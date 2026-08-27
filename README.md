@@ -162,6 +162,7 @@ After verify and review, `/patpat` commits and opens a ready PR. Overnight or la
 
 ```bash
 python3 scripts/validate.py --self-test
+python3 scripts/dry_run_loop.py --self-test
 python3 scripts/install_skills.py --self-test
 python3 scripts/stage_plugin.py --self-test
 python3 scripts/smoke_codex_plugin.py

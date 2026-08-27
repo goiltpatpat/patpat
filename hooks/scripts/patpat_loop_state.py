@@ -26,8 +26,8 @@ DISABLE = re.compile(
 )
 STICKY_CONTEXT = (
     "Patpat Loop is active for this session. Apply /patpat (`patpat-loop`) for this turn. "
-    "Follow the operating protocol. Do not infer commit, push, merge, publish, or deploy "
-    "beyond the named user request."
+    "Follow the operating protocol. After proof, default to commit-and-PR unless opted out. "
+    "Do not merge a red CI, deploy, force-push, or publish a package by implication."
 )
 
 
@@ -280,7 +280,7 @@ def handle_hook(payload: dict[str, Any], plugin_data: str | None = None, now_ms:
         return context_output(
             event,
             "Patpat sticky receipt: trusted session hook persisted /patpat. "
-            "The skill supplies activation-turn behavior. Do not infer delivery authority.",
+            "The skill supplies activation-turn behavior. After proof, default to commit-and-PR unless opted out.",
         )
     current = read_active_state(plugin_data, session_id, cwd, now_ms, ttl_ms)
     if not current:

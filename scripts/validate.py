@@ -624,6 +624,9 @@ def validate_root(root: Path) -> list[str]:
     stage_script = root / "scripts" / "stage_plugin.py"
     if not stage_script.is_file():
         errors.append(f"{stage_script}: missing allowlisted plugin staging script")
+    dry_run = root / "scripts" / "dry_run_loop.py"
+    if not dry_run.is_file():
+        errors.append(f"{dry_run}: missing loop dry-run")
 
     return errors
 
@@ -654,6 +657,9 @@ def run_self_test(root: Path) -> list[str]:
 
     def remove_stage_script(fixture: Path) -> None:
         (fixture / "scripts" / "stage_plugin.py").unlink()
+
+    def remove_dry_run(fixture: Path) -> None:
+        (fixture / "scripts" / "dry_run_loop.py").unlink()
 
     def remove_agents_guide(fixture: Path) -> None:
         (fixture / "AGENTS.md").unlink()
@@ -834,6 +840,7 @@ def run_self_test(root: Path) -> list[str]:
             ("missing Codex smoke", remove_codex_smoke, "missing isolated Codex marketplace smoke test"),
             ("missing Antigravity smoke", remove_antigravity_smoke, "missing isolated Antigravity plugin smoke test"),
             ("missing stage script", remove_stage_script, "missing allowlisted plugin staging script"),
+            ("missing loop dry-run", remove_dry_run, "missing loop dry-run"),
             ("missing agent install contract", remove_agents_guide, "missing agent install contract"),
             ("Codex defaultPrompt drift", drop_codex_default_prompt, "defaultPrompt must include $patpat"),
             ("missing published source", drop_published_source, "homepage and repository must point at the published source"),
@@ -896,6 +903,15 @@ def run_self_test(root: Path) -> list[str]:
         failures.append(
             f"self-test: sticky hook failed: {hook_result.stdout}{hook_result.stderr}"
         )
+    dry_run = root / "scripts" / "dry_run_loop.py"
+    dry_result = subprocess.run(
+        [sys.executable, str(dry_run), "--self-test"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if dry_result.returncode != 0:
+        failures.append(f"self-test: loop dry-run failed: {dry_result.stdout}{dry_result.stderr}")
     return failures
 
 
