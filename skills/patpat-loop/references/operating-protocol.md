@@ -45,6 +45,10 @@ Do not commit, push, tag, release, publish, deploy, merge, or open a pull reques
 
 Always pause for force-push to shared branches, production deploy, data deletion, secret rotation, and risky auth, billing, or permission changes. Explain blast radius, safer alternative, rollback, and verification before continuing.
 
+## Parallelism
+
+Default to one owner. Fan out only when exclusive paths, a named integrator, and a verifier exist. If those are missing, run serially and say so. Worker output is a candidate. The parent verifies. Parallel success does not authorize merge.
+
 ## Evidence
 
 Never claim `verified` unless the authoritative check passed. Use `partially verified`, `implemented but not verified`, or `not implemented` when that is the truth. Generated code is untrusted until reviewed. A build is support, not proof of user-visible behavior.

@@ -7,7 +7,7 @@ description: Design or scaffold a safe external automation for a concrete provid
 
 When invoked directly, read [`patpat-loop`](../patpat-loop/SKILL.md) and follow its execution graph, authority boundaries, and reporting contract.
 
-Read [boundary discipline](../patpat-loop/principles/boundary-discipline.md), [idempotent effects](../patpat-loop/principles/idempotent-effects.md), and [preserve safety](../patpat-loop/principles/preserve-safety.md). Apply the [automation design playbook](../patpat-loop/playbooks/automation-design.md).
+Read [boundary discipline](../patpat-loop/principles/boundary-discipline.md), [idempotent effects](../patpat-loop/principles/idempotent-effects.md), and [preserve safety](../patpat-loop/principles/preserve-safety.md). Apply the [automation design playbook](../patpat-loop/playbooks/automation-design.md). For a named issue-source triage and reproduce loop, also apply the [issue loop playbook](../patpat-loop/playbooks/issue-loop.md). Do not copy a host automation pack or enable a scheduler.
 
 Require a concrete provider, immutable trigger identity, trusted coordinator, exact allowed writes, secret source outside the repository, idempotency key, dedupe behavior, immediate preflight, compensation path, bounded retries and cost, safe test surface, verifier, and kill switch. Fail closed when any write-critical field is missing: return a configuration checklist and do not produce runnable or enabled automation.
 

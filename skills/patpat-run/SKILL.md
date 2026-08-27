@@ -23,6 +23,8 @@ On resume, validate the store, compare live repository state, inspect intentiona
 
 When inheriting an arbitrary branch, transcript, or handoff without a valid Patpat store, apply the [session takeover playbook](../patpat-loop/playbooks/session-takeover.md) before initializing a new run.
 
+When the request is a queue of independent PRs or a linear verified stack, apply the [autopilot playbook](../patpat-loop/playbooks/autopilot.md). Owners build and prove. The root verifies. Landing still requires a named delivery action.
+
 ## Proof closure
 
 Close repository mutations through:

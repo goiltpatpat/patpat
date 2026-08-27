@@ -61,6 +61,10 @@ Read the linked file when the trigger fires. Cite a principle only when it chang
 | Pixel-level UI parity | [`patpat-verify`](../patpat-verify/SKILL.md) | [Visual equivalence](playbooks/visual-equivalence.md) |
 | Proof of an existing claim or artifact | [`patpat-verify`](../patpat-verify/SKILL.md) | Use the workflow directly |
 | Independent challenge of an implementation, diff, or proof claim | [`patpat-review`](../patpat-review/SKILL.md) | [Independent review](playbooks/independent-review.md) |
+| Competing attempts at the same brief | [`patpat-arena`](../patpat-arena/SKILL.md) | [Arena](playbooks/arena.md) |
+| Parallel slices, races, or coverage | [`patpat-swarm`](../patpat-swarm/SKILL.md) | [Swarm](playbooks/swarm.md) |
+| Queue of independent PRs or a linear verified stack | [`patpat-run`](../patpat-run/SKILL.md) | [Autopilot](playbooks/autopilot.md) |
+| Named issue-source triage and reproduce loop | [`patpat-automation`](../patpat-automation/SKILL.md) | [Issue loop](playbooks/issue-loop.md) |
 | Durable multi-phase execution, overnight run, or "don't stop" | [`patpat-run`](../patpat-run/SKILL.md) | [Multi-phase run](playbooks/multi-phase-run.md) |
 | Resume, pause, or take over in-flight work | [`patpat-run`](../patpat-run/SKILL.md) | [Session takeover](playbooks/session-takeover.md) |
 | PR status, conflicts, review threads, or get-it-green | [`patpat-inspect`](../patpat-inspect/SKILL.md) or [`patpat-change`](../patpat-change/SKILL.md) | [PR drive](playbooks/pr-drive.md) |
@@ -103,7 +107,7 @@ Enter `LEARN?` only for a recurring failure worth encoding.
 
 ## Earn parallelism
 
-Default to one owner. Parallelize only when [earned parallelism](principles/earned-parallelism.md) passes. Use [`patpat-engineer`](../patpat-engineer/SKILL.md) only when the host can enforce isolated ownership. Verify artifacts. Do not trust agent summaries.
+Default to one owner. Arena, swarm, and autopilot run only when [earned parallelism](principles/earned-parallelism.md) passes, and they fall back to serial work when isolation is missing. Use [`patpat-engineer`](../patpat-engineer/SKILL.md) for isolated slices. The parent verifies the integrated result. Do not trust worker summaries. Delivery still requires a named action.
 
 ## Report evidence
 
