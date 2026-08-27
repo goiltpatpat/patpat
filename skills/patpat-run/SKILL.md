@@ -17,7 +17,7 @@ Never record secrets, tokens, raw private logs, or sensitive payloads in run sta
 
 If a process interruption leaves a lock, run `unlock` only after confirming the recorded process stopped. Let the engine reject live, malformed, or cross-host locks; never delete them by assumption.
 
-Route completion through `patpat-ship`. Default commit-and-PR after proof. Merge only with land language or overnight, and only when checks are green.
+Route completion through `patpat-ship`. Default commit-and-PR after proof. Merge only with explicit land or merge language, and only when checks are green. Overnight is not merge.
 
 On resume, validate the store, compare live repository state, inspect intentional and pre-existing changes, and continue from the earliest valid graph node. Never trust a checkpoint merely because it parses.
 

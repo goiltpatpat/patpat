@@ -41,9 +41,9 @@ Stop at the first change that satisfies the proof contract. Delete before adding
 
 ## Git and ship
 
-After mutating work passes verify and review, default to commit-and-open-PR. That is the easy ship. Opt out with `don't commit`, `don't open a PR`, or `local only`.
+Explicit `/patpat` or `$patpat` activation opts the session into commit-and-open-PR after mutating work passes verify and review. That is the easy ship. A higher-priority repository rule can prohibit it. Opt out with `don't commit`, `don't open a PR`, or `local only`.
 
-Overnight, going to bed, don't stop, land this, merge this, or ship it is enough to merge a green verified PR. Do not land a real CI failure. Retry a flake once.
+Overnight, going to bed, or don't stop continues until the PR is merge-ready; it does not authorize merge. Merge only when the user explicitly names land or merge and the verified head is green. Treat ambiguous `ship it` as commit-and-PR. Do not land a real CI failure. Retry a flake once.
 
 Always pause for force-push to shared branches, production deploy, package publish, data deletion, secret rotation, and risky auth, billing, or permission changes. Explain blast radius, safer alternative, rollback, and verification before continuing.
 
