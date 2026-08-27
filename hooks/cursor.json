@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "python3 ./hooks/scripts/patpat_loop_state.py"
+      }
+    ],
+    "beforeSubmitPrompt": [
+      {
+        "command": "python3 ./hooks/scripts/patpat_loop_state.py"
+      }
+    ],
+    "sessionEnd": [
+      {
+        "command": "python3 ./hooks/scripts/patpat_loop_state.py"
+      }
+    ]
+  }
+}

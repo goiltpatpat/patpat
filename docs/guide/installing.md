@@ -31,7 +31,7 @@ codex plugin marketplace add /absolute/path/to/patpat-dist
 codex plugin add patpat@patpat
 ```
 
-Do not `marketplace add` a dirty checkout. Start a new task after installation and invoke `$patpat-loop`. Package installation and prompt-time discovery are separate checks.
+Do not `marketplace add` a dirty checkout. Start a new task after installation and invoke `$patpat`. Package installation and prompt-time discovery are separate checks.
 
 Update through Codex so its marketplace and cache remain consistent:
 
@@ -81,14 +81,12 @@ The installer performs a new copy or development symlink installation. It does n
 
 ## Invocation
 
-No `/skill` form is verified.
-
 | Host | Invoke after a fresh session |
 | --- | --- |
-| Codex | `$patpat-loop` |
-| Portable / generic Agent Skills | `Use patpat-loop to ...` |
-| Antigravity | host UI or `Use patpat-loop to ...` |
-| Cursor | host UI or `Use patpat-loop to ...` after reload |
+| Cursor | `/patpat` or `/patpat-loop` |
+| Codex | `$patpat` or `$patpat-loop` |
+| Portable / generic Agent Skills | `Use patpat to ...` |
+| Antigravity | host UI or `Use patpat to ...` |
 
 ## Verification
 

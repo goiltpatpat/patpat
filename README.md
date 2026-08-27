@@ -6,7 +6,9 @@ Agents can generate code faster than teams can review it. Throughput without evi
 
 Patpat turns an agent host into a disciplined engineering loop: inspect the real system, name the proof before editing, change the smallest safe surface, and verify the result where the user would see it.
 
-Use [`patpat-loop`](skills/patpat-loop/SKILL.md) for non-trivial work. Call a focused skill directly when the task is already narrow.
+The core is Patpat's operating protocol: judgment, safety, git, and honest evidence. The workflow machinery is informed by [pstack](https://github.com/cursor/plugins/tree/main/pstack). When those conflict, the protocol wins.
+
+Use [`/patpat`](skills/patpat/SKILL.md) for non-trivial work. It is the same entry as [`/patpat-loop`](skills/patpat-loop/SKILL.md). Call a focused skill directly when the task is already narrow.
 
 ## Install
 
@@ -17,7 +19,7 @@ codex plugin marketplace add goiltpatpat/patpat
 codex plugin add patpat@patpat
 ```
 
-Start a new task, then invoke `$patpat-loop`. Package installation and prompt-time discovery are separate checks.
+Start a new task, then invoke `$patpat`. Package installation and prompt-time discovery are separate checks.
 
 Antigravity, from a clone that does not contain local development state:
 
@@ -42,17 +44,17 @@ A working tree that still contains Memory Bank or other ignored files must be st
 Two steps:
 
 1. Install Patpat on the active host.
-2. Use [`patpat-loop`](skills/patpat-loop/SKILL.md) for the task.
+2. Invoke `/patpat` (Cursor), `$patpat` (Codex), or `Use patpat to ...` on other hosts.
 
 ```text
-Use patpat-loop to reproduce this timeout, fix the root cause, and prove the user-visible behavior.
+/patpat reproduce this timeout, fix the root cause, and land the PR
 ```
 
-That is enough. The router selects a playbook and loads the other skills as the steps need them.
+That is enough. The router stays on across later turns, selects a playbook, and loads the other skills as the steps need them. Say `disable /patpat` to opt out.
 
 ## Usage
 
-[`patpat-loop`](skills/patpat-loop/SKILL.md) is the default entry point. It reads the request, copies a playbook, and routes through inspection, proof, implementation, verification, and review.
+[`/patpat`](skills/patpat/SKILL.md) is the default entry point. It reads the request, copies a playbook, and routes through inspection, proof, implementation, verification, and review. Trusted host hooks persist the mode across resume. Without a hook receipt the mode still applies for the rest of the current session.
 
 ```text
 FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY -> REVIEW -> LEARN? -> REPORT
@@ -60,7 +62,7 @@ FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY -> REVIEW -> LEARN? -> REPOR
 
 A proof contract names the claim, authoritative surface, action, expected observation, and cleanup. A build supports a claim. It does not prove user-visible behavior.
 
-Codex uses `$patpat-loop`. Other hosts use the host-neutral prompt above. No `/skill` form is verified.
+Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`. Portable hosts use `Use patpat to ...`.
 
 ### Playbooks
 
@@ -83,6 +85,8 @@ Codex uses `$patpat-loop`. Other hosts use the host-neutral prompt above. No `/s
 | [Bespoke workflow](skills/patpat-loop/playbooks/bespoke-workflow.md) | No narrow playbook fits. Design a falsifiable sequence. |
 | [Multi-phase run](skills/patpat-loop/playbooks/multi-phase-run.md) | Work that spans phases, checkpoints, or a durable graph. |
 | [Session takeover](skills/patpat-loop/playbooks/session-takeover.md) | Resume or take over in-flight work from live repository state. |
+| [PR drive](skills/patpat-loop/playbooks/pr-drive.md) | PR status, conflicts, review threads, or get-it-green. Land only when named. |
+| [Authorized delivery](skills/patpat-loop/playbooks/authorized-delivery.md) | Named commit, pull request, merge, publish, or deploy after proof. |
 | [Independent review](skills/patpat-loop/playbooks/independent-review.md) | Challenge an implementation and its proof without editing. |
 | [Skill change](skills/patpat-loop/playbooks/skill-change.md) | Write or revise a SKILL.md. |
 | [Behavioral evaluation](skills/patpat-loop/playbooks/behavioral-eval.md) | Test whether a skill triggers and behaves correctly. |
@@ -96,6 +100,7 @@ Codex uses `$patpat-loop`. Other hosts use the host-neutral prompt above. No `/s
 
 | Skill | Use it when |
 | --- | --- |
+| [`patpat`](skills/patpat/SKILL.md) | Slash alias for the loop. `/patpat` is the default entry. |
 | [`patpat-loop`](skills/patpat-loop/SKILL.md) | The work is non-trivial and needs the full loop. |
 | [`patpat-inspect`](skills/patpat-inspect/SKILL.md) | Explain, audit, or diagnose without editing. |
 | [`patpat-plan`](skills/patpat-plan/SKILL.md) | Sequence verifiable phases without implementing them. |
@@ -108,7 +113,7 @@ Codex uses `$patpat-loop`. Other hosts use the host-neutral prompt above. No `/s
 | [`patpat-review`](skills/patpat-review/SKILL.md) | Independently try to falsify the change and its evidence. |
 | [`patpat-run`](skills/patpat-run/SKILL.md) | Drive or resume a durable multi-phase graph. |
 | [`patpat-setup`](skills/patpat-setup/SKILL.md) | Install, validate, or remove Patpat on a host. |
-| [`patpat-ship`](skills/patpat-ship/SKILL.md) | Assess readiness and perform only the authorized delivery action. |
+| [`patpat-ship`](skills/patpat-ship/SKILL.md) | Perform only the named delivery action after proof. |
 | [`patpat-skill`](skills/patpat-skill/SKILL.md) | Author a reusable skill. |
 | [`patpat-eval`](skills/patpat-eval/SKILL.md) | Evaluate skill triggering with isolated prompts. |
 | [`patpat-verifier`](skills/patpat-verifier/SKILL.md) | Create or maintain a project-specific verifier. |
@@ -137,15 +142,14 @@ python3 skills/patpat-run/scripts/run_state.py --self-test
 
 ## Not shipped
 
-These remain gated until repository-specific evidence earns them:
+These stay bounded by the operating protocol:
 
-- Parallel writable agents, arena, swarm, and autopilot
-- Sticky cross-turn mode and plugin hooks
-- Runnable issue-tracker or chat automations
-- Automatic merge, publish, deploy, or scheduled external writes
+- Parallel writable agents until isolation is proven
+- Runnable issue-tracker automations
+- Commit, PR, merge, publish, or deploy that the current request did not name
 - Model-selection presets and persona skills
 
-Patpat does not infer authority to commit, push, open a pull request, publish, merge, or deploy.
+`/patpat` stays on across later turns. Named ship requests proceed after verify and review. Production deploy, force-push, secret rotation, and risky auth or billing still pause.
 
 ## Validate
 
@@ -159,7 +163,7 @@ python3 scripts/smoke_antigravity_plugin.py
 
 ## Design lineage
 
-Patpat is an independent rewrite informed by the public control-loop ideas in [Lauren Tan's pstack](https://github.com/cursor/plugins/tree/main/pstack). It keeps the engineering jobs and drops the host-specific catalog: sticky mode, model roles, Graphite merge automation, and persona skills.
+Patpat is an independent system. Its core is the [operating protocol](skills/patpat-loop/references/operating-protocol.md). Its router, playbooks, sticky `/patpat` mode, and named ship path are informed by [Lauren Tan's pstack](https://github.com/cursor/plugins/tree/main/pstack). It does not take pstack's voice, model-role presets, Graphite merge-when-ready, persona skills, or "never block on the human" for delivery.
 
 ## License
 

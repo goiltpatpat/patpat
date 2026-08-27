@@ -1,0 +1,41 @@
+{
+  "description": "Session-scoped Patpat Loop lifecycle hooks.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "resume|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$PLUGIN_ROOT/hooks/scripts/patpat_loop_state.py\"",
+            "timeout": 2,
+            "additionalContextLimit": 1200
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$PLUGIN_ROOT/hooks/scripts/patpat_loop_state.py\"",
+            "timeout": 2,
+            "additionalContextLimit": 1200
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$PLUGIN_ROOT/hooks/scripts/patpat_loop_state.py\"",
+            "timeout": 1
+          }
+        ]
+      }
+    ]
+  }
+}
