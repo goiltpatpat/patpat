@@ -66,11 +66,14 @@ Read the linked file when the trigger fires. Cite a principle only when it chang
 | Queue of independent PRs or a linear verified stack | [`patpat-run`](../patpat-run/SKILL.md) | [Autopilot](playbooks/autopilot.md) |
 | Named issue-source triage and reproduce loop | [`patpat-automation`](../patpat-automation/SKILL.md) | [Issue loop](playbooks/issue-loop.md) |
 | Durable multi-phase execution, overnight run, or "don't stop" | [`patpat-run`](../patpat-run/SKILL.md) | [Multi-phase run](playbooks/multi-phase-run.md) |
-| Resume, pause, or take over in-flight work | [`patpat-run`](../patpat-run/SKILL.md) | [Session takeover](playbooks/session-takeover.md) |
-| PR status, conflicts, review threads, or get-it-green | [`patpat-inspect`](../patpat-inspect/SKILL.md) or [`patpat-change`](../patpat-change/SKILL.md) | [PR drive](playbooks/pr-drive.md) |
+| Pause in-flight work or go offline | [`patpat-run`](../patpat-run/SKILL.md) | [Pause safely](playbooks/pause-safely.md) |
+| Resume or take over in-flight work with no valid run store | [`patpat-run`](../patpat-run/SKILL.md) | [Session takeover](playbooks/session-takeover.md) |
+| PR status | [`patpat-inspect`](../patpat-inspect/SKILL.md) | [PR drive](playbooks/pr-drive.md) |
+| Get a PR green, babysit CI, or address review threads | [`patpat-change`](../patpat-change/SKILL.md) | [PR babysit](playbooks/pr-babysit.md) |
+| Prune merged or abandoned git worktrees | Use the playbook directly | [Worktree cleanup](playbooks/worktree-cleanup.md) |
 | Install, update, remove, or validate Patpat on an agent host | [`patpat-setup`](../patpat-setup/SKILL.md) | Use the workflow directly |
 | End of mutating work, or named commit / pull request | [`patpat-ship`](../patpat-ship/SKILL.md) | [Default delivery](playbooks/default-delivery.md) |
-| Named merge, publish, deploy, or overnight land of a green PR | [`patpat-ship`](../patpat-ship/SKILL.md) | [Authorized delivery](playbooks/authorized-delivery.md) |
+| Named merge, publish, or deploy | [`patpat-ship`](../patpat-ship/SKILL.md) | [Authorized delivery](playbooks/authorized-delivery.md) |
 | Create or revise a reusable agent skill | [`patpat-skill`](../patpat-skill/SKILL.md) | [Skill change](playbooks/skill-change.md) |
 | Test whether a skill triggers and behaves correctly | [`patpat-eval`](../patpat-eval/SKILL.md) | [Behavioral evaluation](playbooks/behavioral-eval.md) |
 | Create or maintain a project-specific verification skill | [`patpat-verifier`](../patpat-verifier/SKILL.md) | [Project verifier](playbooks/project-verifier.md) |
@@ -83,7 +86,7 @@ If no narrow route fits, use `patpat-plan`. Do not persist a new reusable workfl
 
 Resolve overlaps by the earliest unsettled decision. Architect first when the target contract is unsettled. Plan when the remaining problem is sequencing. Impact assesses downstream risk without designing the replacement. A prototype settles an empirical fork instead of asking the human to choose.
 
-Overnight, "don't stop", or "going to bed" continues the matched playbook through verify, review, default commit-and-PR, and merge of a green verified PR. It does not land a real CI failure and does not deploy.
+Overnight, "don't stop", or "going to bed" continues the matched playbook through verify, review, and default commit-and-PR, then stops merge-ready. Merge only when the user explicitly names land or merge. Never deploy by implication.
 
 ## Run the graph
 
@@ -104,8 +107,8 @@ Enter `LEARN?` only for a recurring failure worth encoding.
 ## Preserve control
 
 - Ordinary in-scope edits proceed under `/patpat` without asking permission to type.
-- After verify and review, default to [commit and a ready PR](playbooks/default-delivery.md). Opt out with `don't commit` or `local only`.
-- Merge a green verified PR on land / merge / ship it / overnight / going to bed. Do not land a real CI failure.
+- Explicit `/patpat` or `$patpat` activation opts in to [commit and a ready PR](playbooks/default-delivery.md) after verify and review. Higher-priority repository rules and `don't commit` / `local only` still win.
+- Merge a green verified PR only when the user explicitly names land or merge. Treat ambiguous `ship it` as commit-and-PR, not merge.
 - Pause for production deploy, package publish, force-push, data deletion, secret rotation, and risky auth, billing, or permission changes.
 - Workers never ship. The parent ships.
 

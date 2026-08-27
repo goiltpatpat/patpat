@@ -1,6 +1,6 @@
 ---
 name: patpat-ship
-description: Commit and open a ready pull request after verified mutating work, and merge, publish, or deploy only with land language or overnight intent. Use at the end of implementation and for explicit ship, land, merge, publish, or deploy requests.
+description: Commit and open or update a ready pull request after verified work when Patpat was explicitly activated, and merge only with explicit land or merge language. Use at the end of an active Patpat implementation and for explicit ship, land, merge, publish, or deploy requests.
 ---
 
 # Patpat Ship
@@ -9,9 +9,9 @@ When invoked directly, read [`patpat-loop`](../patpat-loop/SKILL.md) and follow 
 
 Read [preserve safety](../patpat-loop/principles/preserve-safety.md), [proof over proxy](../patpat-loop/principles/proof-over-proxy.md), and the [operating protocol](../patpat-loop/references/operating-protocol.md).
 
-After verify and review pass, apply [default delivery](../patpat-loop/playbooks/default-delivery.md): commit the in-scope diff and open a ready pull request unless the user opted out or the path was read-only.
+After verify and review pass, require delivery authority from one of these sources: the current request explicitly activated Patpat, a trusted active-session receipt proves earlier explicit activation, or the user explicitly requested the named commit, push, or pull-request action. Also require that no higher-priority repository rule forbids delivery. Then apply [default delivery](../patpat-loop/playbooks/default-delivery.md): commit the in-scope diff, use a non-force push, and open or update one ready pull request unless the user opted out or the path was read-only.
 
-Apply [authorized delivery](../patpat-loop/playbooks/authorized-delivery.md) to merge, publish, or deploy. Overnight, going to bed, don't stop, land this, merge this, or ship it merges a green verified PR. Do not land a real CI failure. Retry a flake once.
+Apply [authorized delivery](../patpat-loop/playbooks/authorized-delivery.md) to merge, publish, or deploy. Only explicit `land` or `merge` language authorizes merge. Overnight, going to bed, or don't stop drives a verified pull request to merge-ready and stops. Do not land a real CI failure. Retry a flake once.
 
 Inspect version-control state, unrelated dirty files, and secrets before any git write. Workers never ship. Re-check the remote revision after the action.
 

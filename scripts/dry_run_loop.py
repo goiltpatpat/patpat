@@ -4,12 +4,18 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 HOOK = ROOT / "hooks" / "scripts" / "patpat_loop_state.py"
+EXPLICIT_MERGE = re.compile(
+    r"(?:^|\s)(?:land|merge)(?:\s+(?:this|it|the\s+(?:pr|pull request|stack)|pr\s*#?\d+))?(?=$|[.!?])",
+    re.IGNORECASE,
+)
+MERGE_DENIAL = re.compile(r"(?:do\s+not|don't|never)\s+(?:land|merge)", re.IGNORECASE)
 
 
 def load_hook():
@@ -35,9 +41,15 @@ def route(prompt: str) -> str:
         return "autopilot"
     if "how does" in text or "do not change" in text or "read-only" in text:
         return "inspect"
+    if "pause safely" in text or "go offline" in text:
+        return "pause"
+    if "babysit" in text or "get it green" in text or "watch ci" in text:
+        return "pr-babysit"
+    if "worktree" in text and ("clean" in text or "prune" in text):
+        return "worktree-cleanup"
     if "timeout" in text or "bug" in text or "repro" in text or "fix" in text:
         return "debug"
-    if "land" in text or "open the pr" in text or "merge" in text:
+    if explicit_merge_intent(prompt) or "open the pr" in text:
         return "ship"
     return "loop"
 
@@ -47,9 +59,14 @@ def ship_plan(
     path: str,
     verified: bool,
     reviewed: bool,
+    patpat_activated: bool,
+    explicit_delivery: bool,
+    repo_allows_delivery: bool,
     opt_out: bool,
-    land: bool,
+    explicit_merge: bool,
+    continuation: bool,
     ci: str,
+    existing_pr: bool = False,
     action: str = "edit",
 ) -> str:
     if path == "read-only" or action == "inspect":
@@ -60,31 +77,78 @@ def ship_plan(
         return "local-only"
     if action in {"deploy", "publish", "force-push"}:
         return "pause"
-    if land:
+    if not repo_allows_delivery:
+        return "stop-repository-policy"
+    if not (patpat_activated or explicit_delivery or explicit_merge):
+        return "local-only-no-authority"
+    if explicit_merge:
         if ci == "green":
             return "merge"
         if ci == "flake":
             return "retry-then-merge-if-flake"
         return "no-land-real-fail"
+    if continuation:
+        return "drive-existing-pr-to-merge-ready" if existing_pr else "commit-pr-then-drive-to-merge-ready"
+    if existing_pr:
+        return "update-existing-pr"
     return "commit-and-pr"
 
 
-def fan_out(*, kind: str, isolated: bool, read_only: bool) -> str:
+def fan_out(*, kind: str, worktree_or_sandbox: bool, shared_worktree: bool, read_only: bool) -> str:
     if kind not in {"arena", "swarm", "autopilot"}:
         return "serial"
     if read_only and kind == "swarm":
         return "parallel-readonly"
-    if isolated:
+    if worktree_or_sandbox and not shared_worktree:
         return "parallel"
     return "serial-fallback"
 
 
-def issue_loop(*, provider: str, enabled: bool, sandbox: bool, canary: bool) -> str:
+def issue_loop(
+    *,
+    provider: str,
+    enabled: bool,
+    sandbox: bool,
+    canary: bool,
+    requested_write: str = "",
+    allowed_writes: tuple[str, ...] = (),
+    fresh_authority: bool = False,
+) -> str:
     if not provider or not sandbox:
         return "fail-closed"
     if not canary or not enabled:
         return "paused"
-    return "triage-readonly-until-confirmed"
+    if not requested_write:
+        return "triage-readonly"
+    if requested_write in allowed_writes and fresh_authority:
+        return "coordinator-write-authorized"
+    return "triage-readonly-write-denied"
+
+
+def explicit_merge_intent(prompt: str) -> bool:
+    if MERGE_DENIAL.search(prompt):
+        return False
+    return EXPLICIT_MERGE.search(prompt) is not None
+
+
+def continuation_intent(prompt: str) -> bool:
+    text = prompt.casefold()
+    return any(phrase in text for phrase in ("overnight", "going to bed", "don't stop", "do not stop"))
+
+
+def base_ship_args() -> dict[str, object]:
+    return {
+        "path": "mutating",
+        "verified": True,
+        "reviewed": True,
+        "patpat_activated": True,
+        "explicit_delivery": False,
+        "repo_allows_delivery": True,
+        "opt_out": False,
+        "explicit_merge": False,
+        "continuation": False,
+        "ci": "unknown",
+    }
 
 
 def run_self_test() -> None:
@@ -101,6 +165,12 @@ def run_self_test() -> None:
         "/patpat swarm each package against its check script": "swarm",
         "/patpat autopilot this queue; do not merge": "autopilot",
         "/patpat design an issue-loop for GitHub issues; keep it paused": "issue-loop",
+        "/patpat pause safely, I am going offline": "pause",
+        "/patpat babysit this PR and get it green": "pr-babysit",
+        "/patpat prune abandoned worktrees": "worktree-cleanup",
+        "/patpat merge this": "ship",
+        "do not merge; keep the work local": "loop",
+        "make this merge-ready without landing": "loop",
         "disable /patpat": "disable",
     }
     for prompt, expected in cases.items():
@@ -108,23 +178,53 @@ def run_self_test() -> None:
         if got != expected:
             raise AssertionError(f"route({prompt!r})={got!r} expected {expected!r}")
 
-    assert ship_plan(path="mutating", verified=True, reviewed=True, opt_out=False, land=False, ci="unknown") == "commit-and-pr"
-    assert ship_plan(path="mutating", verified=True, reviewed=True, opt_out=True, land=False, ci="unknown") == "local-only"
-    assert ship_plan(path="read-only", verified=True, reviewed=True, opt_out=False, land=False, ci="unknown") == "no-ship"
-    assert ship_plan(path="mutating", verified=False, reviewed=True, opt_out=False, land=False, ci="unknown") == "stop-missing-proof"
-    assert ship_plan(path="mutating", verified=True, reviewed=True, opt_out=False, land=True, ci="green") == "merge"
-    assert ship_plan(path="mutating", verified=True, reviewed=True, opt_out=False, land=True, ci="red") == "no-land-real-fail"
-    assert ship_plan(path="mutating", verified=True, reviewed=True, opt_out=False, land=True, ci="flake") == "retry-then-merge-if-flake"
-    assert ship_plan(path="mutating", verified=True, reviewed=True, opt_out=False, land=False, ci="green", action="deploy") == "pause"
+    base_ship = base_ship_args()
+    assert ship_plan(**base_ship) == "commit-and-pr"
+    assert ship_plan(**{**base_ship, "opt_out": True}) == "local-only"
+    assert ship_plan(**{**base_ship, "path": "read-only"}) == "no-ship"
+    assert ship_plan(**{**base_ship, "verified": False}) == "stop-missing-proof"
+    assert ship_plan(**{**base_ship, "patpat_activated": False}) == "local-only-no-authority"
+    assert ship_plan(
+        **{**base_ship, "patpat_activated": False, "explicit_delivery": True}
+    ) == "commit-and-pr"
+    assert ship_plan(**{**base_ship, "repo_allows_delivery": False}) == "stop-repository-policy"
+    assert ship_plan(**{**base_ship, "existing_pr": True}) == "update-existing-pr"
+    assert ship_plan(**{**base_ship, "explicit_merge": True, "ci": "green"}) == "merge"
+    assert ship_plan(**{**base_ship, "explicit_merge": True, "ci": "red"}) == "no-land-real-fail"
+    assert ship_plan(**{**base_ship, "explicit_merge": True, "ci": "flake"}) == "retry-then-merge-if-flake"
+    assert ship_plan(**{**base_ship, "continuation": True, "ci": "green"}) == "commit-pr-then-drive-to-merge-ready"
+    assert ship_plan(**{**base_ship, "continuation": True, "ci": "green", "existing_pr": True}) == "drive-existing-pr-to-merge-ready"
+    assert ship_plan(**{**base_ship, "action": "deploy"}) == "pause"
+    assert ship_plan(**{**base_ship, "action": "force-push"}) == "pause"
 
-    assert fan_out(kind="arena", isolated=True, read_only=False) == "parallel"
-    assert fan_out(kind="arena", isolated=False, read_only=False) == "serial-fallback"
-    assert fan_out(kind="swarm", isolated=False, read_only=True) == "parallel-readonly"
-    assert fan_out(kind="autopilot", isolated=False, read_only=False) == "serial-fallback"
+    assert explicit_merge_intent("/patpat merge this") is True
+    assert explicit_merge_intent("land the PR") is True
+    assert explicit_merge_intent("work overnight") is False
+    assert explicit_merge_intent("don't stop until merge-ready") is False
+    assert explicit_merge_intent("do not merge") is False
+    assert explicit_merge_intent("ship it") is False
+    assert continuation_intent("work overnight") is True
+    assert continuation_intent("merge this") is False
+
+    assert fan_out(kind="arena", worktree_or_sandbox=True, shared_worktree=False, read_only=False) == "parallel"
+    assert fan_out(kind="arena", worktree_or_sandbox=False, shared_worktree=True, read_only=False) == "serial-fallback"
+    assert fan_out(kind="arena", worktree_or_sandbox=True, shared_worktree=True, read_only=False) == "serial-fallback"
+    assert fan_out(kind="swarm", worktree_or_sandbox=False, shared_worktree=True, read_only=True) == "parallel-readonly"
+    assert fan_out(kind="autopilot", worktree_or_sandbox=False, shared_worktree=True, read_only=False) == "serial-fallback"
 
     assert issue_loop(provider="", enabled=False, sandbox=False, canary=False) == "fail-closed"
     assert issue_loop(provider="github", enabled=False, sandbox=True, canary=True) == "paused"
-    assert issue_loop(provider="github", enabled=True, sandbox=True, canary=True) == "triage-readonly-until-confirmed"
+    assert issue_loop(provider="github", enabled=True, sandbox=True, canary=True) == "triage-readonly"
+    assert issue_loop(provider="github", enabled=True, sandbox=True, canary=True, requested_write="comment") == "triage-readonly-write-denied"
+    assert issue_loop(
+        provider="github",
+        enabled=True,
+        sandbox=True,
+        canary=True,
+        requested_write="comment",
+        allowed_writes=("comment",),
+        fresh_authority=True,
+    ) == "coordinator-write-authorized"
 
     print("Patpat loop dry-run self-test passed.")
 
@@ -134,15 +234,17 @@ def main() -> int:
         run_self_test()
         print()
         print("Dry-run scenarios")
+        base_ship = base_ship_args()
         rows = [
-            ("inspect", route("How does this work? Do not change files."), ship_plan(path="read-only", verified=True, reviewed=True, opt_out=False, land=False, ci="unknown")),
-            ("fix", route("/patpat fix the timeout"), ship_plan(path="mutating", verified=True, reviewed=True, opt_out=False, land=False, ci="unknown")),
-            ("fix local only", "debug", ship_plan(path="mutating", verified=True, reviewed=True, opt_out=True, land=False, ci="unknown")),
-            ("land green", "debug", ship_plan(path="mutating", verified=True, reviewed=True, opt_out=False, land=True, ci="green")),
-            ("land red", "debug", ship_plan(path="mutating", verified=True, reviewed=True, opt_out=False, land=True, ci="red")),
-            ("deploy", "ship", ship_plan(path="mutating", verified=True, reviewed=True, opt_out=False, land=False, ci="green", action="deploy")),
-            ("arena isolated", "arena", fan_out(kind="arena", isolated=True, read_only=False)),
-            ("arena no isolation", "arena", fan_out(kind="arena", isolated=False, read_only=False)),
+            ("inspect", route("How does this work? Do not change files."), ship_plan(**{**base_ship, "path": "read-only"})),
+            ("fix", route("/patpat fix the timeout"), ship_plan(**base_ship)),
+            ("fix local only", "debug", ship_plan(**{**base_ship, "opt_out": True})),
+            ("overnight", "debug", ship_plan(**{**base_ship, "continuation": True, "ci": "green"})),
+            ("land green", "debug", ship_plan(**{**base_ship, "explicit_merge": True, "ci": "green"})),
+            ("land red", "debug", ship_plan(**{**base_ship, "explicit_merge": True, "ci": "red"})),
+            ("deploy", "ship", ship_plan(**{**base_ship, "ci": "green", "action": "deploy"})),
+            ("arena isolated", "arena", fan_out(kind="arena", worktree_or_sandbox=True, shared_worktree=False, read_only=False)),
+            ("arena shared worktree", "arena", fan_out(kind="arena", worktree_or_sandbox=True, shared_worktree=True, read_only=False)),
             ("issue-loop unnamed", "issue-loop", issue_loop(provider="", enabled=False, sandbox=False, canary=False)),
         ]
         for name, routed, decision in rows:
