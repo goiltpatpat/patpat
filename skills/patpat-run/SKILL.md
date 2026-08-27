@@ -17,11 +17,13 @@ Never record secrets, tokens, raw private logs, or sensitive payloads in run sta
 
 If a process interruption leaves a lock, run `unlock` only after confirming the recorded process stopped. Let the engine reject live, malformed, or cross-host locks; never delete them by assumption.
 
-Keep delivery outside the run engine. A run may record authority but must still route commit, push, publish, merge, or deployment through `patpat-ship` at the moment of action.
+Route completion through `patpat-ship`. Default commit-and-PR after proof. Merge only with land language or overnight, and only when checks are green.
 
 On resume, validate the store, compare live repository state, inspect intentional and pre-existing changes, and continue from the earliest valid graph node. Never trust a checkpoint merely because it parses.
 
 When inheriting an arbitrary branch, transcript, or handoff without a valid Patpat store, apply the [session takeover playbook](../patpat-loop/playbooks/session-takeover.md) before initializing a new run.
+
+When the request is a queue of independent PRs or a linear verified stack, apply the [autopilot playbook](../patpat-loop/playbooks/autopilot.md). Owners build and prove. The root verifies. Landing still requires a named delivery action.
 
 ## Proof closure
 

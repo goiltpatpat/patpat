@@ -86,7 +86,12 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 | [Multi-phase run](skills/patpat-loop/playbooks/multi-phase-run.md) | Work that spans phases, checkpoints, or a durable graph. |
 | [Session takeover](skills/patpat-loop/playbooks/session-takeover.md) | Resume or take over in-flight work from live repository state. |
 | [PR drive](skills/patpat-loop/playbooks/pr-drive.md) | PR status, conflicts, review threads, or get-it-green. Land only when named. |
-| [Authorized delivery](skills/patpat-loop/playbooks/authorized-delivery.md) | Named commit, pull request, merge, publish, or deploy after proof. |
+| [Arena](skills/patpat-loop/playbooks/arena.md) | Competing isolated attempts at one brief, then a verified synthesis. |
+| [Swarm](skills/patpat-loop/playbooks/swarm.md) | Parallel slices or races, one aggregated report. |
+| [Autopilot](skills/patpat-loop/playbooks/autopilot.md) | A verified queue or stack. Merge only when named. |
+| [Issue loop](skills/patpat-loop/playbooks/issue-loop.md) | Named-provider triage and reproduce. Stays paused until enabled. |
+| [Default delivery](skills/patpat-loop/playbooks/default-delivery.md) | After proof, commit and open a ready PR unless opted out. |
+| [Authorized delivery](skills/patpat-loop/playbooks/authorized-delivery.md) | Merge a green verified PR on land/overnight; pause for deploy. |
 | [Independent review](skills/patpat-loop/playbooks/independent-review.md) | Challenge an implementation and its proof without editing. |
 | [Skill change](skills/patpat-loop/playbooks/skill-change.md) | Write or revise a SKILL.md. |
 | [Behavioral evaluation](skills/patpat-loop/playbooks/behavioral-eval.md) | Test whether a skill triggers and behaves correctly. |
@@ -112,8 +117,10 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 | [`patpat-verify`](skills/patpat-verify/SKILL.md) | Test a claim on the real artifact or user surface. |
 | [`patpat-review`](skills/patpat-review/SKILL.md) | Independently try to falsify the change and its evidence. |
 | [`patpat-run`](skills/patpat-run/SKILL.md) | Drive or resume a durable multi-phase graph. |
+| [`patpat-arena`](skills/patpat-arena/SKILL.md) | Compete isolated attempts and synthesize one verified result. |
+| [`patpat-swarm`](skills/patpat-swarm/SKILL.md) | Cover slices or races and return one report. |
 | [`patpat-setup`](skills/patpat-setup/SKILL.md) | Install, validate, or remove Patpat on a host. |
-| [`patpat-ship`](skills/patpat-ship/SKILL.md) | Perform only the named delivery action after proof. |
+| [`patpat-ship`](skills/patpat-ship/SKILL.md) | Default commit-and-PR after proof; merge on land or overnight. |
 | [`patpat-skill`](skills/patpat-skill/SKILL.md) | Author a reusable skill. |
 | [`patpat-eval`](skills/patpat-eval/SKILL.md) | Evaluate skill triggering with isolated prompts. |
 | [`patpat-verifier`](skills/patpat-verifier/SKILL.md) | Create or maintain a project-specific verifier. |
@@ -144,12 +151,12 @@ python3 skills/patpat-run/scripts/run_state.py --self-test
 
 These stay bounded by the operating protocol:
 
-- Parallel writable agents until isolation is proven
-- Runnable issue-tracker automations
-- Commit, PR, merge, publish, or deploy that the current request did not name
+- Writable arena, swarm, and autopilot require isolation and fall back to serial work
+- Issue-loop stays paused until a named provider, sandbox, canary, and enable request exist
+- Merge of a red CI, package publish, and production deploy
 - Model-selection presets and persona skills
 
-`/patpat` stays on across later turns. Named ship requests proceed after verify and review. Production deploy, force-push, secret rotation, and risky auth or billing still pause.
+After verify and review, `/patpat` commits and opens a ready PR. Overnight or land this merges when checks are green. It still pauses for production deploy, force-push, secret rotation, and risky auth or billing changes.
 
 ## Validate
 

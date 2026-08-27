@@ -9,4 +9,6 @@ Use parallel work only when all gates pass:
 - One integration owner is named.
 - The integrated result receives whole-system verification.
 
-Keep mutating work serial when any gate fails or that repository-specific trust evidence does not exist. Read-only investigation may parallelize across independent evidence sources. Never enable auto-merge merely because independent checks are green.
+Keep mutating work serial when any gate fails or that repository-specific trust evidence does not exist. Read-only investigation may parallelize across independent evidence sources.
+
+Arena, swarm, and autopilot are admitted only through these gates. Missing isolation is a serial fallback, not invented coverage. The parent owns integration, verification, and any named delivery. Never enable auto-merge merely because independent checks are green.
