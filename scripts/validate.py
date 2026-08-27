@@ -36,6 +36,7 @@ ALLOWED_SKILL_POLICIES = {"mutating", "read-only", "support", "router"}
 SKILL_POLICIES = {
     "patpat": "router",
     "patpat-architect": "read-only",
+    "patpat-arena": "mutating",
     "patpat-automation": "mutating",
     "patpat-change": "mutating",
     "patpat-debug": "mutating",
@@ -52,10 +53,12 @@ SKILL_POLICIES = {
     "patpat-setup": "mutating",
     "patpat-ship": "mutating",
     "patpat-skill": "mutating",
+    "patpat-swarm": "mutating",
     "patpat-verifier": "mutating",
     "patpat-verify": "read-only",
 }
 EXPECTED_MUTATING_SKILLS = {
+    "patpat-arena",
     "patpat-automation",
     "patpat-change",
     "patpat-debug",
@@ -66,6 +69,7 @@ EXPECTED_MUTATING_SKILLS = {
     "patpat-setup",
     "patpat-ship",
     "patpat-skill",
+    "patpat-swarm",
     "patpat-verifier",
 }
 MUTATING_SKILLS = {name for name, policy in SKILL_POLICIES.items() if policy == "mutating"}

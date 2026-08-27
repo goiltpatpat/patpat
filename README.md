@@ -86,6 +86,10 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 | [Multi-phase run](skills/patpat-loop/playbooks/multi-phase-run.md) | Work that spans phases, checkpoints, or a durable graph. |
 | [Session takeover](skills/patpat-loop/playbooks/session-takeover.md) | Resume or take over in-flight work from live repository state. |
 | [PR drive](skills/patpat-loop/playbooks/pr-drive.md) | PR status, conflicts, review threads, or get-it-green. Land only when named. |
+| [Arena](skills/patpat-loop/playbooks/arena.md) | Competing isolated attempts at one brief, then a verified synthesis. |
+| [Swarm](skills/patpat-loop/playbooks/swarm.md) | Parallel slices or races, one aggregated report. |
+| [Autopilot](skills/patpat-loop/playbooks/autopilot.md) | A verified queue or stack. Merge only when named. |
+| [Issue loop](skills/patpat-loop/playbooks/issue-loop.md) | Named-provider triage and reproduce. Stays paused until enabled. |
 | [Authorized delivery](skills/patpat-loop/playbooks/authorized-delivery.md) | Named commit, pull request, merge, publish, or deploy after proof. |
 | [Independent review](skills/patpat-loop/playbooks/independent-review.md) | Challenge an implementation and its proof without editing. |
 | [Skill change](skills/patpat-loop/playbooks/skill-change.md) | Write or revise a SKILL.md. |
@@ -112,6 +116,8 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 | [`patpat-verify`](skills/patpat-verify/SKILL.md) | Test a claim on the real artifact or user surface. |
 | [`patpat-review`](skills/patpat-review/SKILL.md) | Independently try to falsify the change and its evidence. |
 | [`patpat-run`](skills/patpat-run/SKILL.md) | Drive or resume a durable multi-phase graph. |
+| [`patpat-arena`](skills/patpat-arena/SKILL.md) | Compete isolated attempts and synthesize one verified result. |
+| [`patpat-swarm`](skills/patpat-swarm/SKILL.md) | Cover slices or races and return one report. |
 | [`patpat-setup`](skills/patpat-setup/SKILL.md) | Install, validate, or remove Patpat on a host. |
 | [`patpat-ship`](skills/patpat-ship/SKILL.md) | Perform only the named delivery action after proof. |
 | [`patpat-skill`](skills/patpat-skill/SKILL.md) | Author a reusable skill. |
@@ -144,8 +150,8 @@ python3 skills/patpat-run/scripts/run_state.py --self-test
 
 These stay bounded by the operating protocol:
 
-- Parallel writable agents until isolation is proven
-- Runnable issue-tracker automations
+- Writable arena, swarm, and autopilot require isolation and fall back to serial work
+- Issue-loop stays paused until a named provider, sandbox, canary, and enable request exist
 - Commit, PR, merge, publish, or deploy that the current request did not name
 - Model-selection presets and persona skills
 
