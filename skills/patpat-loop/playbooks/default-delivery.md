@@ -11,5 +11,5 @@ Skip this playbook when the path was read-only, the prototype is throwaway, the 
 3. Commit on a task branch. Prefer a small ordered commit. Do not commit Memory Bank, secrets, or run-state.
 4. Push the branch with a non-force, non-lease-breaking push and open a ready pull request when a remote exists. Never open as draft. Report the URL.
 5. Do not start PR-drive babysit from this step. Keep building unless the user asked to watch the PR.
-6. Merge only through [authorized delivery](authorized-delivery.md): the user named land/merge, or overnight / going to bed / don't stop after a PR exists. Merge when checks are green. If CI is red, classify flake vs real fail; retry a flake once; do not land a real fail.
+6. Merge only through [authorized delivery](authorized-delivery.md) after explicit land or merge language. Overnight, going to bed, or don't stop stop merge-ready and do not merge. If CI is red, classify flake vs real fail; retry a flake once; do not land a real fail.
 7. Pause for production deploy, package publish, force-push, secret rotation, protected-default merge without land language, and risky auth, billing, or permission changes.

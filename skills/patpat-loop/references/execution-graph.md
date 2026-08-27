@@ -34,7 +34,7 @@ LEARN?
   -> one-off fact       -> REPORT
 ```
 
-Stop at an approval gate when the next transition would delete data, alter production, weaken a safety boundary, change billing or permissions, force-push, publish a package, or deploy. Default commit-and-PR after proof is not that gate. Merge still requires land language or overnight, and green checks.
+Stop at an approval gate when the next transition would delete data, alter production, weaken a safety boundary, change billing or permissions, force-push, publish a package, or deploy. Default commit-and-PR after proof is not that gate. Merge still requires explicit land or merge language, and green checks. Overnight is not merge.
 
 Use a bounded loop. A retry must add evidence or change the hypothesis, implementation, verifier, or environment. After three failures caused by the same unchanged blocker, report the blocker and the evidence required to continue.
 

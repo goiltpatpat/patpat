@@ -9,4 +9,4 @@ Read [sequence verifiable units](../principles/sequence-verifiable-units.md), [p
 5. Before a pause, validate the state, checkpoint the earliest resumable node, record the exact blocker and next proof action, and leave external authority unchanged.
 6. On resume, validate state and invalidate claims that do not match the live revision.
 7. Stop at `BLOCKED` after three failures from the same unchanged blocker.
-8. Overnight or "don't stop" continues this graph until the completion predicate, then [default delivery](default-delivery.md). Merge a green verified PR through [authorized delivery](authorized-delivery.md). Do not deploy from this step.
+8. Overnight or "don't stop" continues this graph until the completion predicate, then [default delivery](default-delivery.md), and stops merge-ready. Do not merge a green verified PR from this step. Merge only through [authorized delivery](authorized-delivery.md) after explicit land or merge language. Do not deploy from this step.
