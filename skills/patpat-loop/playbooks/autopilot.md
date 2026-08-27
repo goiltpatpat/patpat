@@ -9,7 +9,7 @@ Choose a mode from the request:
 
 1. State the plan and wait when the user asked for the protocol. Execution starts only on explicit go.
 2. Split the queue into independent slices. Overlapping writers run serially. Each owner is [`patpat-engineer`](../../patpat-engineer/SKILL.md) with exclusive files or branches.
-3. Each owner builds, proves on the real surface, and returns a candidate. Owners do not merge, push, or open a PR unless that action was named for them.
+3. Each owner builds and proves on the real surface. The parent runs [default delivery](default-delivery.md) for that slice. Owners never merge.
 4. At each merge-ready head, the root runs [swarm](swarm.md) verification: gates at that revision, live behavior on the load-bearing surface, and a diff audit that distrusts the PR body. A new head voids the verdict.
 5. Findings go back to the owner. A clean verdict does not merge by itself.
 6. Queue mode merges a green verified PR when the program included land / overnight / ship it. Stack mode appends verified links and stops for the operator unless merge language was present.

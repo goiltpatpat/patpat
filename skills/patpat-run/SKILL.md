@@ -17,7 +17,7 @@ Never record secrets, tokens, raw private logs, or sensitive payloads in run sta
 
 If a process interruption leaves a lock, run `unlock` only after confirming the recorded process stopped. Let the engine reject live, malformed, or cross-host locks; never delete them by assumption.
 
-Keep delivery outside the run engine. A run may record authority but must still route commit, push, publish, merge, or deployment through `patpat-ship` at the moment of action.
+Route completion through `patpat-ship`. Default commit-and-PR after proof. Merge only with land language or overnight, and only when checks are green.
 
 On resume, validate the store, compare live repository state, inspect intentional and pre-existing changes, and continue from the earliest valid graph node. Never trust a checkpoint merely because it parses.
 

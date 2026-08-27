@@ -1,19 +1,21 @@
 ---
 name: patpat-ship
-description: Assess and execute an explicitly requested delivery step after direct verification. Use for commit, pull request, publish, release, merge, deployment, or overnight land requests; do not trigger for ordinary implementation completion.
+description: Commit and open a ready pull request after verified mutating work, and merge, publish, or deploy only with land language or overnight intent. Use at the end of implementation and for explicit ship, land, merge, publish, or deploy requests.
 ---
 
 # Patpat Ship
 
 When invoked directly, read [`patpat-loop`](../patpat-loop/SKILL.md) and follow its execution graph, authority boundaries, and reporting contract.
 
-Read [preserve safety](../patpat-loop/principles/preserve-safety.md), [proof over proxy](../patpat-loop/principles/proof-over-proxy.md), the [operating protocol](../patpat-loop/references/operating-protocol.md), and the [authorized delivery playbook](../patpat-loop/playbooks/authorized-delivery.md). Require current evidence from [`patpat-verify`](../patpat-verify/SKILL.md) and an independent pass through [`patpat-review`](../patpat-review/SKILL.md).
+Read [preserve safety](../patpat-loop/principles/preserve-safety.md), [proof over proxy](../patpat-loop/principles/proof-over-proxy.md), and the [operating protocol](../patpat-loop/references/operating-protocol.md).
 
-Treat delivery as a separate authorization boundary. The current user request must name the action. `/patpat land this PR` or `going to bed, commit and open the PR` is enough for that named ordinary action after checks pass.
+After verify and review pass, apply [default delivery](../patpat-loop/playbooks/default-delivery.md): commit the in-scope diff and open a ready pull request unless the user opted out or the path was read-only.
 
-Inspect version-control state, staged diff, generated files, secrets, and unrelated work. When authorized, perform only the requested delivery step and re-check the delivered artifact or remote state directly. Green checks do not authorize auto-merge.
+Apply [authorized delivery](../patpat-loop/playbooks/authorized-delivery.md) to merge, publish, or deploy. Overnight, going to bed, don't stop, land this, merge this, or ship it merges a green verified PR. Do not land a real CI failure. Retry a flake once.
 
-Obtain fresh confirmation immediately before production deployment, package or release publication, merge onto a protected default, destructive migration, force push, secret rotation, or risky auth, billing, and permission changes. Explain blast radius, rollback, and verification before requesting approval.
+Inspect version-control state, unrelated dirty files, and secrets before any git write. Workers never ship. Re-check the remote revision after the action.
+
+Pause for production deploy, package publish, force-push, secret rotation, and risky auth, billing, or permission changes. Explain blast radius, rollback, and verification before continuing.
 
 ## Proof closure
 

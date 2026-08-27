@@ -69,7 +69,8 @@ Read the linked file when the trigger fires. Cite a principle only when it chang
 | Resume, pause, or take over in-flight work | [`patpat-run`](../patpat-run/SKILL.md) | [Session takeover](playbooks/session-takeover.md) |
 | PR status, conflicts, review threads, or get-it-green | [`patpat-inspect`](../patpat-inspect/SKILL.md) or [`patpat-change`](../patpat-change/SKILL.md) | [PR drive](playbooks/pr-drive.md) |
 | Install, update, remove, or validate Patpat on an agent host | [`patpat-setup`](../patpat-setup/SKILL.md) | Use the workflow directly |
-| Named commit, pull request, publish, release, merge, deployment, or overnight land | [`patpat-ship`](../patpat-ship/SKILL.md) | [Authorized delivery](playbooks/authorized-delivery.md) |
+| End of mutating work, or named commit / pull request | [`patpat-ship`](../patpat-ship/SKILL.md) | [Default delivery](playbooks/default-delivery.md) |
+| Named merge, publish, deploy, or overnight land of a green PR | [`patpat-ship`](../patpat-ship/SKILL.md) | [Authorized delivery](playbooks/authorized-delivery.md) |
 | Create or revise a reusable agent skill | [`patpat-skill`](../patpat-skill/SKILL.md) | [Skill change](playbooks/skill-change.md) |
 | Test whether a skill triggers and behaves correctly | [`patpat-eval`](../patpat-eval/SKILL.md) | [Behavioral evaluation](playbooks/behavioral-eval.md) |
 | Create or maintain a project-specific verification skill | [`patpat-verifier`](../patpat-verifier/SKILL.md) | [Project verifier](playbooks/project-verifier.md) |
@@ -82,7 +83,7 @@ If no narrow route fits, use `patpat-plan`. Do not persist a new reusable workfl
 
 Resolve overlaps by the earliest unsettled decision. Architect first when the target contract is unsettled. Plan when the remaining problem is sequencing. Impact assesses downstream risk without designing the replacement. A prototype settles an empirical fork instead of asking the human to choose.
 
-Overnight, "don't stop", or "going to bed" continues the matched playbook through verify and review. It is delivery authority only when the request also names commit, PR, merge, publish, or deploy.
+Overnight, "don't stop", or "going to bed" continues the matched playbook through verify, review, default commit-and-PR, and merge of a green verified PR. It does not land a real CI failure and does not deploy.
 
 ## Run the graph
 
@@ -90,7 +91,8 @@ Read [the execution graph](references/execution-graph.md), the matched workflow,
 
 ```text
 FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY -> REVIEW -> LEARN? -> REPORT
-NAMED DELIVERY? -> SHIP the named action only
+MUTATING? -> DEFAULT SHIP (commit + PR)
+LAND? -> MERGE a green verified PR
 ```
 
 A proof contract names the claim, authoritative surface, action, expected observation, and cleanup. Define it before editing.
@@ -102,12 +104,14 @@ Enter `LEARN?` only for a recurring failure worth encoding.
 ## Preserve control
 
 - Ordinary in-scope edits proceed under `/patpat` without asking permission to type.
-- Delivery is a separate gate. Commit, push, pull request, merge, publish, and deploy only when the current request names that action.
-- Pause for production deploy, force-push, data deletion, secret rotation, and risky auth, billing, or permission changes.
+- After verify and review, default to [commit and a ready PR](playbooks/default-delivery.md). Opt out with `don't commit` or `local only`.
+- Merge a green verified PR on land / merge / ship it / overnight / going to bed. Do not land a real CI failure.
+- Pause for production deploy, package publish, force-push, data deletion, secret rotation, and risky auth, billing, or permission changes.
+- Workers never ship. The parent ships.
 
 ## Earn parallelism
 
-Default to one owner. Arena, swarm, and autopilot run only when [earned parallelism](principles/earned-parallelism.md) passes, and they fall back to serial work when isolation is missing. Use [`patpat-engineer`](../patpat-engineer/SKILL.md) for isolated slices. The parent verifies the integrated result. Do not trust worker summaries. Delivery still requires a named action.
+Default to one owner. Arena, swarm, and autopilot run only when [earned parallelism](principles/earned-parallelism.md) passes, and they fall back to serial work when isolation is missing. Use [`patpat-engineer`](../patpat-engineer/SKILL.md) for isolated slices. The parent verifies the integrated result. Do not trust worker summaries. The parent then runs default delivery.
 
 ## Report evidence
 

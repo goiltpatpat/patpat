@@ -9,5 +9,5 @@ Read [automation design](automation-design.md), [defect](defect.md), [preserve s
 3. **Triage** is read-only. Classify each report: bug, question, duplicate, insufficient evidence, or out of scope. Post or file only through one coordinator, with an idempotency key, and only to destinations the user named.
 4. **Reproduce** only confirmed bugs. Require a failing observation on the real surface. Workers get no credentials and no external write tools. They return a typed proposal: repro evidence, suspected cause, and an optional draft diff.
 5. The coordinator applies a draft only after [`patpat-verify`](../../patpat-verify/SKILL.md) and [`patpat-review`](../../patpat-review/SKILL.md). External comments stay in the source thread. Do not broadcast.
-6. Land a fix only when the current request named commit, PR, or merge. Overnight triage does not imply ship.
+6. A verified draft fix goes through [default delivery](default-delivery.md). Overnight triage does not merge. Land only with land language or a named merge.
 7. Stop on ambiguous writes, secret leakage, missing sandbox proof, or a failed canary. Leave the loop paused.
