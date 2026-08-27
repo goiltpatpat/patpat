@@ -1,0 +1,12 @@
+# Earned Parallelism
+
+Use parallel work only when all gates pass:
+
+- A recent representative single-owner run in this repository passed the same verifier and integration path.
+- A stable verifier can judge each result.
+- Work splits into independent, deterministic slices.
+- Workers do not share a mutable file, branch, key, environment, or external resource.
+- One integration owner is named.
+- The integrated result receives whole-system verification.
+
+Keep mutating work serial when any gate fails or that repository-specific trust evidence does not exist. Read-only investigation may parallelize across independent evidence sources. Never enable auto-merge merely because independent checks are green.

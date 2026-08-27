@@ -1,0 +1,34 @@
+{
+  "name": "patpat",
+  "version": "0.3.0",
+  "description": "Evidence-driven engineering workflows with bounded changes and explicit verification.",
+  "author": {
+    "name": "Patpat maintainers"
+  },
+  "homepage": "https://github.com/goiltpatpat/patpat",
+  "repository": "https://github.com/goiltpatpat/patpat",
+  "license": "MIT",
+  "keywords": [
+    "agentic-engineering",
+    "verification",
+    "debugging",
+    "architecture"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Patpat",
+    "shortDescription": "Run disciplined engineering loops with evidence.",
+    "longDescription": "Route repository work through inspection, bounded implementation, real-artifact verification, safety review, and evidence-based reporting.",
+    "developerName": "Patpat maintainers",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Use $patpat-loop for this engineering task.",
+      "Use $patpat-setup to install or validate Patpat on this host."
+    ]
+  }
+}

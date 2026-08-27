@@ -1,0 +1,26 @@
+{
+  "name": "patpat",
+  "displayName": "Patpat",
+  "version": "0.3.0",
+  "description": "Evidence-driven engineering workflows with bounded changes and explicit verification.",
+  "author": {
+    "name": "Patpat maintainers"
+  },
+  "homepage": "https://github.com/goiltpatpat/patpat",
+  "repository": "https://github.com/goiltpatpat/patpat",
+  "license": "MIT",
+  "keywords": [
+    "agentic-engineering",
+    "verification",
+    "debugging",
+    "architecture"
+  ],
+  "category": "developer-tools",
+  "tags": [
+    "workflow",
+    "verification",
+    "review"
+  ],
+  "skills": "./skills/",
+  "agents": "./adapters/cursor/agents/"
+}
