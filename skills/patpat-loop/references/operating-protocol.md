@@ -41,13 +41,17 @@ Stop at the first change that satisfies the proof contract. Delete before adding
 
 ## Git and ship
 
-Do not commit, push, tag, release, publish, deploy, merge, or open a pull request unless the current user request names that action. `/patpat land this` or `going to bed, open the PR` is authority for that named step after verify and review.
+After mutating work passes verify and review, default to commit-and-open-PR. That is the easy ship. Opt out with `don't commit`, `don't open a PR`, or `local only`.
 
-Always pause for force-push to shared branches, production deploy, data deletion, secret rotation, and risky auth, billing, or permission changes. Explain blast radius, safer alternative, rollback, and verification before continuing.
+Overnight, going to bed, don't stop, land this, merge this, or ship it is enough to merge a green verified PR. Do not land a real CI failure. Retry a flake once.
+
+Always pause for force-push to shared branches, production deploy, package publish, data deletion, secret rotation, and risky auth, billing, or permission changes. Explain blast radius, safer alternative, rollback, and verification before continuing.
+
+Read-only work never ships. Workers never ship. The parent ships.
 
 ## Parallelism
 
-Default to one owner. Fan out only when exclusive paths, a named integrator, and a verifier exist. If those are missing, run serially and say so. Worker output is a candidate. The parent verifies. Parallel success does not authorize merge.
+Default to one owner. Fan out only when exclusive paths, a named integrator, and a verifier exist. If those are missing, run serially and say so. Worker output is a candidate. The parent verifies. Parallel success does not merge by itself.
 
 ## Evidence
 

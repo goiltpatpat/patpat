@@ -9,4 +9,4 @@ Read [earned parallelism](../principles/earned-parallelism.md), [proof over prox
 5. Fan out through [`patpat-engineer`](../../patpat-engineer/SKILL.md) for writes, or read-only workers for investigation. Inherit the parent model unless the user named models.
 6. Aggregate into one table. Do not paste raw dumps. A missing required slice is a gap, not inferred coverage.
 7. The parent verifies the integrated result. Worker self-report is not proof.
-8. Delivery stays with the parent and still requires a named action.
+8. Delivery stays with the parent. Writable swarms finish through [default delivery](default-delivery.md).

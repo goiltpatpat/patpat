@@ -9,4 +9,4 @@ Read [earned parallelism](../principles/earned-parallelism.md), [smallest safe c
 5. Read every complete candidate against the rubric. Pick the base a future maintainer can extend. Prefer the smaller surface when two tie.
 6. Graft only the parts that keep one coherent model. Record grafts, rejections, and dropouts. If candidates wildly diverge, reframe instead of averaging.
 7. Verify the synthesized artifact on its authoritative surface through [`patpat-verify`](../../patpat-verify/SKILL.md) and [`patpat-review`](../../patpat-review/SKILL.md). The arena does not waive proof.
-8. Delivery stays with the parent. Hand a named commit or PR to [authorized delivery](authorized-delivery.md) only when the request names it.
+8. The parent runs [default delivery](default-delivery.md) on the synthesized artifact. Merge still needs land language or overnight.
