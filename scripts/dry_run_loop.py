@@ -39,7 +39,14 @@ def route(prompt: str) -> str:
         return "swarm"
     if "autopilot" in text or "this queue" in text:
         return "autopilot"
-    if "how does" in text or "do not change" in text or "read-only" in text:
+    if (
+        "how does" in text
+        or "do not change" in text
+        or "read-only" in text
+        or "which skill owns" in text
+        or "where should this live" in text
+        or "where should" in text
+    ):
         return "inspect"
     if "pause safely" in text or "go offline" in text:
         return "pause"
@@ -161,6 +168,8 @@ def run_self_test() -> None:
     cases = {
         "How does auth reach this handler? Do not change files.": "inspect",
         "/patpat reproduce this timeout and fix the root cause": "debug",
+        "which skill owns investigation vs rationale-forensics?": "inspect",
+        "where should this live?": "inspect",
         "/patpat arena two layouts for this page": "arena",
         "/patpat swarm each package against its check script": "swarm",
         "/patpat autopilot this queue; do not merge": "autopilot",
@@ -237,6 +246,7 @@ def main() -> int:
         base_ship = base_ship_args()
         rows = [
             ("inspect", route("How does this work? Do not change files."), ship_plan(**{**base_ship, "path": "read-only"})),
+            ("placement", route("which skill owns investigation vs rationale-forensics?"), ship_plan(**{**base_ship, "path": "read-only"})),
             ("fix", route("/patpat fix the timeout"), ship_plan(**base_ship)),
             ("fix local only", "debug", ship_plan(**{**base_ship, "opt_out": True})),
             ("overnight", "debug", ship_plan(**{**base_ship, "continuation": True, "ci": "green"})),
