@@ -23,9 +23,18 @@ SEMVER_PATTERN = re.compile(
 )
 LINK_PATTERN = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 ALLOWED_FRONTMATTER = {"name", "description"}
+OPTIONAL_HOST_FRONTMATTER = {
+    "disable-model-invocation",
+    "mode",
+    "reminder",
+    "icon",
+    "color",
+}
+MODE_SKILLS = {"patpat", "patpat-loop"}
 PUBLISHED_SOURCE = "https://github.com/goiltpatpat/patpat"
 ALLOWED_SKILL_POLICIES = {"mutating", "read-only", "support", "router"}
 SKILL_POLICIES = {
+    "patpat": "router",
     "patpat-architect": "read-only",
     "patpat-automation": "mutating",
     "patpat-change": "mutating",
@@ -78,12 +87,16 @@ UNADMITTED_COMPONENT_PATHS = {
     ".mcp.json",
     "automations",
     "commands",
-    "hooks",
     "hooks.json",
     "mcp",
     "mcp-servers",
     "mcp_config.json",
     "rules",
+}
+EXPECTED_HOOK_FILES = {
+    Path("hooks/hooks.json"),
+    Path("hooks/cursor.json"),
+    Path("hooks/scripts/patpat_loop_state.py"),
 }
 
 
@@ -325,6 +338,31 @@ def validate_agent_adapters(root: Path, parsed: dict[str, dict[str, object]], er
             errors.append(f"{path}: Antigravity adapter body must remain the canonical thin wrapper")
 
 
+def validate_hooks(root: Path, parsed: dict[str, dict[str, object]], errors: list[str]) -> None:
+    hooks_root = root / "hooks"
+    if not hooks_root.is_dir():
+        errors.append(f"{hooks_root}: missing sticky-mode hook directory")
+        return
+    actual = {
+        path.relative_to(root)
+        for path in hooks_root.rglob("*")
+        if (path.is_file() or path.is_symlink())
+        and "__pycache__" not in path.parts
+        and path.suffix != ".pyc"
+    }
+    if actual != EXPECTED_HOOK_FILES:
+        errors.append(f"{hooks_root}: expected hook files {sorted(EXPECTED_HOOK_FILES)}")
+    if parsed.get("cursor", {}).get("hooks") != "./hooks/cursor.json":
+        errors.append("Cursor manifest hooks must point to ./hooks/cursor.json")
+    if parsed.get("codex", {}).get("hooks") != "./hooks/hooks.json":
+        errors.append("Codex manifest hooks must point to ./hooks/hooks.json")
+    if "hooks" in parsed.get("antigravity", {}):
+        errors.append("Antigravity manifest must not claim packaged hooks")
+    script = root / "hooks" / "scripts" / "patpat_loop_state.py"
+    if script.is_file() and "PLUGIN_DATA" not in script.read_text(encoding="utf-8"):
+        errors.append(f"{script}: sticky hook must fail closed without PLUGIN_DATA")
+
+
 def validate_root(root: Path) -> list[str]:
     errors: list[str] = []
     for relative in sorted(UNADMITTED_COMPONENT_PATHS):
@@ -373,11 +411,11 @@ def validate_root(root: Path) -> list[str]:
         "cursor": {
             "name", "displayName", "version", "description", "author", "homepage",
             "repository", "license", "keywords", "category", "tags", "skills",
-            "agents",
+            "agents", "hooks",
         },
         "codex": {
             "name", "version", "description", "author", "homepage", "repository",
-            "license", "keywords", "skills", "interface",
+            "license", "keywords", "skills", "hooks", "interface",
         },
     }
     for host, manifest in parsed.items():
@@ -437,11 +475,12 @@ def validate_root(root: Path) -> list[str]:
             )
         prompts = codex_interface.get("defaultPrompt")
         if not isinstance(prompts, list) or not any(
-            isinstance(item, str) and "$patpat-loop" in item for item in prompts
+            isinstance(item, str) and "$patpat" in item for item in prompts
         ):
-            errors.append(f"{manifests['codex']}: defaultPrompt must include $patpat-loop")
+            errors.append(f"{manifests['codex']}: defaultPrompt must include $patpat")
 
     validate_agent_adapters(root, parsed, errors)
+    validate_hooks(root, parsed, errors)
 
     skills_root = root / "skills"
     skills = skill_directories(skills_root) if skills_root.is_dir() else []
@@ -484,11 +523,19 @@ def validate_root(root: Path) -> list[str]:
         except (OSError, ValueError) as error:
             errors.append(f"{skill_file}: {error}")
             continue
-        unknown = set(frontmatter) - ALLOWED_FRONTMATTER
-        if unknown:
-            errors.append(f"{skill_file}: non-portable frontmatter: {sorted(unknown)}")
         name = frontmatter.get("name", "")
         description = frontmatter.get("description", "")
+        unknown = set(frontmatter) - ALLOWED_FRONTMATTER - OPTIONAL_HOST_FRONTMATTER
+        if unknown:
+            errors.append(f"{skill_file}: non-portable frontmatter: {sorted(unknown)}")
+        host_keys = set(frontmatter) & OPTIONAL_HOST_FRONTMATTER
+        if host_keys and name not in MODE_SKILLS:
+            errors.append(f"{skill_file}: host mode frontmatter is limited to /patpat")
+        if name in MODE_SKILLS:
+            if frontmatter.get("mode") != "true":
+                errors.append(f"{skill_file}: /patpat must declare sticky mode")
+            if frontmatter.get("disable-model-invocation") != "true":
+                errors.append(f"{skill_file}: /patpat must be an explicit slash skill")
         if name != skill.name:
             errors.append(f"{skill_file}: name must match folder {skill.name}")
         if not NAME_PATTERN.fullmatch(name):
@@ -682,7 +729,7 @@ def run_self_test(root: Path) -> list[str]:
         router = fixture / "skills" / "patpat-loop" / "SKILL.md"
         text = router.read_text(encoding="utf-8")
         router.write_text(
-            text.replace("(../patpat-inspect/SKILL.md)", "(SKILL.md)", 1),
+            text.replace("(playbooks/pr-drive.md)", "(playbooks/missing-pr-drive.md)", 1),
             encoding="utf-8",
         )
 
@@ -784,7 +831,7 @@ def run_self_test(root: Path) -> list[str]:
             ("missing Antigravity smoke", remove_antigravity_smoke, "missing isolated Antigravity plugin smoke test"),
             ("missing stage script", remove_stage_script, "missing allowlisted plugin staging script"),
             ("missing agent install contract", remove_agents_guide, "missing agent install contract"),
-            ("Codex defaultPrompt drift", drop_codex_default_prompt, "defaultPrompt must include $patpat-loop"),
+            ("Codex defaultPrompt drift", drop_codex_default_prompt, "defaultPrompt must include $patpat"),
             ("missing published source", drop_published_source, "homepage and repository must point at the published source"),
             ("manifest version drift", drift_version, "manifest versions must match"),
             ("invalid manifest versions", invalid_versions, "valid semantic versioning"),
@@ -806,7 +853,7 @@ def run_self_test(root: Path) -> list[str]:
             ("adapter description drift", drift_adapter_description, "description must remain canonical"),
             ("nested agent adapter", add_nested_agent, "expected agent adapters"),
             ("unsupported Codex agents", add_codex_agents, "must not claim packaged agents"),
-            ("unsupported Cursor hooks", add_cursor_hooks, "unsupported manifest fields"),
+            ("unsupported Cursor hooks", add_cursor_hooks, "hooks/cursor.json"),
             ("auto-discovered command", add_conventional_command, "unadmitted plugin component path"),
             ("commented proof closure", comment_out_proof_closure, "canonical proof closure directive"),
             ("read-only boundary drift", remove_read_only_boundary, "canonical read-only mutation boundary"),
@@ -834,6 +881,17 @@ def run_self_test(root: Path) -> list[str]:
     )
     if result.returncode != 0:
         failures.append(f"self-test: durable run engine failed: {result.stdout}{result.stderr}")
+    hook_script = root / "hooks" / "scripts" / "patpat_loop_state.py"
+    hook_result = subprocess.run(
+        [sys.executable, str(hook_script), "--self-test"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if hook_result.returncode != 0:
+        failures.append(
+            f"self-test: sticky hook failed: {hook_result.stdout}{hook_result.stderr}"
+        )
     return failures
 
 

@@ -27,9 +27,9 @@ Start a fresh task or session. Package list output does not prove prompt-time di
 
 | Host | Invoke |
 | --- | --- |
-| Codex | `$patpat-loop` |
-| Portable / generic | `Use patpat-loop to ...` |
-| Antigravity | host UI or `Use patpat-loop to ...` |
-| Cursor | host UI or `Use patpat-loop to ...` after reload; `/skill` is unverified |
+| Cursor | `/patpat` or `/patpat-loop` |
+| Codex | `$patpat` or `$patpat-loop` |
+| Portable / generic | `Use patpat to ...` |
+| Antigravity | host UI or `Use patpat to ...` |
 
 Report host, scope, exact destination or marketplace, conflicts, command receipts, discovered skill count, invocation result, and removal path. Classify package validation separately from prompt-time discovery.

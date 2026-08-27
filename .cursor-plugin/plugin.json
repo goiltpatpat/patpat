@@ -1,7 +1,7 @@
 {
   "name": "patpat",
   "displayName": "Patpat",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Evidence-driven engineering workflows with bounded changes and explicit verification.",
   "author": {
     "name": "Patpat maintainers"
@@ -22,5 +22,6 @@
     "review"
   ],
   "skills": "./skills/",
-  "agents": "./adapters/cursor/agents/"
+  "agents": "./adapters/cursor/agents/",
+  "hooks": "./hooks/cursor.json"
 }

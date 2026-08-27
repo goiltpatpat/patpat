@@ -1,6 +1,6 @@
 {
   "name": "patpat",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Evidence-driven engineering workflows with bounded changes and explicit verification.",
   "author": {
     "name": "Patpat maintainers"
@@ -15,6 +15,7 @@
     "architecture"
   ],
   "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
   "interface": {
     "displayName": "Patpat",
     "shortDescription": "Run disciplined engineering loops with evidence.",
@@ -27,7 +28,7 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Use $patpat-loop for this engineering task.",
+      "Use $patpat for this engineering task.",
       "Use $patpat-setup to install or validate Patpat on this host."
     ]
   }
