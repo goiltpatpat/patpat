@@ -58,12 +58,12 @@ def how_routing_report() -> str:
 1. `route()` lowercases the prompt and matches earlier, more specific families before `debug` or `ship` (`scripts/dry_run_loop.py:{route_line}`). [confirmed]
 2. How-does and placement phrases return `inspect` (`scripts/dry_run_loop.py:{inspect_line}`). [confirmed]
 3. `ship_plan(path="read-only")` and `action="inspect"` return `no-ship`, so inspect never opens a PR. [confirmed]
-4. A why-shaped neighbor is not this skill; it stays off the inspect route. [inferred]
+4. A why-shaped neighbor still uses inspect, but via rationale-forensics and the why-report, not this how-report. [confirmed]
 
 ### Where Things Live
 - `route` / `ship_plan` - owner `scripts/dry_run_loop.py`, layer test/router. [confirmed]
 - How-equivalent instructions - owner `patpat-inspect` + investigation playbook, layer skill/playbook. [confirmed]
-- Why-shaped questions - owner rationale-forensics under `patpat-inspect`, layer playbook (thin until D). [confirmed]
+- Why-shaped questions - owner rationale-forensics under `patpat-inspect`, layer playbook (why-equivalent). [confirmed]
 
 ### Gotchas
 - `fix`/`repro`/`timeout` still route to `debug`, not inspect.
@@ -86,7 +86,7 @@ Investigation owns how/placement/ownership/layering/critique. Rationale-forensic
 
 ### Where Things Live
 - Investigation - owner `patpat-inspect`, layer playbook (how-equivalent). [confirmed]
-- Rationale-forensics - owner `patpat-inspect`, layer playbook (why, still thin until D). [confirmed]
+- Rationale-forensics - owner `patpat-inspect`, layer playbook (why-equivalent). [confirmed]
 - Router dry-run - owner `scripts/dry_run_loop.py`, layer test. [confirmed]
 
 ### Gotchas
@@ -151,7 +151,7 @@ def run_self_test() -> None:
     assert dry_run_loop.route("how does X work?") == "inspect"
     assert dry_run_loop.route("/patpat fix the timeout") == "debug"
     assert dry_run_loop.route("/patpat merge this") == "ship"
-    assert dry_run_loop.route("why was ship_plan merge gated?") != "inspect"
+    assert dry_run_loop.route("why was ship_plan merge gated?") == "inspect"
 
     how = how_routing_report()
     place = placement_report()
@@ -177,7 +177,7 @@ def run_self_test() -> None:
     print("- trigger where should this live? -> inspect")
     print("- reject /patpat fix the timeout -> debug")
     print("- reject /patpat merge this -> ship")
-    print("- neighbor why was ship_plan merge gated? -> not inspect (D)")
+    print("- neighbor why was ship_plan merge gated? -> inspect via rationale-forensics (D, not this how-report)")
 
 
 def main() -> int:

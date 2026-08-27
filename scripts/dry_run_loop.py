@@ -41,6 +41,9 @@ def route(prompt: str) -> str:
         return "autopilot"
     if (
         "how does" in text
+        or "why does" in text
+        or "why was" in text
+        or "why is" in text
         or "do not change" in text
         or "read-only" in text
         or "which skill owns" in text
@@ -170,6 +173,8 @@ def run_self_test() -> None:
         "/patpat reproduce this timeout and fix the root cause": "debug",
         "which skill owns investigation vs rationale-forensics?": "inspect",
         "where should this live?": "inspect",
+        "Why does dry_run_loop.ship_plan require explicit land/merge?": "inspect",
+        "how does routing work?": "inspect",
         "/patpat arena two layouts for this page": "arena",
         "/patpat swarm each package against its check script": "swarm",
         "/patpat autopilot this queue; do not merge": "autopilot",
@@ -247,6 +252,8 @@ def main() -> int:
         rows = [
             ("inspect", route("How does this work? Do not change files."), ship_plan(**{**base_ship, "path": "read-only"})),
             ("placement", route("which skill owns investigation vs rationale-forensics?"), ship_plan(**{**base_ship, "path": "read-only"})),
+            ("why-ship_plan", route("Why does dry_run_loop.ship_plan require explicit land/merge?"), ship_plan(**{**base_ship, "path": "read-only"})),
+            ("how-routing", route("how does routing work?"), ship_plan(**{**base_ship, "path": "read-only"})),
             ("fix", route("/patpat fix the timeout"), ship_plan(**base_ship)),
             ("fix local only", "debug", ship_plan(**{**base_ship, "opt_out": True})),
             ("overnight", "debug", ship_plan(**{**base_ship, "continuation": True, "ci": "green"})),
