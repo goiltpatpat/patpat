@@ -68,7 +68,7 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 
 | Playbook | For |
 | --- | --- |
-| [Investigation](skills/patpat-loop/playbooks/investigation.md) | A read-only question. How does this work, why was it built this way, are we sure. |
+| [Investigation](skills/patpat-loop/playbooks/investigation.md) | Read-only how-equivalent: how it works, where it lives, who owns it, which layer. Why-shaped questions stay on rationale-forensics. |
 | [Defect](skills/patpat-loop/playbooks/defect.md) | Reproduce a failure, prove the root cause, and fix it with runtime evidence. |
 | [Regression first](skills/patpat-loop/playbooks/regression-first.md) | A cheap deterministic test exists. Write the failing check, then the fix. |
 | [Performance](skills/patpat-loop/playbooks/performance.md) | A measured slowness against a comparable baseline. |

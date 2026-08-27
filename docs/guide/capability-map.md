@@ -31,7 +31,7 @@ Compare pstack jobs to Patpat artifacts. Missing filenames are not gaps when the
 | pstack job | Patpat home | Class |
 | --- | --- | --- |
 | `poteto-mode` routing + playbooks | `patpat-loop` + playbooks | adapted |
-| `how` / `why` / `teach` investigation | `patpat-inspect` + investigation / rationale-forensics | adapted |
+| `how` / `why` / `teach` investigation | `patpat-inspect` + investigation (how/placement/ownership/layering/critique deepened) / rationale-forensics (why still thin until D) | adapted |
 | `blast-radius` | `patpat-impact` | covered |
 | `architect` | `patpat-architect` | adapted |
 | feature / refactor / prototype | `patpat-change` + bounded-change / behavior-preserving-refactor / prototype | covered |
