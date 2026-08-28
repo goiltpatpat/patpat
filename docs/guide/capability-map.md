@@ -2,7 +2,7 @@
 
 This map tracks engineering behavior, not upstream file names or counts. Patpat's core is its operating protocol. Workflow jobs are informed by [pstack](https://github.com/cursor/plugins/tree/main/pstack) and its [Codex adaptation](https://github.com/Aqua-123/pstack-for-codex), then bounded so they cannot override that protocol.
 
-Upstream pstack was last reviewed through commit `6fecddba` (2026-08-27). Compare later changes by invariant before changing Patpat.
+Upstream pstack was last reviewed through commit `397c8660` (2026-08-27). Compare later changes by invariant before changing Patpat.
 
 ## Covered
 
