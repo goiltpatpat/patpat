@@ -1,6 +1,6 @@
 # Earn Parallelism
 
-![One trusted path passes a verification gate before splitting into three isolated workspaces and recombining under one review owner.](./images/earned-parallelism.jpg)
+![A proven path passes through a verification gate before helper drones work in three isolated bays and Patpat integrates their components with a reviewer.](./images/earned-parallelism.jpg)
 
 Parallel generation multiplies output. It does not multiply trust. Patpat starts with one reliable end-to-end path and adds concurrency only where ownership and integration proof are explicit.
 

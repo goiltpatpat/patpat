@@ -1,6 +1,6 @@
 # Route Work Through Patpat
 
-![A coding agent moves through repository inspection, a bounded change, the real application, evidence capture, and independent review as one closed loop.](./images/evidence-loop.jpg)
+![Patpat routes rounded helper drones through repository inspection, a bounded build, real-system verification, and review on one continuous workshop loop.](./images/evidence-loop.jpg)
 
 Patpat turns an outcome into a closed engineering loop:
 

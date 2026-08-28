@@ -1,6 +1,6 @@
 # Run Durable Work
 
-![A content-bound graph advances through verified checkpoints, stops one failed branch safely, resumes from current evidence, and ends at independent review.](./images/durable-runs.jpg)
+![Patpat follows a teal route of sealed evidence checkpoints while one coral branch stops safely and a helper drone resumes from the last valid state.](./images/durable-runs.jpg)
 
 Long work needs explicit state, not a longer prompt. `patpat-run` models phases and evidence as a deterministic local graph that can stop, resume, and reject stale proof.
 

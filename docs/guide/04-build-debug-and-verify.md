@@ -1,6 +1,6 @@
 # Build, Debug, and Verify
 
-![Automated testing, a packaged artifact, and the real user surface converge into one reviewed proof artifact.](./images/proof-surfaces.jpg)
+![Patpat times a physical courier-machine trial while helper drones capture and inspect the delivered artifact as evidence.](./images/proof-surfaces.jpg)
 
 Generation is cheap. Evidence is the scarce resource. Patpat shapes the implementation around the strongest practical observation of changed behavior.
 
