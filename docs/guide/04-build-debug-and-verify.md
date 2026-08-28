@@ -1,5 +1,7 @@
 # Build, Debug, and Verify
 
+![Automated testing, a packaged artifact, and the real user surface converge into one reviewed proof artifact.](./images/proof-surfaces.jpg)
+
 Generation is cheap. Evidence is the scarce resource. Patpat shapes the implementation around the strongest practical observation of changed behavior.
 
 ## Make the smallest safe change

@@ -1,5 +1,7 @@
 # Route Work Through Patpat
 
+![A coding agent moves through repository inspection, a bounded change, the real application, evidence capture, and independent review as one closed loop.](./images/evidence-loop.jpg)
+
 Patpat turns an outcome into a closed engineering loop:
 
 ```text
