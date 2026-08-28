@@ -26,6 +26,7 @@ PACKAGE_ENTRIES = (
     "agents",
     "docs",
     "hooks",
+    "hooks.json",
     "plugin.json",
     "scripts",
     "skills",

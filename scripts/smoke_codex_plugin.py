@@ -130,6 +130,21 @@ def main() -> int:
         run_json([codex, "plugin", "remove", PLUGIN_ID, "--json"], environment)
         if installed_path.exists():
             raise SmokeError("Codex plugin removal left the installed artifact behind")
+
+        reinstalled = run_json(
+            [codex, "plugin", "add", PLUGIN_ID, "--json"],
+            environment,
+        )
+        raw_reinstalled_path = reinstalled.get("installedPath")
+        if not isinstance(raw_reinstalled_path, str) or not raw_reinstalled_path:
+            raise SmokeError("Codex reinstall did not return an artifact path")
+        reinstalled_path = Path(raw_reinstalled_path)
+        if file_inventory(reinstalled_path) != staged_inventory:
+            raise SmokeError("Codex reinstall did not refresh the staged distribution")
+        run_json([codex, "plugin", "remove", PLUGIN_ID, "--json"], environment)
+        if reinstalled_path.exists():
+            raise SmokeError("Codex reinstall removal left the artifact behind")
+
         run_json([codex, "plugin", "marketplace", "remove", "patpat", "--json"], environment)
         remaining_cache_files = list(cache_root.rglob("*")) if cache_root.exists() else []
         if any(path.is_file() or path.is_symlink() for path in remaining_cache_files):

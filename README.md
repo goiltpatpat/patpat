@@ -21,6 +21,14 @@ codex plugin add patpat@patpat
 
 Start a new task, then invoke `$patpat`. Package installation and prompt-time discovery are separate checks.
 
+Grok CLI, from this repository:
+
+```bash
+grok plugin install goiltpatpat/patpat --trust
+```
+
+Start a new session, then invoke `/patpat`. The trusted hook path is covered by an isolated install-and-execution smoke test.
+
 Antigravity, from a clone that does not contain local development state:
 
 ```bash
@@ -39,6 +47,8 @@ python3 scripts/install_skills.py \
 
 A working tree that still contains Memory Bank or other ignored files must be staged first. Agents should follow [`AGENTS.md`](AGENTS.md). Host commands, updates, and removal live in the [installation guide](docs/guide/installing.md).
 
+Update through the owner of the installed state: Codex marketplace upgrade plus remove/add, `grok plugin update patpat`, pull/validate/install on the same Antigravity clone, or the transactional portable updater. Development symlinks follow source content and use the updater when the skill catalog changes. Cursor native update remains unverified. See the [update matrix](docs/guide/installing.md#update).
+
 ## Get started
 
 Two steps:
@@ -50,7 +60,7 @@ Two steps:
 /patpat reproduce this timeout, fix the root cause, and land the PR
 ```
 
-That is enough. The router stays on across later turns, selects a playbook, and loads the other skills as the steps need them. Say `disable /patpat` to opt out.
+That is enough. Explicit activation opts the session into verified auto ship: commit the in-scope diff, non-force push, and open or update one ready pull request after verification and review. The router stays on across later turns when a supported trusted host hook supplies a receipt. Say `disable /patpat` or `local only` to opt out. Higher-priority repository rules still win.
 
 ## Usage
 
@@ -93,7 +103,7 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 | [Swarm](skills/patpat-loop/playbooks/swarm.md) | Parallel slices or races, one aggregated report. |
 | [Autopilot](skills/patpat-loop/playbooks/autopilot.md) | A verified queue or stack. Merge only when named. |
 | [Issue loop](skills/patpat-loop/playbooks/issue-loop.md) | Named-provider triage and reproduce. Stays paused until enabled. |
-| [Default delivery](skills/patpat-loop/playbooks/default-delivery.md) | After proof, commit and open a ready PR unless opted out. |
+| [Default delivery](skills/patpat-loop/playbooks/default-delivery.md) | After explicit activation and proof, commit and open or update one ready PR unless blocked or opted out. |
 | [Authorized delivery](skills/patpat-loop/playbooks/authorized-delivery.md) | Merge a green verified PR only on explicit land or merge; pause for deploy. |
 | [Independent review](skills/patpat-loop/playbooks/independent-review.md) | Challenge an implementation and its proof without editing. |
 | [Skill change](skills/patpat-loop/playbooks/skill-change.md) | Write or revise a SKILL.md. |
@@ -123,7 +133,7 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 | [`patpat-arena`](skills/patpat-arena/SKILL.md) | Compete isolated attempts and synthesize one verified result. |
 | [`patpat-swarm`](skills/patpat-swarm/SKILL.md) | Cover slices or races and return one report. |
 | [`patpat-setup`](skills/patpat-setup/SKILL.md) | Install, validate, or remove Patpat on a host. |
-| [`patpat-ship`](skills/patpat-ship/SKILL.md) | Default commit-and-PR after proof; merge only when explicitly named. |
+| [`patpat-ship`](skills/patpat-ship/SKILL.md) | Auto commit-and-PR after explicit activation and proof; merge only when explicitly named. |
 | [`patpat-skill`](skills/patpat-skill/SKILL.md) | Author a reusable skill. |
 | [`patpat-eval`](skills/patpat-eval/SKILL.md) | Evaluate skill triggering with isolated prompts. |
 | [`patpat-verifier`](skills/patpat-verifier/SKILL.md) | Create or maintain a project-specific verifier. |
@@ -146,31 +156,43 @@ Cursor and Antigravity ship a thin native adapter only for the reviewer. The eng
 
 [`patpat-run`](skills/patpat-run/SKILL.md) is a standard-library state machine, not a prose checklist. It refuses `ACT` without a proof contract, `REVIEW` without a current content-bound evidence file, and completion without independent review. The third identical blocker stops the run.
 
+Multi-PR plans use a host-neutral checked JSON contract. Validate dependencies, owned files, proof surfaces, exact-head evidence, review gates, and delivery authority before implementation:
+
 ```bash
 python3 skills/patpat-run/scripts/run_state.py --self-test
+python3 skills/patpat-run/scripts/validate_plan.py --self-test
 ```
 
 ## Not shipped
 
 These stay bounded by the operating protocol:
 
-- Writable arena, swarm, and autopilot require isolation and fall back to serial work
+- Writable arena, swarm, and autopilot require separate worktrees or host-enforced sandboxes and fall back to serial work
 - Issue-loop stays paused until a named provider, sandbox, canary, and enable request exist
 - Merge of a red CI, package publish, and production deploy
 - Model-selection presets and persona skills
 
-After verify and review, `/patpat` commits and opens a ready PR. Overnight, going to bed, or don't stop stops merge-ready and flags the user. Merge only on explicit land or merge when checks are green. It still pauses for production deploy, force-push, secret rotation, and risky auth or billing changes.
+After verify and review, explicitly activated `/patpat` commits and opens or updates a ready PR. Overnight work stops merge-ready. Only explicit land or merge language can merge when checks are green. Patpat still pauses for production deploy, force-push, secret rotation, and risky auth or billing changes.
 
 ## Validate
 
 ```bash
 python3 scripts/validate.py --self-test
 python3 scripts/dry_run_loop.py --self-test
+python3 scripts/eval_inspect.py --self-test
+python3 scripts/eval_why.py --self-test
 python3 scripts/install_skills.py --self-test
+python3 scripts/update_skills.py --self-test
 python3 scripts/stage_plugin.py --self-test
+python3 hooks/scripts/patpat_loop_state.py --self-test
+python3 skills/patpat-run/scripts/run_state.py --self-test
+python3 skills/patpat-run/scripts/validate_plan.py --self-test
 python3 scripts/smoke_codex_plugin.py
 python3 scripts/smoke_antigravity_plugin.py
+python3 scripts/smoke_grok_plugin.py
 ```
+
+`eval_why.py` requires a source checkout with Git history; do not use it as an installed-artifact smoke test.
 
 ## Design lineage
 

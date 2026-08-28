@@ -6,6 +6,16 @@ Agents should follow [`AGENTS.md`](../../AGENTS.md). The published source is `ht
 
 Stage a working tree that contains Memory Bank or other ignored files before native Codex or Antigravity install. A clean clone of the published repository does not need staging.
 
+## Grok CLI
+
+```bash
+grok plugin install goiltpatpat/patpat --trust
+grok plugin list --json
+grok plugin details patpat
+```
+
+`--trust` is required for hooks. Start a new session, then invoke `/patpat`. Package list output does not prove prompt-time discovery. Remove with `grok plugin uninstall patpat --confirm`. Validate isolated installation and hook execution with `python3 scripts/smoke_grok_plugin.py` when Grok CLI is available.
+
 ## Codex
 
 From GitHub:
@@ -77,12 +87,43 @@ python3 scripts/install_skills.py \
   --target /absolute/path/to/project/.agents/skills
 ```
 
-The installer performs a new copy or development symlink installation. It does not update, merge, or remove existing skills. Never point it at a guessed home directory or a directory containing another Patpat installation.
+The installer performs a new copy or development symlink installation. It records ownership for copied skills but does not overwrite an existing installation. Never point it at a guessed home directory or a directory containing another Patpat installation.
+
+## Update
+
+Use the owner of the installed state. After every update, inspect the installed catalog and start a fresh task or session before checking discovery.
+
+| Installation | Update path |
+| --- | --- |
+| Codex marketplace | Run `codex plugin marketplace upgrade patpat`, then `codex plugin remove patpat@patpat` and `codex plugin add patpat@patpat`. Start a fresh task. |
+| Grok CLI | Run `grok plugin update patpat`. Start a fresh session. |
+| Antigravity clean clone | Run `git -C /absolute/path/to/patpat pull --ff-only`, `agy plugin validate /absolute/path/to/patpat`, then `agy plugin install /absolute/path/to/patpat`. Reuse the same path and start a fresh session. |
+| Portable copy | Pull the trusted source checkout, run `scripts/update_skills.py` with explicit `--target`, new `--backup`, and `--dry-run`, then repeat without `--dry-run`. The updater refuses modified recorded files, backs up the previous catalog, and rolls back a failed promotion. |
+| Portable development symlink | Update the source checkout, then run the same updater to add newly introduced skill links. Existing links follow source content. Reload the host or start a fresh session. |
+| Cursor native plugin | Update behavior remains unverified. Use the portable route until native install and update are proven in a live project. |
+
+Example portable update:
+
+```bash
+python3 scripts/update_skills.py \
+  --target /absolute/path/to/project/.agents/skills \
+  --backup /absolute/path/to/project/.agents/patpat-backup-v0.6 \
+  --dry-run
+
+python3 scripts/update_skills.py \
+  --target /absolute/path/to/project/.agents/skills \
+  --backup /absolute/path/to/project/.agents/patpat-backup-v0.6
+```
+
+The backup path must not exist and must share a filesystem with the target. The updater touches only the Patpat catalog it validates. Keep the backup until the fresh-session discovery check passes.
 
 ## Invocation
 
+Explicit invocation opts the active session into verified auto ship: commit the in-scope diff, non-force push, and open or update one ready pull request after verification and review. Higher-priority repository rules and `local only` still win. Overnight work stops merge-ready; merge requires explicit `land` or `merge` language.
+
 | Host | Invoke after a fresh session |
 | --- | --- |
+| Grok CLI | `/patpat` or `/patpat-loop` |
 | Cursor | `/patpat` or `/patpat-loop` |
 | Codex | `$patpat` or `$patpat-loop` |
 | Portable / generic Agent Skills | `Use patpat to ...` |
@@ -93,9 +134,12 @@ The installer performs a new copy or development symlink installation. It does n
 ```bash
 python3 scripts/validate.py --self-test
 python3 scripts/install_skills.py --self-test
+python3 scripts/update_skills.py --self-test
 python3 scripts/stage_plugin.py --self-test
 python3 scripts/smoke_codex_plugin.py
 python3 scripts/smoke_antigravity_plugin.py
+python3 scripts/smoke_grok_plugin.py
+python3 skills/patpat-run/scripts/validate_plan.py --self-test
 agy plugin validate .
 ```
 

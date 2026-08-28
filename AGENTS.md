@@ -14,6 +14,7 @@ Published source: `https://github.com/goiltpatpat/patpat`. Plugin id: `patpat@pa
 
 | Host | Install |
 | --- | --- |
+| Grok CLI from GitHub | `grok plugin install goiltpatpat/patpat --trust` |
 | Codex from GitHub | `codex plugin marketplace add goiltpatpat/patpat` then `codex plugin add patpat@patpat` |
 | Codex from a dirty local tree | `python3 scripts/stage_plugin.py --target /absolute/path/to/patpat-dist` then marketplace-add that staged path |
 | Antigravity from a clean clone | `agy plugin validate /absolute/path/to/patpat` then `agy plugin install /absolute/path/to/patpat` |
@@ -25,8 +26,11 @@ Published source: `https://github.com/goiltpatpat/patpat`. Plugin id: `patpat@pa
 
 Start a fresh task or session. Package list output does not prove prompt-time discovery.
 
+Explicit `/patpat`, `/patpat-loop`, `$patpat`, or `$patpat-loop` activation opts the session into verified auto ship: commit the in-scope diff, non-force push, and open or update one ready pull request after verification and review. Higher-priority repository rules and `local only` still win. Merge requires explicit `land` or `merge` language.
+
 | Host | Invoke |
 | --- | --- |
+| Grok CLI | `/patpat` or `/patpat-loop` after a new session |
 | Cursor | `/patpat` or `/patpat-loop` |
 | Codex | `$patpat` or `$patpat-loop` |
 | Portable / generic | `Use patpat to ...` |

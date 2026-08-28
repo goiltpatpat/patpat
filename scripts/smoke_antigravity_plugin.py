@@ -71,6 +71,18 @@ def main() -> int:
         if not any(isinstance(item, dict) and item.get("name") == "patpat" for item in imports):
             raise SmokeError("installed Patpat plugin was absent from Antigravity plugin list")
 
+        readme = staged_source / "README.md"
+        readme.write_text(
+            readme.read_text(encoding="utf-8")
+            + "\n<!-- antigravity-update-smoke -->\n",
+            encoding="utf-8",
+        )
+        refreshed_inventory = file_inventory(staged_source)
+        run([agy, "plugin", "validate", str(staged_source)], environment)
+        run([agy, "plugin", "install", str(staged_source)], environment)
+        if file_inventory(installed_path) != refreshed_inventory:
+            raise SmokeError("Antigravity reinstall did not refresh the staged distribution")
+
         run([agy, "plugin", "uninstall", "patpat"], environment)
         if installed_path.exists():
             raise SmokeError("Antigravity uninstall left the staged plugin behind")

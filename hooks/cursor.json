@@ -2,17 +2,17 @@
   "hooks": {
     "sessionStart": [
       {
-        "command": "python3 ./hooks/scripts/patpat_loop_state.py"
+        "command": "if [ -n \"${CURSOR_PLUGIN_ROOT:-}\" ]; then python3 \"${CURSOR_PLUGIN_ROOT}/hooks/scripts/patpat_loop_state.py\"; fi"
       }
     ],
     "beforeSubmitPrompt": [
       {
-        "command": "python3 ./hooks/scripts/patpat_loop_state.py"
+        "command": "if [ -n \"${CURSOR_PLUGIN_ROOT:-}\" ]; then python3 \"${CURSOR_PLUGIN_ROOT}/hooks/scripts/patpat_loop_state.py\"; fi"
       }
     ],
     "sessionEnd": [
       {
-        "command": "python3 ./hooks/scripts/patpat_loop_state.py"
+        "command": "if [ -n \"${CURSOR_PLUGIN_ROOT:-}\" ]; then python3 \"${CURSOR_PLUGIN_ROOT}/hooks/scripts/patpat_loop_state.py\"; fi"
       }
     ]
   }
