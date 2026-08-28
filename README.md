@@ -163,7 +163,10 @@ Multi-PR plans use a host-neutral checked JSON contract. Validate dependencies, 
 ```bash
 python3 skills/patpat-run/scripts/run_state.py --self-test
 python3 skills/patpat-run/scripts/validate_plan.py --self-test
+python3 skills/patpat-run/scripts/program_state.py --self-test
 ```
+
+The program store adds a dependency frontier, inbox, explicit dispatch and delivery gates, and head-bound verification records under Git metadata. It coordinates state without spawning agents or creating delivery authority. Dependency head changes invalidate downstream evidence.
 
 ## Not shipped
 
@@ -182,6 +185,7 @@ After verify and review, explicitly activated `/patpat` commits and opens or upd
 python3 scripts/validate.py --self-test
 python3 scripts/dry_run_loop.py --self-test
 python3 scripts/eval_inspect.py --self-test
+python3 scripts/eval_parallel.py --self-test
 python3 scripts/eval_why.py --self-test
 python3 scripts/install_skills.py --self-test
 python3 scripts/update_skills.py --self-test
@@ -189,6 +193,8 @@ python3 scripts/stage_plugin.py --self-test
 python3 hooks/scripts/patpat_loop_state.py --self-test
 python3 skills/patpat-run/scripts/run_state.py --self-test
 python3 skills/patpat-run/scripts/validate_plan.py --self-test
+python3 skills/patpat-run/scripts/program_state.py --self-test
+python3 skills/patpat-ship/scripts/pr_watch.py --self-test
 python3 scripts/smoke_codex_plugin.py
 python3 scripts/smoke_antigravity_plugin.py
 python3 scripts/smoke_grok_plugin.py

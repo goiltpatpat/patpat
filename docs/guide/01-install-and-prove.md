@@ -18,7 +18,7 @@ Use the exact commands and update behavior in the [installation reference](./ins
 
 ## Prove the package
 
-Run the host's validation or inventory command. Confirm that the installed source is the expected repository and version. For portable copies, retain the ownership record created by the installer; the updater uses it to detect local tampering and roll back failed replacements.
+Run the host's validation or inventory command. Confirm that the installed source is the expected repository and version. For portable copy and symlink installs, retain the ownership record created by the installer; the updater uses it to detect local tampering, reconcile the recorded catalog, and roll back failed replacements.
 
 ## Prove discovery
 

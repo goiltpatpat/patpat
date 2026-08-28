@@ -57,6 +57,9 @@ def install_paths(source: Path, target: Path, skills: list[Path], mode: str, dry
         for skill in skills
         if (target / skill.name).exists() or (target / skill.name).is_symlink()
     ]
+    marker = target / INVENTORY_NAME
+    if marker.exists() or marker.is_symlink():
+        conflicts.append(marker)
     if conflicts:
         print("Refusing to overwrite existing skills:", file=sys.stderr)
         for conflict in conflicts:
@@ -82,20 +85,24 @@ def install_paths(source: Path, target: Path, skills: list[Path], mode: str, dry
             else:
                 destination.symlink_to(skill, target_is_directory=True)
                 installed.append(destination)
-        if mode == "copy":
-            marker = target / INVENTORY_NAME
-            installed.append(marker)
-            write_json(
-                marker,
-                {
-                    "plugin": "patpat",
-                    "schema": SCHEMA,
-                    "skills": {
-                        skill.name: inventory(target / skill.name)
-                        for skill in skills
-                    },
+        marker = target / INVENTORY_NAME
+        installed.append(marker)
+        write_json(
+            marker,
+            {
+                "plugin": "patpat",
+                "schema": SCHEMA,
+                "mode": mode,
+                "skills": {
+                    skill.name: (
+                        inventory(target / skill.name)
+                        if mode == "copy"
+                        else {"target": str(skill.resolve())}
+                    )
+                    for skill in skills
                 },
-            )
+            },
+        )
     except BaseException as error:
         cleanup_errors = rollback(installed)
         if cleanup_errors:
@@ -148,6 +155,7 @@ def run_self_test(source: Path, skills: list[Path]) -> int:
             skill.name: inventory(copy_target / skill.name)
             for skill in skills
         }
+        checks["symlink ownership inventory"] = (link_target / INVENTORY_NAME).is_file()
 
         original_copytree = shutil.copytree
 

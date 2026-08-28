@@ -87,7 +87,7 @@ python3 scripts/install_skills.py \
   --target /absolute/path/to/project/.agents/skills
 ```
 
-The installer performs a new copy or development symlink installation. It records ownership for copied skills but does not overwrite an existing installation. Never point it at a guessed home directory or a directory containing another Patpat installation.
+The installer performs a new copy or development symlink installation. It records exact ownership for copied skills and symlink targets but does not overwrite an existing installation. Never point it at a guessed home directory or a directory containing another Patpat installation.
 
 ## Update
 
@@ -99,7 +99,7 @@ Use the owner of the installed state. After every update, inspect the installed 
 | Grok CLI | Run `grok plugin update patpat`. Start a fresh session. |
 | Antigravity clean clone | Run `git -C /absolute/path/to/patpat pull --ff-only`, `agy plugin validate /absolute/path/to/patpat`, then `agy plugin install /absolute/path/to/patpat`. Reuse the same path and start a fresh session. |
 | Portable copy | Pull the trusted source checkout, run `scripts/update_skills.py` with explicit `--target`, new `--backup`, and `--dry-run`, then repeat without `--dry-run`. The updater refuses modified recorded files, backs up the previous catalog, and rolls back a failed promotion. |
-| Portable development symlink | Update the source checkout, then run the same updater to add newly introduced skill links. Existing links follow source content. Reload the host or start a fresh session. |
+| Portable development symlink | Update the source checkout, then run the same updater. It reconciles added, retired, and relocated links only from the recorded Patpat catalog, preserves unrecorded paths, and rolls back failed changes. Reload the host or start a fresh session. |
 | Cursor native plugin | Update behavior remains unverified. Use the portable route until native install and update are proven in a live project. |
 
 Example portable update:

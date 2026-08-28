@@ -43,4 +43,6 @@ python3 skills/patpat-run/scripts/validate_plan.py --self-test
 
 Plan validity proves dependency, ownership, evidence, and review structure. It never grants commit, merge, deploy, or publication authority.
 
+For a validated multi-unit plan, `skills/patpat-run/scripts/program_state.py` persists the dependency frontier, worker inbox, exact-head verification ledger, and explicit dispatch and delivery gates under Git metadata. It does not spawn agents or call a provider. When an upstream unit changes head, it invalidates downstream evidence before the frontier can advance.
+
 Next: [Earn parallelism](./07-earned-parallelism.md).

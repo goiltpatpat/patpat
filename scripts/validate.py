@@ -950,6 +950,18 @@ def run_self_test(root: Path) -> list[str]:
     )
     if dry_result.returncode != 0:
         failures.append(f"self-test: loop dry-run failed: {dry_result.stdout}{dry_result.stderr}")
+    parallel_eval = root / "scripts" / "eval_parallel.py"
+    parallel_result = subprocess.run(
+        [sys.executable, str(parallel_eval), "--self-test"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if parallel_result.returncode != 0:
+        failures.append(
+            "self-test: writable parallelism evaluation failed: "
+            f"{parallel_result.stdout}{parallel_result.stderr}"
+        )
     updater = root / "scripts" / "update_skills.py"
     update_result = subprocess.run(
         [sys.executable, str(updater), "--self-test"],
@@ -971,6 +983,28 @@ def run_self_test(root: Path) -> list[str]:
     if plan_result.returncode != 0:
         failures.append(
             f"self-test: multi-PR plan validator failed: {plan_result.stdout}{plan_result.stderr}"
+        )
+    program_state = root / "skills" / "patpat-run" / "scripts" / "program_state.py"
+    program_result = subprocess.run(
+        [sys.executable, str(program_state), "--self-test"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if program_result.returncode != 0:
+        failures.append(
+            f"self-test: program coordination store failed: {program_result.stdout}{program_result.stderr}"
+        )
+    pr_watcher = root / "skills" / "patpat-ship" / "scripts" / "pr_watch.py"
+    watch_result = subprocess.run(
+        [sys.executable, str(pr_watcher), "--self-test"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if watch_result.returncode != 0:
+        failures.append(
+            f"self-test: pull-request watcher failed: {watch_result.stdout}{watch_result.stderr}"
         )
     return failures
 

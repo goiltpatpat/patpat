@@ -96,8 +96,20 @@ def validate_owned_skill(path: Path, expected_name: str) -> dict[str, str]:
 
 
 def load_recorded_inventory(target: Path) -> dict[str, dict[str, str]] | None:
+    record = load_ownership_record(target)
+    if record is None:
+        return None
+    mode, skills = record
+    if mode != "copy":
+        raise UpdateError(
+            f"inventory marker does not describe a copy installation: {target / INVENTORY_NAME}"
+        )
+    return skills
+
+
+def load_ownership_record(target: Path) -> tuple[str, dict[str, dict[str, str]]] | None:
     marker = target / INVENTORY_NAME
-    if not marker.exists():
+    if not marker.exists() and not marker.is_symlink():
         return None
     if marker.is_symlink() or not marker.is_file():
         raise UpdateError(f"inventory marker is not a regular file: {marker}")
@@ -107,6 +119,9 @@ def load_recorded_inventory(target: Path) -> dict[str, dict[str, str]] | None:
         raise UpdateError(f"inventory marker is unreadable: {marker}") from error
     if not isinstance(value, dict) or value.get("schema") != SCHEMA or value.get("plugin") != "patpat":
         raise UpdateError(f"inventory marker has an unsupported contract: {marker}")
+    mode = value.get("mode", "copy")
+    if mode not in {"copy", "symlink"}:
+        raise UpdateError(f"inventory marker has an unsupported install mode: {marker}")
     skills = value.get("skills")
     if not isinstance(skills, dict):
         raise UpdateError(f"inventory marker has no skill inventory: {marker}")
@@ -114,7 +129,7 @@ def load_recorded_inventory(target: Path) -> dict[str, dict[str, str]] | None:
     for name, files in skills.items():
         if not isinstance(name, str) or SKILL_NAME.fullmatch(name) is None or not isinstance(files, dict):
             raise UpdateError(f"inventory marker has an invalid skill entry: {marker}")
-        if not all(
+        valid_copy_files = mode == "copy" and all(
             isinstance(path, str)
             and path
             and not Path(path).is_absolute()
@@ -122,10 +137,17 @@ def load_recorded_inventory(target: Path) -> dict[str, dict[str, str]] | None:
             and isinstance(digest, str)
             and DIGEST.fullmatch(digest) is not None
             for path, digest in files.items()
-        ):
+        )
+        valid_symlink = (
+            mode == "symlink"
+            and set(files) == {"target"}
+            and isinstance(files.get("target"), str)
+            and Path(files["target"]).is_absolute()
+        )
+        if not valid_copy_files and not valid_symlink:
             raise UpdateError(f"inventory marker has an invalid file entry: {marker}")
         normalized[name] = dict(files)
-    return normalized
+    return mode, normalized
 
 
 def write_json(path: Path, value: dict[str, Any]) -> None:
@@ -162,6 +184,9 @@ def validate_paths(source: Path, target: Path, backup: Path) -> None:
 
 
 def classify_installation(source: Path, target: Path, skills: list[Path]) -> str:
+    recorded = load_ownership_record(target)
+    if recorded is not None:
+        return recorded[0]
     existing = [target / skill.name for skill in skills if (target / skill.name).exists() or (target / skill.name).is_symlink()]
     if not existing:
         raise UpdateError("target contains no recognizable Patpat skills")
@@ -175,6 +200,59 @@ def classify_installation(source: Path, target: Path, skills: list[Path]) -> str
                 raise UpdateError(f"refusing an unowned skill symlink: {destination}")
         return "symlink"
     return "copy"
+
+
+def symlink_target(path: Path) -> Path:
+    raw = Path(os.readlink(path))
+    return raw if raw.is_absolute() else path.parent / raw
+
+
+def validate_symlink_installation(
+    source: Path,
+    target: Path,
+    skills: list[Path],
+) -> tuple[dict[str, dict[str, str]], bool]:
+    source_names = {skill.name for skill in skills}
+    record = load_ownership_record(target)
+    if record is None:
+        installed: dict[str, dict[str, str]] = {}
+        for skill in skills:
+            destination = target / skill.name
+            if not destination.exists() and not destination.is_symlink():
+                continue
+            if (
+                not destination.is_symlink()
+                or symlink_target(destination).resolve() != skill.resolve()
+            ):
+                raise UpdateError(f"refusing an unowned skill path: {destination}")
+            installed[skill.name] = {"target": str(skill.resolve())}
+        if not installed:
+            raise UpdateError("target contains no recognizable Patpat symlink installation")
+        return installed, False
+
+    mode, installed = record
+    if mode != "symlink":
+        raise UpdateError(
+            "inventory marker does not describe a symlink installation: "
+            f"{target / INVENTORY_NAME}"
+        )
+    for name, entry in installed.items():
+        destination = target / name
+        if not destination.is_symlink():
+            raise UpdateError(f"installed Patpat skill symlink is missing: {destination}")
+        if symlink_target(destination).resolve() != Path(entry["target"]).resolve():
+            raise UpdateError(
+                f"installed Patpat skill symlink changed since the last update: {destination}"
+            )
+    collisions = [
+        name for name in sorted(source_names - set(installed))
+        if (target / name).exists() or (target / name).is_symlink()
+    ]
+    if collisions:
+        raise UpdateError(
+            "new Patpat skill names collide with unowned target paths: " + ", ".join(collisions)
+        )
+    return installed, True
 
 
 def validate_copy_installation(
@@ -234,7 +312,11 @@ def rollback(
         original = backup_work / name
         destination = target / name
         try:
-            if original.exists() and not destination.exists() and not destination.is_symlink():
+            if (
+                (original.exists() or original.is_symlink())
+                and not destination.exists()
+                and not destination.is_symlink()
+            ):
                 os.replace(original, destination)
         except Exception as error:
             errors.append(f"restore {destination}: {error}")
@@ -287,7 +369,12 @@ def update_copy_installation(
 
         write_json(
             staged / INVENTORY_NAME,
-            {"plugin": "patpat", "schema": SCHEMA, "skills": source_inventory},
+            {
+                "plugin": "patpat",
+                "schema": SCHEMA,
+                "mode": "copy",
+                "skills": source_inventory,
+            },
         )
         for name in old_inventory:
             os.replace(target / name, backup_work / name)
@@ -323,6 +410,105 @@ def update_copy_installation(
             shutil.rmtree(transaction)
 
 
+def update_symlink_installation(
+    source: Path,
+    target: Path,
+    backup: Path,
+    skills: list[Path],
+    dry_run: bool,
+    *,
+    fail_after: int | None = None,
+) -> None:
+    old_inventory, recorded = validate_symlink_installation(source, target, skills)
+    source_inventory = {
+        skill.name: {"target": str(skill.resolve())}
+        for skill in skills
+    }
+    retired = sorted(set(old_inventory) - set(source_inventory))
+    added = sorted(set(source_inventory) - set(old_inventory))
+    relinked = sorted(
+        name
+        for name in set(old_inventory) & set(source_inventory)
+        if Path(old_inventory[name]["target"]).resolve()
+        != Path(source_inventory[name]["target"]).resolve()
+    )
+    moved_names = retired + relinked
+    promoted_names = added + relinked
+    changed = moved_names or promoted_names or not recorded
+    for name in retired:
+        print(f"retire: {target / name}")
+    for name in added:
+        print(f"link: {target / name} -> {source / name}")
+    for name in relinked:
+        print(f"relink: {target / name} -> {source / name}")
+    if not changed:
+        print("Patpat symlink installation already follows the canonical source; no update needed.")
+        return
+    print(f"backup: {backup}")
+    if dry_run:
+        return
+
+    transaction = Path(
+        tempfile.mkdtemp(prefix=f".{target.name}.patpat-link-update-", dir=target.parent)
+    )
+    staged = transaction / "staged"
+    backup_work = transaction / "backup"
+    staged.mkdir()
+    backup_work.mkdir()
+    marker = target / INVENTORY_NAME
+    moved: list[str] = []
+    promoted: list[str] = []
+    marker_moved = False
+    mutations = 0
+    try:
+        write_json(
+            staged / INVENTORY_NAME,
+            {
+                "plugin": "patpat",
+                "schema": SCHEMA,
+                "mode": "symlink",
+                "skills": source_inventory,
+            },
+        )
+        for name in moved_names:
+            os.replace(target / name, backup_work / name)
+            moved.append(name)
+            mutations += 1
+            if fail_after is not None and mutations >= fail_after:
+                raise UpdateError("injected symlink update failure")
+        for name in promoted_names:
+            destination = target / name
+            destination.symlink_to(source / name, target_is_directory=True)
+            promoted.append(name)
+            mutations += 1
+            if fail_after is not None and mutations >= fail_after:
+                raise UpdateError("injected symlink update failure")
+
+        if marker.exists():
+            os.replace(marker, backup_work / INVENTORY_NAME)
+            marker_moved = True
+        os.replace(staged / INVENTORY_NAME, marker)
+        write_json(
+            backup_work / BACKUP_MANIFEST_NAME,
+            {
+                "plugin": "patpat",
+                "schema": SCHEMA,
+                "mode": "symlink",
+                "skills": old_inventory,
+                "restoreTarget": str(target),
+            },
+        )
+        os.replace(backup_work, backup)
+    except BaseException:
+        errors = rollback(target, backup_work, moved, promoted, marker_moved)
+        if errors:
+            raise UpdateError("rollback was incomplete: " + "; ".join(errors))
+        raise
+    finally:
+        if transaction.exists():
+            shutil.rmtree(transaction)
+
+
 def update(source: Path, target: Path, backup: Path, dry_run: bool, *, fail_after: int | None = None) -> None:
     if target.is_symlink():
         raise UpdateError(f"target must not be a symlink: {target}")
@@ -337,24 +523,14 @@ def update(source: Path, target: Path, backup: Path, dry_run: bool, *, fail_afte
         raise UpdateError("canonical skills directory contains no skills")
     installation = classify_installation(source, target, skills)
     if installation == "symlink":
-        missing = [skill for skill in skills if not (target / skill.name).is_symlink()]
-        for skill in missing:
-            print(f"link: {target / skill.name} -> {skill}")
-        if not dry_run:
-            created: list[Path] = []
-            try:
-                for skill in missing:
-                    destination = target / skill.name
-                    destination.symlink_to(skill, target_is_directory=True)
-                    created.append(destination)
-            except BaseException:
-                for destination in reversed(created):
-                    destination.unlink(missing_ok=True)
-                raise
-        if missing:
-            print("Patpat symlink catalog updated; source content already follows the checkout.")
-        else:
-            print("Patpat symlink installation already follows the canonical source; no update needed.")
+        update_symlink_installation(
+            source,
+            target,
+            backup,
+            skills,
+            dry_run,
+            fail_after=fail_after,
+        )
         return
     update_copy_installation(source, target, backup, skills, dry_run, fail_after=fail_after)
 
@@ -472,15 +648,108 @@ def run_self_test() -> None:
         else:
             raise UpdateError("update accepted a symlink target root")
 
+        link_source = root / "link-source"
+        link_source.mkdir()
+        for name in ("patpat-alpha", "patpat-beta"):
+            create_test_skill(link_source, name, "old")
+
+        def create_link_installation(destination: Path, *, marker: bool = True) -> None:
+            destination.mkdir()
+            for skill in skill_directories(link_source):
+                (destination / skill.name).symlink_to(skill, target_is_directory=True)
+            create_test_skill(destination, "unrelated-skill", "keep")
+            if marker:
+                write_json(
+                    destination / INVENTORY_NAME,
+                    {
+                        "plugin": "patpat",
+                        "schema": SCHEMA,
+                        "mode": "symlink",
+                        "skills": {
+                            skill.name: {"target": str(skill.resolve())}
+                            for skill in skill_directories(link_source)
+                        },
+                    },
+                )
+
         link_target = root / "link-skills"
-        link_target.mkdir()
-        alpha = source / "patpat-alpha"
-        (link_target / alpha.name).symlink_to(alpha, target_is_directory=True)
-        update(source, link_target, root / "link-backup", False)
+        link_rollback_target = root / "link-rollback-skills"
+        link_tampered_target = root / "link-tampered-skills"
+        for destination in (link_target, link_rollback_target, link_tampered_target):
+            create_link_installation(destination)
+        unrelated_link_before = inventory(link_target / "unrelated-skill")
+
+        (link_tampered_target / "patpat-alpha").unlink()
+        (link_tampered_target / "patpat-alpha").symlink_to(
+            link_tampered_target / "unrelated-skill",
+            target_is_directory=True,
+        )
+        try:
+            update(link_source, link_tampered_target, root / "link-tampered-backup", False)
+        except UpdateError:
+            pass
+        else:
+            raise UpdateError("symlink update accepted a modified owned link")
+
+        shutil.rmtree(link_source / "patpat-beta")
+        create_test_skill(link_source, "patpat-gamma", "new")
+        link_backup = root / "link-backup"
+        update(link_source, link_target, link_backup, False)
+        if (link_target / "patpat-beta").is_symlink():
+            raise UpdateError("symlink update retained a recorded retired skill")
         if not (link_target / "patpat-gamma").is_symlink():
             raise UpdateError("symlink update did not add a new skill")
-        if (root / "link-backup").exists():
+        if not (link_backup / "patpat-beta").is_symlink():
+            raise UpdateError("symlink update did not back up a retired skill")
+        if inventory(link_target / "unrelated-skill") != unrelated_link_before:
+            raise UpdateError("symlink update changed an unrelated skill")
+        link_record = load_ownership_record(link_target)
+        if link_record is None or set(link_record[1]) != {"patpat-alpha", "patpat-gamma"}:
+            raise UpdateError("symlink update did not reconcile its ownership catalog")
+
+        try:
+            update(
+                link_source,
+                link_rollback_target,
+                root / "link-rollback-backup",
+                False,
+                fail_after=1,
+            )
+        except UpdateError as error:
+            if str(error) != "injected symlink update failure":
+                raise
+        else:
+            raise UpdateError("symlink failure injection did not fail")
+        if not (link_rollback_target / "patpat-beta").is_symlink():
+            raise UpdateError("symlink rollback did not restore a retired skill")
+        if (link_rollback_target / "patpat-gamma").is_symlink():
+            raise UpdateError("symlink rollback retained a new skill")
+        if (root / "link-rollback-backup").exists():
+            raise UpdateError("failed symlink update promoted a backup")
+
+        legacy_link_target = root / "legacy-link-skills"
+        create_link_installation(legacy_link_target, marker=False)
+        unrecorded = legacy_link_target / "patpat-retired"
+        unrecorded.symlink_to(link_source / "patpat-retired", target_is_directory=True)
+        update(link_source, legacy_link_target, root / "legacy-link-backup", False)
+        if not unrecorded.is_symlink():
+            raise UpdateError("symlink adoption removed an unrecorded path")
+        if load_ownership_record(legacy_link_target) is None:
+            raise UpdateError("symlink adoption did not write an ownership catalog")
+
+        no_op_backup = root / "link-no-op-backup"
+        update(link_source, link_target, no_op_backup, False)
+        if no_op_backup.exists():
             raise UpdateError("symlink no-op created a backup")
+
+        relocated_source = root / "relocated-link-source"
+        relocated_source.mkdir()
+        for name in ("patpat-alpha", "patpat-gamma"):
+            create_test_skill(relocated_source, name, "relocated")
+        update(relocated_source, link_target, root / "relink-backup", False)
+        for skill in skill_directories(relocated_source):
+            if symlink_target(link_target / skill.name).resolve() != skill.resolve():
+                raise UpdateError("symlink update did not follow a relocated source checkout")
 
     print("Patpat skill updater self-test passed.")
 

@@ -44,13 +44,13 @@ Compare pstack jobs to Patpat artifacts. Missing filenames are not gaps when the
 | `figure-it-out` | `patpat-plan` + bespoke-workflow | adapted |
 | `show-me-your-work` / autonomous run / pause / pickup | `patpat-run` + multi-phase-run / pause-safely / session-takeover | adapted |
 | checked multi-PR plan | `patpat-run` + `skills/patpat-run/scripts/validate_plan.py`; host-neutral units require dependencies, owned files, proof surfaces, exact-head evidence, review gate, and explicit delivery authority | adapted; no fixed model or lane count |
-| babysit / shipping / opening a PR | PR drive + PR babysit + authorized-delivery | adapted; land only when named |
+| babysit / shipping / opening a PR | PR drive + PR babysit + head-SHA-bound provider-neutral watcher + authorized-delivery | adapted; host adapter owns observation and wake, land only when named |
 | `reflect` | `patpat-learn` | adapted |
 | `eval` / skill authoring | `patpat-eval` / `patpat-skill` | covered |
 | `setup-pstack` / Codex marketplace packaging | `patpat-setup` + host manifests + `AGENTS.md` + `goiltpatpat/patpat` | adapted; no model-role presets |
 | `automate-me` / Benny | issue-loop under `patpat-automation`; provider-named design, paused until a real integration is enabled | gated |
-| `arena` / `swarm` | `patpat-arena` / `patpat-swarm`; writable work requires isolated worktrees or sandboxes | gated pending representative behavioral evidence |
-| orchestrate / autopilot | autopilot playbook under `patpat-run`; serial fallback and explicit merge authority | gated pending representative behavioral evidence |
+| `arena` / `swarm` | `patpat-arena` / `patpat-swarm`; writable work requires isolated worktrees or sandboxes | structural worktree behavior verified; gated pending live-model evidence |
+| orchestrate / autopilot | autopilot playbook + host-neutral program store; checked plans, dependency frontier, inbox, exact-head ledger, structural worktree behavior, serial fallback, and explicit merge authority | coordination runtime covered; execution remains gated pending live-model evidence |
 | sticky mode / hooks | explicit `/patpat` activation + host hook state; fail closed without a supported host data root | adapted; Grok execution verified, Cursor live runtime pending |
 | pstack opening-a-pr / shipping / overnight land | explicit activation enables default delivery; overnight stops merge-ready; explicit land or merge can merge green | adapted |
 | `unslop` / `bro` / `no-comments` / `technical-writing` / `typescript-best-practices` / `recall` chat mining | not a Patpat workflow | outside the core |
