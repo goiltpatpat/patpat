@@ -51,7 +51,7 @@ Read-only work never ships. Workers never ship. The parent ships.
 
 ## Parallelism
 
-Default to one owner. Fan out only when exclusive paths, a named integrator, and a verifier exist. If those are missing, run serially and say so. Worker output is a candidate. The parent verifies. Parallel success does not merge by itself.
+Default to one owner. Writable fan-out requires a separate Git worktree or host-enforced sandbox per owner, each with its own Git index and process boundary, plus a named integrator and verifier. Disjoint paths in one shared worktree are not isolation. If those controls are missing, run serially and say so. Read-only fan-out may share a worktree when it cannot mutate repository or external state. Worker output is a candidate. The parent verifies. Parallel success does not merge by itself.
 
 ## Evidence
 

@@ -23,13 +23,6 @@ SEMVER_PATTERN = re.compile(
 )
 LINK_PATTERN = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 ALLOWED_FRONTMATTER = {"name", "description"}
-OPTIONAL_HOST_FRONTMATTER = {
-    "disable-model-invocation",
-    "mode",
-    "reminder",
-    "icon",
-    "color",
-}
 MODE_SKILLS = {"patpat", "patpat-loop"}
 PUBLISHED_SOURCE = "https://github.com/goiltpatpat/patpat"
 ALLOWED_SKILL_POLICIES = {"mutating", "read-only", "support", "router"}
@@ -91,7 +84,6 @@ UNADMITTED_COMPONENT_PATHS = {
     ".mcp.json",
     "automations",
     "commands",
-    "hooks.json",
     "mcp",
     "mcp-servers",
     "mcp_config.json",
@@ -358,10 +350,16 @@ def validate_hooks(root: Path, parsed: dict[str, dict[str, object]], errors: lis
         errors.append(f"{hooks_root}: expected hook files {sorted(EXPECTED_HOOK_FILES)}")
     if parsed.get("cursor", {}).get("hooks") != "./hooks/cursor.json":
         errors.append("Cursor manifest hooks must point to ./hooks/cursor.json")
-    if parsed.get("codex", {}).get("hooks") != "./hooks/hooks.json":
-        errors.append("Codex manifest hooks must point to ./hooks/hooks.json")
+    if "hooks" in parsed.get("codex", {}):
+        errors.append("Codex manifest must use the conventional root hooks.json")
     if "hooks" in parsed.get("antigravity", {}):
         errors.append("Antigravity manifest must not claim packaged hooks")
+    codex_hooks = root / "hooks.json"
+    grok_hooks = root / "hooks" / "hooks.json"
+    if not codex_hooks.is_file():
+        errors.append(f"{codex_hooks}: missing conventional Codex hooks")
+    elif grok_hooks.is_file() and codex_hooks.read_bytes() != grok_hooks.read_bytes():
+        errors.append("Codex and Grok hook manifests must remain identical")
     script = root / "hooks" / "scripts" / "patpat_loop_state.py"
     if script.is_file() and "PLUGIN_DATA" not in script.read_text(encoding="utf-8"):
         errors.append(f"{script}: sticky hook must fail closed without PLUGIN_DATA")
@@ -419,7 +417,7 @@ def validate_root(root: Path) -> list[str]:
         },
         "codex": {
             "name", "version", "description", "author", "homepage", "repository",
-            "license", "keywords", "skills", "hooks", "interface",
+            "license", "keywords", "skills", "interface",
         },
     }
     for host, manifest in parsed.items():
@@ -529,17 +527,18 @@ def validate_root(root: Path) -> list[str]:
             continue
         name = frontmatter.get("name", "")
         description = frontmatter.get("description", "")
-        unknown = set(frontmatter) - ALLOWED_FRONTMATTER - OPTIONAL_HOST_FRONTMATTER
+        unknown = set(frontmatter) - ALLOWED_FRONTMATTER
         if unknown:
             errors.append(f"{skill_file}: non-portable frontmatter: {sorted(unknown)}")
-        host_keys = set(frontmatter) & OPTIONAL_HOST_FRONTMATTER
-        if host_keys and name not in MODE_SKILLS:
-            errors.append(f"{skill_file}: host mode frontmatter is limited to /patpat")
         if name in MODE_SKILLS:
-            if frontmatter.get("mode") != "true":
-                errors.append(f"{skill_file}: /patpat must declare sticky mode")
-            if frontmatter.get("disable-model-invocation") != "true":
-                errors.append(f"{skill_file}: /patpat must be an explicit slash skill")
+            openai_config = skill / "agents" / "openai.yaml"
+            try:
+                config_text = openai_config.read_text(encoding="utf-8")
+            except OSError:
+                errors.append(f"{openai_config}: missing explicit-invocation policy")
+            else:
+                if "allow_implicit_invocation: false" not in config_text:
+                    errors.append(f"{openai_config}: Patpat entry skills must disable implicit invocation")
         if name != skill.name:
             errors.append(f"{skill_file}: name must match folder {skill.name}")
         if not NAME_PATTERN.fullmatch(name):
@@ -621,12 +620,27 @@ def validate_root(root: Path) -> list[str]:
     antigravity_smoke = root / "scripts" / "smoke_antigravity_plugin.py"
     if not antigravity_smoke.is_file():
         errors.append(f"{antigravity_smoke}: missing isolated Antigravity plugin smoke test")
+    grok_smoke = root / "scripts" / "smoke_grok_plugin.py"
+    if not grok_smoke.is_file():
+        errors.append(f"{grok_smoke}: missing isolated Grok plugin and hook smoke test")
     stage_script = root / "scripts" / "stage_plugin.py"
     if not stage_script.is_file():
         errors.append(f"{stage_script}: missing allowlisted plugin staging script")
+    update_script = root / "scripts" / "update_skills.py"
+    if not update_script.is_file():
+        errors.append(f"{update_script}: missing portable skill updater")
     dry_run = root / "scripts" / "dry_run_loop.py"
     if not dry_run.is_file():
         errors.append(f"{dry_run}: missing loop dry-run")
+    inspect_eval = root / "scripts" / "eval_inspect.py"
+    if not inspect_eval.is_file():
+        errors.append(f"{inspect_eval}: missing inspect behavioral eval")
+    why_eval = root / "scripts" / "eval_why.py"
+    if not why_eval.is_file():
+        errors.append(f"{why_eval}: missing rationale behavioral eval")
+    plan_validator = root / "skills" / "patpat-run" / "scripts" / "validate_plan.py"
+    if not plan_validator.is_file():
+        errors.append(f"{plan_validator}: missing multi-PR plan validator")
 
     return errors
 
@@ -655,11 +669,26 @@ def run_self_test(root: Path) -> list[str]:
     def remove_antigravity_smoke(fixture: Path) -> None:
         (fixture / "scripts" / "smoke_antigravity_plugin.py").unlink()
 
+    def remove_grok_smoke(fixture: Path) -> None:
+        (fixture / "scripts" / "smoke_grok_plugin.py").unlink()
+
     def remove_stage_script(fixture: Path) -> None:
         (fixture / "scripts" / "stage_plugin.py").unlink()
 
+    def remove_update_script(fixture: Path) -> None:
+        (fixture / "scripts" / "update_skills.py").unlink()
+
     def remove_dry_run(fixture: Path) -> None:
         (fixture / "scripts" / "dry_run_loop.py").unlink()
+
+    def remove_inspect_eval(fixture: Path) -> None:
+        (fixture / "scripts" / "eval_inspect.py").unlink()
+
+    def remove_why_eval(fixture: Path) -> None:
+        (fixture / "scripts" / "eval_why.py").unlink()
+
+    def remove_plan_validator(fixture: Path) -> None:
+        (fixture / "skills" / "patpat-run" / "scripts" / "validate_plan.py").unlink()
 
     def remove_agents_guide(fixture: Path) -> None:
         (fixture / "AGENTS.md").unlink()
@@ -739,7 +768,7 @@ def run_self_test(root: Path) -> list[str]:
         router = fixture / "skills" / "patpat-loop" / "SKILL.md"
         text = router.read_text(encoding="utf-8")
         router.write_text(
-            text.replace("(playbooks/pr-drive.md)", "(playbooks/missing-pr-drive.md)", 1),
+            text.replace("(playbooks/worktree-cleanup.md)", "(playbooks/missing-worktree-cleanup.md)", 1),
             encoding="utf-8",
         )
 
@@ -839,8 +868,13 @@ def run_self_test(root: Path) -> list[str]:
             ("missing SKILL.md", remove_skill_file, "immediate skill directory is missing SKILL.md"),
             ("missing Codex smoke", remove_codex_smoke, "missing isolated Codex marketplace smoke test"),
             ("missing Antigravity smoke", remove_antigravity_smoke, "missing isolated Antigravity plugin smoke test"),
+            ("missing Grok smoke", remove_grok_smoke, "missing isolated Grok plugin and hook smoke test"),
             ("missing stage script", remove_stage_script, "missing allowlisted plugin staging script"),
+            ("missing portable updater", remove_update_script, "missing portable skill updater"),
             ("missing loop dry-run", remove_dry_run, "missing loop dry-run"),
+            ("missing inspect eval", remove_inspect_eval, "missing inspect behavioral eval"),
+            ("missing why eval", remove_why_eval, "missing rationale behavioral eval"),
+            ("missing plan validator", remove_plan_validator, "missing multi-PR plan validator"),
             ("missing agent install contract", remove_agents_guide, "missing agent install contract"),
             ("Codex defaultPrompt drift", drop_codex_default_prompt, "defaultPrompt must include $patpat"),
             ("missing published source", drop_published_source, "homepage and repository must point at the published source"),
@@ -878,7 +912,11 @@ def run_self_test(root: Path) -> list[str]:
         temp_root = Path(temp_directory)
         for index, (name, mutate, expected) in enumerate(cases):
             fixture = temp_root / f"fixture-{index}"
-            shutil.copytree(root, fixture)
+            shutil.copytree(
+                root,
+                fixture,
+                ignore=shutil.ignore_patterns(".git", "memory-bank", "__pycache__", "*.pyc"),
+            )
             mutate(fixture)
             fixture_errors = validate_root(fixture)
             if not any(expected in error for error in fixture_errors):
@@ -912,6 +950,28 @@ def run_self_test(root: Path) -> list[str]:
     )
     if dry_result.returncode != 0:
         failures.append(f"self-test: loop dry-run failed: {dry_result.stdout}{dry_result.stderr}")
+    updater = root / "scripts" / "update_skills.py"
+    update_result = subprocess.run(
+        [sys.executable, str(updater), "--self-test"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if update_result.returncode != 0:
+        failures.append(
+            f"self-test: portable skill updater failed: {update_result.stdout}{update_result.stderr}"
+        )
+    plan_validator = root / "skills" / "patpat-run" / "scripts" / "validate_plan.py"
+    plan_result = subprocess.run(
+        [sys.executable, str(plan_validator), "--self-test"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if plan_result.returncode != 0:
+        failures.append(
+            f"self-test: multi-PR plan validator failed: {plan_result.stdout}{plan_result.stderr}"
+        )
     return failures
 
 

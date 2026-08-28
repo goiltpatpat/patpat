@@ -1,0 +1,6 @@
+interface:
+  display_name: "Patpat"
+  short_description: "Activate the explicit Patpat engineering loop"
+  default_prompt: "Use $patpat to handle this engineering task with evidence."
+policy:
+  allow_implicit_invocation: false

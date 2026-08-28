@@ -1,0 +1,48 @@
+name: Validate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate repository contracts
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python3 scripts/validate.py --self-test
+          python3 scripts/dry_run_loop.py --self-test
+          python3 scripts/eval_inspect.py --self-test
+          python3 scripts/eval_why.py --self-test
+          python3 scripts/install_skills.py --self-test
+          python3 scripts/update_skills.py --self-test
+          python3 scripts/stage_plugin.py --self-test
+          python3 scripts/smoke_grok_plugin.py --commands-only
+          python3 skills/patpat-run/scripts/run_state.py --self-test
+          python3 skills/patpat-run/scripts/validate_plan.py --self-test
+          python3 hooks/scripts/patpat_loop_state.py --self-test
+
+      - name: Validate release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version="$(python3 -c 'import json; print(json.load(open(".codex-plugin/plugin.json", encoding="utf-8"))["version"])')"
+          test "${GITHUB_REF_NAME}" = "v${version}"

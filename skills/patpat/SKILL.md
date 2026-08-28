@@ -1,9 +1,6 @@
 ---
 name: patpat
-description: Slash alias for Patpat Loop. Use for /patpat, $patpat, or requests to work in the Patpat engineering style.
-disable-model-invocation: true
-mode: true
-reminder: New task with rigor, a playbook match, or ship intent -> apply /patpat. Casual turn or user opts out -> don't.
+description: Explicit alias for Patpat Loop. Use only when the user invokes /patpat, $patpat, /patpat-loop, or $patpat-loop, or directly asks to activate Patpat mode.
 ---
 
 # Patpat

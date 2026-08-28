@@ -1,0 +1,6 @@
+interface:
+  display_name: "Patpat Loop"
+  short_description: "Run the explicit evidence-driven work loop"
+  default_prompt: "Use $patpat-loop to execute this task through verified engineering gates."
+policy:
+  allow_implicit_invocation: false

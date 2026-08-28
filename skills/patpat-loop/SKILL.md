@@ -1,9 +1,6 @@
 ---
 name: patpat-loop
-description: Route non-trivial repository work through an evidence-driven engineering loop. Use for /patpat, /patpat-loop, $patpat, $patpat-loop, or requests to work in this style.
-disable-model-invocation: true
-mode: true
-reminder: New task with rigor, a playbook match, or ship intent -> apply /patpat. Casual turn or user opts out -> don't.
+description: Run the explicit Patpat evidence-driven engineering loop. Use only when the user invokes /patpat, /patpat-loop, $patpat, or $patpat-loop, or directly asks to activate Patpat mode.
 ---
 
 # Patpat Loop
@@ -12,7 +9,7 @@ reminder: New task with rigor, a playbook match, or ship intent -> apply /patpat
 
 Patpat is one system. The [operating protocol](references/operating-protocol.md) is the spine: judgment, safety, git, and evidence. The playbooks and principles are the machinery, informed by pstack jobs, renamed and bounded so they cannot override that spine.
 
-This mode stays on across later turns after invocation. Trusted host hooks persist it across resume and compaction. Without a hook receipt, apply it for the rest of this session and report `current-turn-only` if a later session has no receipt. Say `disable /patpat` to opt out. Casual turns stay out of the way unless a playbook matches or the work needs rigor.
+This mode stays on across later turns after explicit invocation. Trusted host hooks may persist it across resume and compaction. Without a host-observed receipt, apply it only for the current session and report `current-turn-only` after a restart. Say `disable /patpat` to opt out. Do not infer activation from a task that merely resembles a playbook.
 
 ## Start
 
@@ -114,7 +111,7 @@ Enter `LEARN?` only for a recurring failure worth encoding.
 
 ## Earn parallelism
 
-Default to one owner. Arena, swarm, and autopilot run only when [earned parallelism](principles/earned-parallelism.md) passes, and they fall back to serial work when isolation is missing. Use [`patpat-engineer`](../patpat-engineer/SKILL.md) for isolated slices. The parent verifies the integrated result. Do not trust worker summaries. The parent then runs default delivery.
+Default to one owner. Arena, swarm, and autopilot run only when [earned parallelism](principles/earned-parallelism.md) passes, and they fall back to serial work when isolation is missing. Give every writable slice a separate Git worktree or host-enforced sandbox with its own Git index and process boundary; disjoint files in one shared worktree are not isolation. Use [`patpat-engineer`](../patpat-engineer/SKILL.md) for isolated slices. The parent verifies the integrated result. Do not trust worker summaries. The parent then runs default delivery when delivery authority exists.
 
 ## Report evidence
 

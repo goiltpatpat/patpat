@@ -17,13 +17,15 @@ Never record secrets, tokens, raw private logs, or sensitive payloads in run sta
 
 If a process interruption leaves a lock, run `unlock` only after confirming the recorded process stopped. Let the engine reject live, malformed, or cross-host locks; never delete them by assumption.
 
-Route completion through `patpat-ship`. Default commit-and-PR after proof. Merge only with explicit land or merge language, and only when checks are green. Overnight is not merge.
+Route completion through `patpat-ship`. Explicit Patpat activation authorizes default commit-and-PR after proof unless a higher-priority rule blocks it. Overnight stops merge-ready. Merge only with explicit land or merge language and green checks.
 
 On resume, validate the store, compare live repository state, inspect intentional and pre-existing changes, and continue from the earliest valid graph node. Never trust a checkpoint merely because it parses.
 
 When inheriting an arbitrary branch, transcript, or handoff without a valid Patpat store, apply the [session takeover playbook](../patpat-loop/playbooks/session-takeover.md) before initializing a new run.
 
 When the request is a queue of independent PRs or a linear verified stack, apply the [autopilot playbook](../patpat-loop/playbooks/autopilot.md). Owners build and prove. The root verifies. Landing still requires a named delivery action.
+
+For a multi-PR queue or stack, write a host-neutral JSON plan and validate it with [`scripts/validate_plan.py`](scripts/validate_plan.py) before fan-out or implementation. Give every unit an id, dependencies, owned files, build command or `N/A: <reason>`, observable proof, targeted/live/performance checks or explicit `N/A: <reason>`, `exact-head` evidence binding, and `independent-pass-before-delivery` review gate. Record claimed delivery authority once for the plan, then prove that authority again at execution time; a valid plan never grants permission. Do not encode fixed model or lane counts.
 
 ## Proof closure
 

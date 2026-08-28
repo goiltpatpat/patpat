@@ -2,6 +2,8 @@
 
 This map tracks engineering behavior, not upstream file names or counts. Patpat's core is its operating protocol. Workflow jobs are informed by [pstack](https://github.com/cursor/plugins/tree/main/pstack) and its [Codex adaptation](https://github.com/Aqua-123/pstack-for-codex), then bounded so they cannot override that protocol.
 
+Upstream pstack was last reviewed through commit `6fecddba` (2026-08-27). Compare later changes by invariant before changing Patpat.
+
 ## Covered
 
 - Higher-order routing with progressive disclosure
@@ -22,7 +24,7 @@ This map tracks engineering behavior, not upstream file names or counts. Patpat'
 
 ## Outside the core
 
-Generic technical writing, language-specific style catalogs, persona skills, chat-history mining, simulator cleanup, and model-selection presets remain project or host extensions. Add them only when repeated evidence shows that a Patpat-owned constraint improves engineering outcomes.
+Generic technical writing, language-specific style catalogs, persona skills, chat-history mining, simulator cleanup, model-selection presets, and host-specific bot interfaces remain project or host extensions. Add them only when repeated evidence shows that a Patpat-owned constraint improves engineering outcomes.
 
 ## Upstream invariant mapping
 
@@ -41,6 +43,7 @@ Compare pstack jobs to Patpat artifacts. Missing filenames are not gaps when the
 | `create-verification-skill` / `maintain-verification-skill` | `patpat-verifier` | covered |
 | `figure-it-out` | `patpat-plan` + bespoke-workflow | adapted |
 | `show-me-your-work` / autonomous run / pause / pickup | `patpat-run` + multi-phase-run / pause-safely / session-takeover | adapted |
+| checked multi-PR plan | `patpat-run` + `skills/patpat-run/scripts/validate_plan.py`; host-neutral units require dependencies, owned files, proof surfaces, exact-head evidence, review gate, and explicit delivery authority | adapted; no fixed model or lane count |
 | babysit / shipping / opening a PR | PR drive + PR babysit + authorized-delivery | adapted; land only when named |
 | `reflect` | `patpat-learn` | adapted |
 | `eval` / skill authoring | `patpat-eval` / `patpat-skill` | covered |
@@ -56,6 +59,7 @@ Compare pstack jobs to Patpat artifacts. Missing filenames are not gaps when the
 | redesign-from-first-principles / migrate-then-delete / build-the-lever | architecture-change, sequence-verifiable-units | adapted |
 | type-system-discipline / comment encoding | shape-before-logic, smallest-safe-change | adapted |
 | Codex `agents/openai.yaml` explicit-only policy | entry skills set `allow_implicit_invocation: false` | covered |
+| `make-bot-ui` | no core workflow; a Grok Bot webhook, sender-key handoff, local server, and Tailscale UI are host-specific integration concerns | outside the core; add as an optional project extension only when requested |
 
 Packaging is already host-native: Codex marketplace + `.codex-plugin/plugin.json`, Cursor `.cursor-plugin/plugin.json`, Antigravity root `plugin.json`, portable `scripts/install_skills.py`, and allowlisted sticky hooks. Do not copy pstack-for-codex Node/Bun validators, TOML agent profiles, or Benny.
 

@@ -9,6 +9,13 @@ import sys
 import tempfile
 from pathlib import Path
 
+from update_skills import (
+    INVENTORY_NAME,
+    SCHEMA,
+    inventory,
+    load_recorded_inventory,
+    write_json,
+)
 from validate import validate_root
 
 
@@ -33,6 +40,8 @@ def rollback(paths: list[Path]) -> list[str]:
                 destination.unlink()
             elif destination.is_dir():
                 shutil.rmtree(destination)
+            elif destination.is_file():
+                destination.unlink()
         except Exception as error:
             errors.append(f"{destination}: {error}")
     return errors
@@ -73,6 +82,20 @@ def install_paths(source: Path, target: Path, skills: list[Path], mode: str, dry
             else:
                 destination.symlink_to(skill, target_is_directory=True)
                 installed.append(destination)
+        if mode == "copy":
+            marker = target / INVENTORY_NAME
+            installed.append(marker)
+            write_json(
+                marker,
+                {
+                    "plugin": "patpat",
+                    "schema": SCHEMA,
+                    "skills": {
+                        skill.name: inventory(target / skill.name)
+                        for skill in skills
+                    },
+                },
+            )
     except BaseException as error:
         cleanup_errors = rollback(installed)
         if cleanup_errors:
@@ -84,7 +107,7 @@ def install_paths(source: Path, target: Path, skills: list[Path], mode: str, dry
         print(f"Install failed; owned paths were rolled back: {error}", file=sys.stderr)
         return 3
 
-    print(f"Installed {len(installed)} skills into {target}")
+    print(f"Installed {len(skills)} skills into {target}")
     return 0
 
 
@@ -119,6 +142,11 @@ def run_self_test(source: Path, skills: list[Path]) -> int:
             "ancestor overlap refusal": statuses["ancestor overlap"] == 2,
             "copy fidelity": all(trees_match(skill, copy_target / skill.name) for skill in skills),
             "symlink fidelity": all((link_target / skill.name).is_symlink() for skill in skills),
+        }
+        recorded = load_recorded_inventory(copy_target)
+        checks["copy ownership inventory"] = recorded == {
+            skill.name: inventory(copy_target / skill.name)
+            for skill in skills
         }
 
         original_copytree = shutil.copytree

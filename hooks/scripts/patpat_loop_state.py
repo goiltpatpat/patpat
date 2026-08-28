@@ -9,7 +9,7 @@ import os
 import re
 import sys
 import tempfile
-import uuid
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -26,13 +26,24 @@ DISABLE = re.compile(
 )
 STICKY_CONTEXT = (
     "Patpat Loop is active for this session. Apply /patpat (`patpat-loop`) for this turn. "
-    "Follow the operating protocol. After proof, default to commit-and-PR unless opted out. "
-    "Do not merge a red CI, deploy, force-push, or publish a package by implication."
+    "Follow the operating protocol. Explicit activation authorizes commit-and-PR after proof unless "
+    "a higher-priority repository rule or opt-out blocks it. Merge only on explicit land or merge language. "
+    "Do not deploy, force-push, or publish a package by implication."
 )
+PLUGIN_DATA_ENV_KEYS = ("PLUGIN_DATA", "GROK_PLUGIN_DATA", "CLAUDE_PLUGIN_DATA")
 
 
 def hash_value(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def resolve_plugin_data(environment: Mapping[str, str] | None = None) -> str | None:
+    values = os.environ if environment is None else environment
+    for key in PLUGIN_DATA_ENV_KEYS:
+        value = values.get(key)
+        if value:
+            return value
+    return None
 
 
 def session_key(session_id: object) -> str | None:
@@ -227,7 +238,7 @@ def persist(targets: dict[str, Path], state: dict[str, Any], receipt: dict[str, 
 
 
 def handle_hook(payload: dict[str, Any], plugin_data: str | None = None, now_ms: int | None = None) -> dict[str, Any] | None:
-    plugin_data = plugin_data if plugin_data is not None else os.environ.get("PLUGIN_DATA")
+    plugin_data = plugin_data if plugin_data is not None else resolve_plugin_data()
     now_ms = now_ms if now_ms is not None else int(__import__("time").time() * 1000)
     if not plugin_data:
         return None
@@ -280,7 +291,8 @@ def handle_hook(payload: dict[str, Any], plugin_data: str | None = None, now_ms:
         return context_output(
             event,
             "Patpat sticky receipt: trusted session hook persisted /patpat. "
-            "The skill supplies activation-turn behavior. After proof, default to commit-and-PR unless opted out.",
+            "The skill supplies activation-turn behavior. After proof, default to commit-and-PR unless "
+            "a higher-priority repository rule or opt-out blocks it. Merge requires explicit land or merge language.",
         )
     current = read_active_state(plugin_data, session_id, cwd, now_ms, ttl_ms)
     if not current:
@@ -339,7 +351,15 @@ def run_self_test() -> None:
             raise AssertionError("sticky mode survived disable")
         missing = handle_hook(payload, plugin_data="", now_ms=6_000)
         if missing is not None:
-            raise AssertionError("missing PLUGIN_DATA must fail closed")
+            raise AssertionError("missing plugin data must fail closed")
+        if resolve_plugin_data({"PLUGIN_DATA": "/primary", "GROK_PLUGIN_DATA": "/grok"}) != "/primary":
+            raise AssertionError("PLUGIN_DATA must take precedence")
+        if resolve_plugin_data({"GROK_PLUGIN_DATA": "/grok"}) != "/grok":
+            raise AssertionError("GROK_PLUGIN_DATA was not recognized")
+        if resolve_plugin_data({"CLAUDE_PLUGIN_DATA": "/compat"}) != "/compat":
+            raise AssertionError("CLAUDE_PLUGIN_DATA compatibility alias was not recognized")
+        if resolve_plugin_data({}) is not None:
+            raise AssertionError("missing plugin data environment must fail closed")
     print("Patpat loop sticky-hook self-test passed.")
 
 
