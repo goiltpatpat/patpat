@@ -24,7 +24,13 @@ SCRIPT_DIRECTORY = str(Path(__file__).resolve().parent)
 if SCRIPT_DIRECTORY not in sys.path:
     sys.path.insert(0, SCRIPT_DIRECTORY)
 
-from state_lock import path_guard, path_has_identity, process_is_alive, read_lock_record
+from state_lock import (
+    bounded_file_binding,
+    path_guard,
+    path_has_identity,
+    process_is_alive,
+    read_lock_record,
+)
 from team_shape import (
     PARALLEL_GATE_CHECKS,
     PARALLEL_GATE_KIND,
@@ -54,6 +60,7 @@ HEAD_SHA = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 LOCK_TOKEN = re.compile(r"^[0-9a-f]{32}$")
 MAX_LOCK_BYTES = 4096
 MAX_PROGRAM_STATE_BYTES = 4 * 1024 * 1024
+MAX_EVIDENCE_BYTES = 64 * 1024 * 1024
 MAX_INBOX_EVENTS = 4096
 UNIT_STATES = {"pending", "running", "completed", "blocked"}
 VERDICT_KINDS = {"verification", "review"}
@@ -343,14 +350,12 @@ def checked_text(value: Any, label: str, max_length: int | None = None) -> str:
 
 
 def evidence_binding(path: Path) -> dict[str, Any]:
-    if not path.is_absolute() or path != path.resolve() or not path.is_file() or path.is_symlink():
-        raise ProgramStateError("evidence must be an existing absolute regular file without symlinks")
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        while chunk := handle.read(1024 * 1024):
-            digest.update(chunk)
-    stat = path.stat()
-    return {"path": str(path), "sha256": digest.hexdigest(), "size": stat.st_size}
+    return bounded_file_binding(
+        path,
+        max_bytes=MAX_EVIDENCE_BYTES,
+        error_type=ProgramStateError,
+        label="evidence",
+    )
 
 
 def evidence_is_fresh(binding: Any) -> bool:

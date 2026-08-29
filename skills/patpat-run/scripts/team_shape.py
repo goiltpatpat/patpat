@@ -200,6 +200,10 @@ def select_team_shape(
     consequence: str,
     independent_oracle: bool,
     parallel_gate_receipt: dict[str, Any] | None = None,
+    expected_program_id: str | None = None,
+    expected_plan_digest: str | None = None,
+    expected_integration_owner: str | None = None,
+    expected_units: set[str] | None = None,
 ) -> dict[str, Any]:
     """Return a deterministic topology without granting execution authority."""
     if work_kind not in WORK_KINDS:
@@ -223,7 +227,23 @@ def select_team_shape(
     risk_requires_adversarial = uncertainty == "high" or consequence == "high"
     receipt_summary = None
     if parallel_gate_receipt is not None:
-        receipt_summary = validate_parallel_gate_receipt(parallel_gate_receipt)
+        expected_binding = (
+            expected_program_id,
+            expected_plan_digest,
+            expected_integration_owner,
+            expected_units,
+        )
+        if work_kind == "writable" and any(value is None for value in expected_binding):
+            raise TeamShapeError(
+                "writable parallel gate receipt requires expected program, plan, owner, and units"
+            )
+        receipt_summary = validate_parallel_gate_receipt(
+            parallel_gate_receipt,
+            expected_program_id=expected_program_id,
+            expected_plan_digest=expected_plan_digest,
+            expected_integration_owner=expected_integration_owner,
+            expected_units=expected_units,
+        )
 
     reasons = [
         f"work is {work_kind}",
@@ -303,6 +323,10 @@ def self_test() -> None:
         "consequence": "medium",
         "independent_oracle": False,
         "parallel_gate_receipt": receipt,
+        "expected_program_id": "release-train",
+        "expected_plan_digest": "a" * 64,
+        "expected_integration_owner": "integration-owner",
+        "expected_units": {"contract", "consumer", "docs"},
     }
 
     distributed = select_team_shape(**common)
@@ -331,6 +355,33 @@ def self_test() -> None:
 
     boolean_only = select_team_shape(**{**common, "parallel_gate_receipt": None})
     assert boolean_only["pattern"] == "iterative"
+
+    try:
+        select_team_shape(
+            **{
+                **common,
+                "expected_program_id": "different-program",
+            }
+        )
+    except TeamShapeError as error:
+        assert "program_id does not match" in str(error)
+    else:
+        raise AssertionError("receipt for a different program was accepted")
+
+    unbound = dict(common)
+    for key in (
+        "expected_program_id",
+        "expected_plan_digest",
+        "expected_integration_owner",
+        "expected_units",
+    ):
+        unbound[key] = None
+    try:
+        select_team_shape(**unbound)
+    except TeamShapeError as error:
+        assert "requires expected program" in str(error)
+    else:
+        raise AssertionError("unbound writable receipt was accepted")
 
     reused_identity = json.loads(json.dumps(receipt))
     reused_identity["isolation_identities"]["consumer"] = "worktree-contract"
@@ -386,6 +437,10 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--worker-budget", type=int)
     command.add_argument("--writable-gates-passed", type=parse_boolean)
     command.add_argument("--parallel-gate-receipt", type=Path)
+    command.add_argument("--program-id")
+    command.add_argument("--plan-digest")
+    command.add_argument("--integration-owner")
+    command.add_argument("--unit", action="append", default=[])
     command.add_argument("--uncertainty", choices=LEVELS)
     command.add_argument("--consequence", choices=LEVELS)
     command.add_argument("--independent-oracle", type=parse_boolean)
@@ -417,7 +472,14 @@ def main() -> int:
         receipt = None
         if args.parallel_gate_receipt is not None:
             receipt, _ = load_parallel_gate_receipt(args.parallel_gate_receipt)
-        result = select_team_shape(**required, parallel_gate_receipt=receipt)
+        result = select_team_shape(
+            **required,
+            parallel_gate_receipt=receipt,
+            expected_program_id=args.program_id,
+            expected_plan_digest=args.plan_digest,
+            expected_integration_owner=args.integration_owner,
+            expected_units=set(args.unit) if args.unit else None,
+        )
     except TeamShapeError as error:
         command.error(str(error))
     print(json.dumps(result, indent=2, sort_keys=True))

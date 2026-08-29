@@ -23,7 +23,13 @@ SCRIPT_DIRECTORY = str(Path(__file__).resolve().parent)
 if SCRIPT_DIRECTORY not in sys.path:
     sys.path.insert(0, SCRIPT_DIRECTORY)
 
-from state_lock import path_guard, path_has_identity, process_is_alive, read_lock_record
+from state_lock import (
+    bounded_file_binding,
+    path_guard,
+    path_has_identity,
+    process_is_alive,
+    read_lock_record,
+)
 
 
 SCHEMA_VERSION = 2
@@ -31,6 +37,7 @@ RUN_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 LOCK_TOKEN_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 MAX_LOCK_BYTES = 4096
 MAX_STATE_BYTES = 1024 * 1024
+MAX_EVIDENCE_BYTES = 64 * 1024 * 1024
 NODES = {
     "FRAME",
     "INSPECT",
@@ -343,18 +350,12 @@ def canonical_identity(value: Any, label: str) -> str:
 
 
 def file_binding(path: Path) -> dict[str, Any]:
-    if not path.is_absolute() or path != path.resolve() or not path.is_file() or path.is_symlink():
-        raise RunStateError("file receipt must be an existing absolute regular file without symlinks")
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        while chunk := handle.read(1024 * 1024):
-            digest.update(chunk)
-    stat = path.stat()
-    return {
-        "path": str(path),
-        "sha256": digest.hexdigest(),
-        "size": stat.st_size,
-    }
+    return bounded_file_binding(
+        path,
+        max_bytes=MAX_EVIDENCE_BYTES,
+        error_type=RunStateError,
+        label="file receipt",
+    )
 
 
 def validate_receipt(receipt: str) -> dict[str, Any]:
@@ -839,6 +840,41 @@ def run_self_test() -> None:
     ):
         root = Path(directory)
         evidence_root = Path(evidence_directory)
+
+        bounded = evidence_root / "bounded.txt"
+        bounded.write_bytes(b"1234")
+        assert bounded_file_binding(
+            bounded.resolve(), max_bytes=4, error_type=RunStateError, label="test evidence"
+        )["size"] == 4
+        bounded.write_bytes(b"12345")
+        try:
+            bounded_file_binding(
+                bounded.resolve(), max_bytes=4, error_type=RunStateError, label="test evidence"
+            )
+        except RunStateError as error:
+            assert "exceeds" in str(error)
+        else:
+            raise AssertionError("oversized evidence was accepted")
+        bounded.write_bytes(b"1234")
+        hardlink = evidence_root / "bounded-hardlink.txt"
+        os.link(bounded, hardlink)
+        try:
+            bounded_file_binding(
+                bounded.resolve(), max_bytes=4, error_type=RunStateError, label="test evidence"
+            )
+        except RunStateError as error:
+            assert "unique regular file" in str(error)
+        else:
+            raise AssertionError("hard-linked evidence was accepted")
+        hardlink.unlink()
+        try:
+            bounded_file_binding(
+                evidence_root.resolve(), max_bytes=4, error_type=RunStateError, label="test evidence"
+            )
+        except RunStateError as error:
+            assert "unique regular file" in str(error)
+        else:
+            raise AssertionError("evidence directory was accepted")
 
         def evidence(name: str) -> str:
             path = evidence_root / f"{name}.txt"
