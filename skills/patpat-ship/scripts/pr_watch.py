@@ -6,14 +6,16 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
+import stat
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 KIND = "patpat.pr_watch.verdict"
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 CHECK_STATES = {"queued", "in_progress", "completed"}
@@ -39,6 +41,12 @@ PULL_REQUEST_STATES = {"open", "closed", "merged"}
 MAX_CHECKS = 100
 MAX_NAME_LENGTH = 128
 MAX_REPOSITORY_LENGTH = 256
+MAX_INPUT_BYTES = 1024 * 1024
+MAX_JSON_DEPTH = 32
+MAX_JSON_NODES = 4096
+MAX_STRING_LENGTH = 16_384
+MAX_OBSERVATION_AGE_SECONDS = 3600
+MAX_CLOCK_SKEW_SECONDS = 60
 
 
 class ContractError(ValueError):
@@ -53,6 +61,44 @@ def _canonical_bytes(value: Any) -> bytes:
 
 def _digest(value: Any) -> str:
     return hashlib.sha256(_canonical_bytes(value)).hexdigest()
+
+
+def _validate_json_shape(value: Any) -> None:
+    stack: list[tuple[Any, int]] = [(value, 0)]
+    nodes = 0
+    while stack:
+        current, depth = stack.pop()
+        nodes += 1
+        if nodes > MAX_JSON_NODES:
+            raise ContractError(f"input must contain at most {MAX_JSON_NODES} JSON values")
+        if depth > MAX_JSON_DEPTH:
+            raise ContractError(f"input nesting must not exceed {MAX_JSON_DEPTH} levels")
+        if isinstance(current, str):
+            if len(current) > MAX_STRING_LENGTH:
+                raise ContractError(
+                    f"input strings must contain at most {MAX_STRING_LENGTH} characters"
+                )
+        elif isinstance(current, dict):
+            if len(current) > MAX_JSON_NODES:
+                raise ContractError("input object is too large")
+            for key, child in current.items():
+                if not isinstance(key, str) or len(key) > MAX_NAME_LENGTH:
+                    raise ContractError("input object keys must be bounded strings")
+                stack.append((child, depth + 1))
+        elif isinstance(current, list):
+            if len(current) > MAX_JSON_NODES:
+                raise ContractError("input array is too large")
+            stack.extend((child, depth + 1) for child in current)
+        elif current is not None and not isinstance(current, (bool, int, float)):
+            raise ContractError("input contains an unsupported JSON value")
+
+
+def _safe_digest(value: Any) -> str:
+    try:
+        _validate_json_shape(value)
+        return _digest(value)
+    except (ContractError, RecursionError, TypeError, ValueError):
+        return hashlib.sha256(b"patpat.invalid-input").hexdigest()
 
 
 def _mapping(value: Any, field: str) -> dict[str, Any]:
@@ -167,14 +213,27 @@ def _verdict(
         "next_action": next_action,
         "reasons": reasons,
         "evidence": evidence,
-        "input_sha256": _digest(document),
+        "input_sha256": _safe_digest(document),
         "mutations_performed": [],
     }
 
 
-def evaluate(document: Any) -> dict[str, Any]:
+def _evaluation_time(value: datetime | str | None) -> tuple[datetime, str]:
+    if value is None:
+        parsed = datetime.now(timezone.utc)
+    elif isinstance(value, str):
+        parsed = _timestamp(value, "evaluated_at")
+    elif isinstance(value, datetime) and value.tzinfo == timezone.utc:
+        parsed = value
+    else:
+        raise ContractError("evaluated_at must be a UTC datetime or RFC3339 UTC timestamp")
+    return parsed, parsed.isoformat().replace("+00:00", "Z")
+
+
+def evaluate(document: Any, *, evaluated_at: datetime | str | None = None) -> dict[str, Any]:
     """Return an auditable verdict for one immutable PR observation."""
     try:
+        _validate_json_shape(document)
         root = _mapping(document, "root")
         if root.get("schema_version") != SCHEMA_VERSION:
             raise ContractError(f"schema_version must equal {SCHEMA_VERSION}")
@@ -193,8 +252,14 @@ def evaluate(document: Any) -> dict[str, Any]:
 
         policy = _mapping(root.get("policy"), "policy")
         max_attempts = _integer(policy.get("max_attempts"), "policy.max_attempts")
+        max_observation_age_seconds = _integer(
+            policy.get("max_observation_age_seconds"),
+            "policy.max_observation_age_seconds",
+            maximum=MAX_OBSERVATION_AGE_SECONDS,
+        )
         deadline_raw = _string(policy.get("deadline"), "policy.deadline")
         deadline = _timestamp(deadline_raw, "policy.deadline")
+        evaluated, evaluated_raw = _evaluation_time(evaluated_at)
         required_review = _boolean(
             policy.get("required_review"), "policy.required_review"
         )
@@ -291,6 +356,8 @@ def evaluate(document: Any) -> dict[str, Any]:
             "draft": draft,
             "deadline": deadline_raw,
             "max_attempts": max_attempts,
+            "max_observation_age_seconds": max_observation_age_seconds,
+            "evaluated_at": evaluated_raw,
             "state": pull_request_state,
             "unresolved_threads": unresolved_threads,
             "base_ref": base_ref,
@@ -351,7 +418,7 @@ def evaluate(document: Any) -> dict[str, Any]:
                 evidence=evidence,
             )
 
-        if observed_at > deadline:
+        if evaluated > deadline:
             return _verdict(
                 document=document,
                 binding=binding,
@@ -359,6 +426,33 @@ def evaluate(document: Any) -> dict[str, Any]:
                 attempt=attempt,
                 verdict="blocked",
                 reasons=[_reason("deadline_exceeded", deadline_raw)],
+                evidence=evidence,
+            )
+        if observed_at > evaluated + timedelta(seconds=MAX_CLOCK_SKEW_SECONDS):
+            return _verdict(
+                document=document,
+                binding=binding,
+                observed_at=observed_at_raw,
+                attempt=attempt,
+                verdict="blocked",
+                reasons=[_reason("observation_from_future", observed_at_raw)],
+                evidence=evidence,
+            )
+        observation_age = (evaluated - observed_at).total_seconds()
+        if observation_age > max_observation_age_seconds:
+            exhausted = attempt >= max_attempts
+            return _verdict(
+                document=document,
+                binding=binding,
+                observed_at=observed_at_raw,
+                attempt=attempt,
+                verdict="blocked" if exhausted else "pending",
+                reasons=[
+                    _reason(
+                        "observation_expired",
+                        f"age {int(observation_age)}s exceeds {max_observation_age_seconds}s",
+                    )
+                ],
                 evidence=evidence,
             )
         if attempt > max_attempts:
@@ -445,7 +539,7 @@ def evaluate(document: Any) -> dict[str, Any]:
             reasons=reasons,
             evidence=evidence,
         )
-    except ContractError as exc:
+    except (ContractError, RecursionError) as exc:
         return _verdict(
             document=document,
             binding=_binding_hint(document),
@@ -470,6 +564,7 @@ def _fixture(**overrides: Any) -> dict[str, Any]:
             "required_checks": ["contracts", "tests"],
             "required_review": True,
             "max_attempts": 3,
+            "max_observation_age_seconds": 900,
             "deadline": "2026-08-29T00:00:00Z",
         },
         "observation": {
@@ -497,12 +592,17 @@ def _fixture(**overrides: Any) -> dict[str, Any]:
 
 
 def self_test() -> None:
+    evaluated_at = "2026-08-28T12:05:00Z"
+
+    def check(document: Any) -> dict[str, Any]:
+        return evaluate(document, evaluated_at=evaluated_at)
+
     ready = _fixture()
-    first = evaluate(ready)
+    first = check(ready)
     assert first["verdict"] == "ready"
     assert first["binding"]["head_sha"] == "a" * 40
     assert first["mutations_performed"] == []
-    assert first == evaluate(ready)
+    assert first == check(ready)
 
     pending = _fixture(
         observation={
@@ -512,32 +612,32 @@ def self_test() -> None:
             ]
         }
     )
-    assert evaluate(pending)["verdict"] == "pending"
+    assert check(pending)["verdict"] == "pending"
 
     stale = _fixture(observation={"head_sha": "b" * 40})
-    assert evaluate(stale)["verdict"] == "stale"
+    assert check(stale)["verdict"] == "stale"
 
     provider_stale = _fixture(observation={"provider_head_sha": "b" * 40})
-    assert evaluate(provider_stale)["verdict"] == "stale"
+    assert check(provider_stale)["verdict"] == "stale"
 
     wrong_base = _fixture(observation={"base_ref": "release"})
-    wrong_base_result = evaluate(wrong_base)
+    wrong_base_result = check(wrong_base)
     assert wrong_base_result["verdict"] == "stale"
     assert wrong_base_result["reasons"][0]["code"] == "base_changed"
 
     wrong_repository = _fixture(observation={"provider_repository": "other/project"})
-    assert evaluate(wrong_repository)["reasons"][0]["code"] == "provider_binding_changed"
+    assert check(wrong_repository)["reasons"][0]["code"] == "provider_binding_changed"
     wrong_pull_request = _fixture(observation={"provider_pull_request": 999})
-    assert evaluate(wrong_pull_request)["reasons"][0]["code"] == "provider_binding_changed"
+    assert check(wrong_pull_request)["reasons"][0]["code"] == "provider_binding_changed"
 
     for state in ("closed", "merged"):
         not_open = _fixture(observation={"state": state})
-        not_open_result = evaluate(not_open)
+        not_open_result = check(not_open)
         assert not_open_result["verdict"] == "blocked"
         assert not_open_result["reasons"][0]["code"] == "pull_request_not_open"
 
     unresolved = _fixture(observation={"unresolved_threads": 2})
-    unresolved_result = evaluate(unresolved)
+    unresolved_result = check(unresolved)
     assert unresolved_result["verdict"] == "blocked"
     assert unresolved_result["reasons"][0]["code"] == "unresolved_review_threads"
 
@@ -549,7 +649,7 @@ def self_test() -> None:
             ]
         }
     )
-    assert evaluate(failed)["verdict"] == "blocked"
+    assert check(failed)["verdict"] == "blocked"
 
     for inconclusive in ("neutral", "skipped"):
         not_proven = _fixture(
@@ -564,13 +664,13 @@ def self_test() -> None:
                 ]
             }
         )
-        assert evaluate(not_proven)["verdict"] == "blocked"
+        assert check(not_proven)["verdict"] == "blocked"
 
     changes_requested = _fixture(
         policy={"required_review": False},
         observation={"review_decision": "changes_requested"},
     )
-    assert evaluate(changes_requested)["verdict"] == "blocked"
+    assert check(changes_requested)["verdict"] == "blocked"
 
     missing = _fixture(
         observation={
@@ -579,11 +679,11 @@ def self_test() -> None:
             ]
         }
     )
-    missing_result = evaluate(missing)
+    missing_result = check(missing)
     assert missing_result["verdict"] == "pending"
     assert missing_result["reasons"][0]["code"] == "missing_required_checks"
     missing["observation"]["attempt"] = 3
-    assert evaluate(missing)["verdict"] == "blocked"
+    assert check(missing)["verdict"] == "blocked"
 
     exhausted = _fixture(
         observation={
@@ -594,37 +694,59 @@ def self_test() -> None:
             ],
         }
     )
-    assert evaluate(exhausted)["verdict"] == "blocked"
+    assert check(exhausted)["verdict"] == "blocked"
 
-    expired = _fixture(observation={"observed_at": "2026-08-29T00:00:01Z"})
-    assert evaluate(expired)["reasons"][0]["code"] == "deadline_exceeded"
+    expired = _fixture()
+    expired_result = evaluate(expired, evaluated_at="2026-08-29T00:00:01Z")
+    assert expired_result["reasons"][0]["code"] == "deadline_exceeded"
+
+    replayed = _fixture(
+        policy={"deadline": "2026-08-30T00:00:00Z", "max_observation_age_seconds": 60},
+        observation={"observed_at": "2026-08-28T10:00:00Z"},
+    )
+    replayed_result = check(replayed)
+    assert replayed_result["verdict"] == "pending"
+    assert replayed_result["reasons"][0]["code"] == "observation_expired"
+
+    replayed["observation"]["attempt"] = 3
+    assert check(replayed)["verdict"] == "blocked"
+
+    from_future = _fixture(observation={"observed_at": "2026-08-28T12:07:00Z"})
+    assert check(from_future)["reasons"][0]["code"] == "observation_from_future"
 
     invalid = _fixture()
     del invalid["observation"]["mergeability"]
-    invalid_result = evaluate(invalid)
+    invalid_result = check(invalid)
     assert invalid_result["verdict"] == "blocked"
     assert invalid_result["reasons"][0]["code"] == "invalid_observation"
 
     missing_provider_head = _fixture()
     del missing_provider_head["observation"]["provider_head_sha"]
-    missing_provider_result = evaluate(missing_provider_head)
+    missing_provider_result = check(missing_provider_head)
     assert missing_provider_result["verdict"] == "blocked"
     assert missing_provider_result["reasons"][0]["code"] == "invalid_observation"
 
     invalid_base = _fixture(observation={"base_ref": ""})
-    invalid_base_result = evaluate(invalid_base)
+    invalid_base_result = check(invalid_base)
     assert invalid_base_result["verdict"] == "blocked"
     assert invalid_base_result["reasons"][0]["code"] == "invalid_observation"
 
     excessive_checks = _fixture(policy={"required_checks": [f"check-{index}" for index in range(101)]})
-    excessive_result = evaluate(excessive_checks)
+    excessive_result = check(excessive_checks)
     assert excessive_result["verdict"] == "blocked"
     assert len(json.dumps(excessive_result)) < 4096
 
     invalid_hint = {"schema_version": SCHEMA_VERSION, "binding": {"repository": "x" * 250_000}}
-    hint_result = evaluate(invalid_hint)
+    hint_result = check(invalid_hint)
     assert hint_result["verdict"] == "blocked"
     assert len(json.dumps(hint_result)) < 4096
+
+    nested: Any = []
+    for _ in range(MAX_JSON_DEPTH + 5):
+        nested = [nested]
+    nested_result = check(nested)
+    assert nested_result["verdict"] == "blocked"
+    assert nested_result["reasons"][0]["code"] == "invalid_observation"
 
     print("pr_watch self-test: PASS")
 
@@ -641,8 +763,49 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
 
 def _read_document(source: str) -> Any:
     if source == "-":
-        return json.load(sys.stdin)
-    return json.loads(Path(source).read_text(encoding="utf-8"))
+        payload = sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)
+    else:
+        path = Path(source)
+        flags = os.O_RDONLY
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        descriptor = os.open(path, flags)
+        try:
+            metadata = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(metadata.st_mode)
+                or metadata.st_nlink != 1
+                or metadata.st_size > MAX_INPUT_BYTES
+            ):
+                raise ContractError("input must be a unique bounded regular file")
+            chunks: list[bytes] = []
+            remaining = MAX_INPUT_BYTES + 1
+            while remaining:
+                chunk = os.read(descriptor, remaining)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            payload = b"".join(chunks)
+        finally:
+            os.close(descriptor)
+    if len(payload) > MAX_INPUT_BYTES:
+        raise ContractError(f"input must not exceed {MAX_INPUT_BYTES} bytes")
+    try:
+        value = json.loads(payload)
+    except (json.JSONDecodeError, UnicodeDecodeError, RecursionError) as error:
+        raise ContractError("input must be bounded valid UTF-8 JSON") from error
+    _validate_json_shape(value)
+    return value
+
+
+def _live_example() -> dict[str, Any]:
+    document = _fixture()
+    observed = datetime.now(timezone.utc).replace(microsecond=0)
+    deadline = observed + timedelta(minutes=30)
+    document["observation"]["observed_at"] = observed.isoformat().replace("+00:00", "Z")
+    document["policy"]["deadline"] = deadline.isoformat().replace("+00:00", "Z")
+    return document
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -651,7 +814,7 @@ def main(argv: list[str] | None = None) -> int:
         self_test()
         return 0
     if args.print_example:
-        print(json.dumps(_fixture(), indent=2))
+        print(json.dumps(_live_example(), indent=2))
         return 0
     if not args.input:
         print(

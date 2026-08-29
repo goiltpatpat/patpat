@@ -20,7 +20,7 @@ Babysitting never authorizes merge. No Graphite. No `gh pr merge`. No merge-when
 
 ## Deterministic watcher
 
-Use [`patpat-ship/scripts/pr_watch.py`](../../patpat-ship/scripts/pr_watch.py) when the host can provide trusted PR observations. Generate the input shape with `python3 skills/patpat-ship/scripts/pr_watch.py --print-example`. Bind every observation to repository, PR number, and full head SHA. Let a host adapter fetch data and control bounded wake intervals; keep provider credentials and mutations outside the evaluator.
+Use [`patpat-ship/scripts/pr_watch.py`](../../patpat-ship/scripts/pr_watch.py) when the host can provide trusted PR observations. Generate the schema-v3 input shape with `python3 skills/patpat-ship/scripts/pr_watch.py --print-example`. Bind every observation to repository, PR number, full head SHA, and base branch. Set a bounded maximum observation age; the evaluator compares it with its own UTC clock and rejects replayed evidence or timestamps beyond the bounded clock skew. Let a host adapter fetch data and control bounded wake intervals; keep provider credentials and mutations outside the evaluator.
 
 - `pending`: wait within the declared deadline and attempt budget, then capture a new observation.
 - `stale`: discard the verdict and bind a new observation to the live head.

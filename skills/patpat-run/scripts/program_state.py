@@ -9,6 +9,7 @@ import json
 import os
 import re
 import socket
+import stat
 import subprocess
 import sys
 import tempfile
@@ -24,7 +25,27 @@ if SCRIPT_DIRECTORY not in sys.path:
     sys.path.insert(0, SCRIPT_DIRECTORY)
 
 from state_lock import path_guard, path_has_identity, read_lock_record
-from validate_plan import ACTIONS, AUTHORITIES, example_plan, validate_plan
+from team_shape import (
+    PARALLEL_GATE_CHECKS,
+    PARALLEL_GATE_KIND,
+    TeamShapeError,
+    load_parallel_gate_receipt,
+    validate_parallel_gate_receipt,
+)
+from validate_plan import (
+    ACTIONS,
+    AUTHORITIES,
+    MAX_DEPENDENCIES,
+    MAX_FILES,
+    MAX_OBJECTIVE_LENGTH,
+    MAX_UNITS,
+    PlanError,
+    example_plan,
+    load_json as load_plan_json,
+    ownership_patterns_overlap,
+    repository_pattern,
+    validate_plan,
+)
 
 
 SCHEMA_VERSION = 1
@@ -32,6 +53,8 @@ PROGRAM_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 HEAD_SHA = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 LOCK_TOKEN = re.compile(r"^[0-9a-f]{32}$")
 MAX_LOCK_BYTES = 4096
+MAX_PROGRAM_STATE_BYTES = 4 * 1024 * 1024
+MAX_INBOX_EVENTS = 4096
 UNIT_STATES = {"pending", "running", "completed", "blocked"}
 VERDICT_KINDS = {"verification", "review"}
 VERDICTS = {"pass", "fail"}
@@ -156,6 +179,8 @@ def atomic_write_json(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
     payload = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    if len(payload) > MAX_PROGRAM_STATE_BYTES:
+        raise ProgramStateError("program state exceeds the byte limit")
     try:
         with temporary.open("xb") as handle:
             handle.write(payload)
@@ -348,14 +373,9 @@ def canonical_json_digest(value: Any) -> str:
 
 
 def read_plan(path: Path) -> dict[str, Any]:
-    if path.is_symlink():
-        raise ProgramStateError("plan must be an existing regular file without symlinks")
-    path = path.resolve()
-    if not path.is_file():
-        raise ProgramStateError("plan must be an existing regular file without symlinks")
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+        value = load_plan_json(path)
+    except PlanError as error:
         raise ProgramStateError(f"could not read plan: {error}") from error
     errors = validate_plan(value)
     if errors:
@@ -431,7 +451,11 @@ def schema_errors(state: Any, root: Path, program_id: str) -> list[str]:
         errors.append("stored program id does not match requested program")
     if state.get("repo_root") != str(root.resolve()):
         errors.append("stored repository root does not match requested root")
-    if not isinstance(state.get("objective"), str) or not state.get("objective"):
+    if (
+        not isinstance(state.get("objective"), str)
+        or not state.get("objective")
+        or len(state["objective"]) > MAX_OBJECTIVE_LENGTH
+    ):
         errors.append("objective is required")
     if not isinstance(state.get("plan_digest"), str) or re.fullmatch(r"[0-9a-f]{64}", state.get("plan_digest", "")) is None:
         errors.append("plan digest is invalid")
@@ -470,28 +494,41 @@ def schema_errors(state: Any, root: Path, program_id: str) -> list[str]:
                 not isinstance(gate.get("open"), bool)
                 or not isinstance(gate.get("reason"), str)
                 or not gate["reason"]
+                or len(gate["reason"]) > 2000
             ):
                 errors.append(f"gate {name} fields are invalid")
     units = state.get("units")
-    if not isinstance(units, dict) or not units:
-        errors.append("units must be a non-empty object")
+    if not isinstance(units, dict) or not units or len(units) > MAX_UNITS:
+        errors.append(f"units must be a non-empty object with at most {MAX_UNITS} entries")
     else:
         known = set(units)
         for unit_id, unit in units.items():
-            if PROGRAM_ID.fullmatch(unit_id) is None or not isinstance(unit, dict) or set(unit) != UNIT_KEYS:
+            if (
+                not isinstance(unit_id, str)
+                or len(unit_id) > 64
+                or PROGRAM_ID.fullmatch(unit_id) is None
+                or not isinstance(unit, dict)
+                or set(unit) != UNIT_KEYS
+            ):
                 errors.append(f"unit {unit_id!r} is malformed")
                 continue
             if unit.get("id") != unit_id or unit.get("state") not in UNIT_STATES:
                 errors.append(f"unit {unit_id} identity or state is invalid")
             dependencies = unit.get("depends_on")
-            if not isinstance(dependencies, list) or len(dependencies) != len(set(dependencies)) or not set(dependencies) <= known:
+            if (
+                not isinstance(dependencies, list)
+                or len(dependencies) > MAX_DEPENDENCIES
+                or len(dependencies) != len(set(dependencies))
+                or not set(dependencies) <= known
+            ):
                 errors.append(f"unit {unit_id} dependencies are invalid")
             elif unit_id in dependencies:
                 errors.append(f"unit {unit_id} cannot depend on itself")
             if (
                 not isinstance(unit.get("files"), list)
                 or not unit["files"]
-                or not all(isinstance(item, str) and item for item in unit["files"])
+                or len(unit["files"]) > MAX_FILES
+                or not all(repository_pattern(item) for item in unit["files"])
             ):
                 errors.append(f"unit {unit_id} files are invalid")
             head = unit.get("head_sha")
@@ -528,25 +565,57 @@ def schema_errors(state: Any, root: Path, program_id: str) -> list[str]:
             and isinstance(unit.get("depends_on"), list)
             and set(unit["depends_on"]) <= known
         }
-        visiting: set[str] = set()
-        visited: set[str] = set()
+        indegree = {unit_id: 0 for unit_id in graph}
+        dependents: dict[str, list[str]] = {unit_id: [] for unit_id in graph}
+        for unit_id, dependencies in graph.items():
+            for dependency in dependencies:
+                if dependency in graph:
+                    indegree[unit_id] += 1
+                    dependents[dependency].append(unit_id)
+        frontier_ids = [unit_id for unit_id, degree in indegree.items() if degree == 0]
+        visited = 0
+        while frontier_ids:
+            unit_id = frontier_ids.pop()
+            visited += 1
+            for dependent in dependents[unit_id]:
+                indegree[dependent] -= 1
+                if indegree[dependent] == 0:
+                    frontier_ids.append(dependent)
+        if visited != len(graph):
+            errors.append("unit dependency graph must be acyclic")
 
-        def visit(unit_id: str) -> None:
-            if unit_id in visiting:
-                errors.append("unit dependency graph must be acyclic")
-                return
-            if unit_id in visited:
-                return
-            visiting.add(unit_id)
-            for dependency in graph.get(unit_id, []):
-                visit(dependency)
-            visiting.remove(unit_id)
-            visited.add(unit_id)
-
+        ancestors: dict[str, set[str]] = {}
         for unit_id in graph:
-            visit(unit_id)
+            found: set[str] = set()
+            pending = list(graph[unit_id])
+            while pending:
+                dependency = pending.pop()
+                if dependency in graph and dependency not in found:
+                    found.add(dependency)
+                    pending.extend(graph[dependency])
+            ancestors[unit_id] = found
+        ordered_ids = sorted(graph)
+        for index, left_id in enumerate(ordered_ids):
+            for right_id in ordered_ids[index + 1 :]:
+                if left_id in ancestors[right_id] or right_id in ancestors[left_id]:
+                    continue
+                left_files = units[left_id].get("files", [])
+                right_files = units[right_id].get("files", [])
+                if any(
+                    ownership_patterns_overlap(left, right)
+                    for left in left_files
+                    for right in right_files
+                    if isinstance(left, str) and isinstance(right, str)
+                ):
+                    errors.append(
+                        f"unordered units {left_id} and {right_id} have overlapping ownership"
+                    )
     inbox = state.get("inbox")
-    if not isinstance(inbox, list) or not all(isinstance(event, dict) and set(event) == INBOX_KEYS for event in inbox):
+    if (
+        not isinstance(inbox, list)
+        or len(inbox) > MAX_INBOX_EVENTS
+        or not all(isinstance(event, dict) and set(event) == INBOX_KEYS for event in inbox)
+    ):
         errors.append("inbox is malformed")
     elif isinstance(units, dict):
         observed_sequences: list[int] = []
@@ -577,12 +646,35 @@ def schema_errors(state: Any, root: Path, program_id: str) -> list[str]:
 
 def load_state(root: Path, program_id: str) -> dict[str, Any]:
     path = state_path(root, program_id)
-    if not path.is_file() or path.is_symlink():
-        raise ProgramStateError(f"program does not exist as a regular state file: {program_id}")
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+        descriptor = os.open(path, flags)
+        metadata = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_nlink != 1
+            or metadata.st_size > MAX_PROGRAM_STATE_BYTES
+        ):
+            raise ProgramStateError("program state must be a bounded unique regular file")
+        chunks: list[bytes] = []
+        remaining = MAX_PROGRAM_STATE_BYTES + 1
+        while remaining:
+            chunk = os.read(descriptor, remaining)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        payload = b"".join(chunks)
+        if len(payload) > MAX_PROGRAM_STATE_BYTES:
+            raise ProgramStateError("program state exceeds the byte limit")
+        value = json.loads(payload.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError) as error:
         raise ProgramStateError(f"invalid state file: {error}") from error
+    finally:
+        if "descriptor" in locals():
+            os.close(descriptor)
     errors = schema_errors(value, root, program_id)
     if errors:
         raise ProgramStateError("; ".join(errors))
@@ -640,7 +732,15 @@ def initialize(root: Path, program_id: str, plan_path: Path) -> dict[str, Any]:
         return state
 
 
-def set_gate(root: Path, program_id: str, name: str, opened: bool, reason: str) -> dict[str, Any]:
+def set_gate(
+    root: Path,
+    program_id: str,
+    name: str,
+    opened: bool,
+    reason: str,
+    receipt_path: Path | None = None,
+    integration_owner: str | None = None,
+) -> dict[str, Any]:
     if name not in GATE_NAMES:
         raise ProgramStateError(f"gate must be one of {sorted(GATE_NAMES)}")
     reason = checked_text(reason, "gate reason", 1000)
@@ -648,6 +748,27 @@ def set_gate(root: Path, program_id: str, name: str, opened: bool, reason: str) 
         state = load_state(root, program_id)
         if opened and name == "delivery" and not delivery_ready(root, state):
             raise ProgramStateError("delivery gate requires every unit to have complete fresh evidence")
+        if opened and name == "dispatch":
+            if receipt_path is None or integration_owner is None:
+                raise ProgramStateError(
+                    "dispatch gate requires a content-bound parallel gate receipt and integration owner"
+                )
+            try:
+                receipt, _ = load_parallel_gate_receipt(receipt_path)
+                receipt_summary = validate_parallel_gate_receipt(
+                    receipt,
+                    expected_program_id=program_id,
+                    expected_plan_digest=state["plan_digest"],
+                    expected_integration_owner=integration_owner,
+                    expected_units=set(state["units"]),
+                )
+            except TeamShapeError as error:
+                raise ProgramStateError(f"dispatch gate receipt is invalid: {error}") from error
+            reason = (
+                f"{reason}; receipt_sha256={receipt_summary['sha256']}; "
+                f"integration_owner={receipt_summary['integration_owner']}; "
+                f"isolation_count={receipt_summary['isolation_count']}"
+            )
         timestamp = now()
         state["gates"][name] = {"open": opened, "reason": reason, "updated_at": timestamp}
         state["updated_at"] = timestamp
@@ -784,6 +905,8 @@ def append_inbox(
         head_sha = checked_head(head_sha)
     with program_lock(root, program_id):
         state = load_state(root, program_id)
+        if len(state["inbox"]) >= MAX_INBOX_EVENTS:
+            raise ProgramStateError("inbox is full; acknowledge processed events before appending")
         if unit_id is not None and unit_id not in state["units"]:
             raise ProgramStateError(f"unknown unit: {unit_id}")
         sequence = state["inbox_sequence"] + 1
@@ -950,7 +1073,50 @@ def run_self_test() -> None:
             lambda: set_gate(root, "release-train", "delivery", True, "ship now"),
             "complete fresh evidence",
         )
-        set_gate(root, "release-train", "dispatch", True, "plan reviewed")
+        expect_error(
+            lambda: set_gate(root, "release-train", "dispatch", True, "plan reviewed"),
+            "content-bound parallel gate receipt",
+        )
+        initialized = load_state(root, "release-train")
+        parallel_receipt = {
+            "schema_version": 1,
+            "kind": PARALLEL_GATE_KIND,
+            "program_id": "release-train",
+            "plan_digest": initialized["plan_digest"],
+            "integration_owner": "Integration Owner",
+            "checks": {name: True for name in PARALLEL_GATE_CHECKS},
+            "isolation_identities": {
+                "contract": "worktree-contract",
+                "consumer": "worktree-consumer",
+            },
+        }
+        receipt_path = root / "parallel-gate.json"
+        receipt_path.write_text(json.dumps(parallel_receipt), encoding="utf-8")
+        tampered_receipt = json.loads(json.dumps(parallel_receipt))
+        tampered_receipt["plan_digest"] = "f" * 64
+        tampered_path = root / "tampered-parallel-gate.json"
+        tampered_path.write_text(json.dumps(tampered_receipt), encoding="utf-8")
+        expect_error(
+            lambda: set_gate(
+                root,
+                "release-train",
+                "dispatch",
+                True,
+                "plan reviewed",
+                tampered_path,
+                "Integration Owner",
+            ),
+            "plan_digest does not match",
+        )
+        set_gate(
+            root,
+            "release-train",
+            "dispatch",
+            True,
+            "plan reviewed",
+            receipt_path,
+            "Integration Owner",
+        )
         assert status(root, "release-train")["frontier"] == ["contract"]
 
         append_inbox(root, "release-train", "worker-update", "contract ready", "contract", None)
@@ -1217,6 +1383,8 @@ def build_parser() -> argparse.ArgumentParser:
     gate_parser.add_argument("name", choices=sorted(GATE_NAMES))
     gate_parser.add_argument("state", choices=["open", "closed"])
     gate_parser.add_argument("--reason", required=True)
+    gate_parser.add_argument("--receipt", type=Path)
+    gate_parser.add_argument("--integration-owner")
     gate_parser.add_argument("--full", action="store_true", help="Print the complete state ledger")
 
     head_parser = commands.add_parser("set-head")
@@ -1273,7 +1441,15 @@ def main() -> int:
         elif args.command == "recover-lock":
             result = {"recovered_lock": str(recover_stale_lock(root, args.program))}
         elif args.command == "set-gate":
-            result = set_gate(root, args.program, args.name, args.state == "open", args.reason)
+            result = set_gate(
+                root,
+                args.program,
+                args.name,
+                args.state == "open",
+                args.reason,
+                args.receipt,
+                args.integration_owner,
+            )
         elif args.command == "set-head":
             result = set_head(root, args.program, args.unit_id, args.head_sha)
         elif args.command == "set-unit":

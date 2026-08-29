@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 import json
 import stat
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Type
@@ -60,8 +61,14 @@ def path_has_identity(path: Path, identity: tuple[int, int] | None) -> bool:
 
 
 @contextmanager
-def path_guard(directory: Path, error_type: Type[Exception] = RuntimeError) -> Iterator[None]:
+def path_guard(
+    directory: Path,
+    error_type: Type[Exception] = RuntimeError,
+    timeout_seconds: float = 5.0,
+) -> Iterator[None]:
     """Hold a process-scoped OS lock while changing `.lock` in a store directory."""
+    if timeout_seconds <= 0:
+        raise error_type("lock guard timeout must be positive")
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / ".lock.guard"
     flags = os.O_RDWR | os.O_CREAT
@@ -83,17 +90,27 @@ def path_guard(directory: Path, error_type: Type[Exception] = RuntimeError) -> I
                 != (path_stat.st_dev, path_stat.st_ino)
             ):
                 raise error_type(f"lock guard is not a unique regular file: {path}")
-            if os.name == "nt":
-                import msvcrt
+            deadline = time.monotonic() + timeout_seconds
+            while True:
+                try:
+                    if os.name == "nt":
+                        import msvcrt
 
-                if descriptor_stat.st_size == 0:
-                    os.write(descriptor, b"0")
-                os.lseek(descriptor, 0, os.SEEK_SET)
-                msvcrt.locking(descriptor, msvcrt.LK_LOCK, 1)
-            else:
-                import fcntl
+                        if descriptor_stat.st_size == 0:
+                            os.write(descriptor, b"0")
+                        os.lseek(descriptor, 0, os.SEEK_SET)
+                        msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
+                    else:
+                        import fcntl
 
-                fcntl.flock(descriptor, fcntl.LOCK_EX)
+                        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except (BlockingIOError, OSError) as error:
+                    if time.monotonic() >= deadline:
+                        raise error_type(
+                            f"lock guard acquisition timed out after {timeout_seconds:.3f}s: {path}"
+                        ) from error
+                    time.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
             current_stat = path.lstat()
             if (
                 (descriptor_stat.st_dev, descriptor_stat.st_ino)

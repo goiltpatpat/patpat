@@ -9,10 +9,13 @@ import json
 import os
 import re
 import shutil
+import stat
 import sys
 import tempfile
+import time
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from validate import validate_root
 
@@ -24,10 +27,65 @@ IGNORED_NAMES = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
 NAME_LINE = re.compile(r"^name:\s*['\"]?([^'\"\s]+)['\"]?\s*$")
 SKILL_NAME = re.compile(r"^patpat(?:-[a-z0-9]+)*$")
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
+UPDATE_LOCK_NAME = ".patpat-update.lock"
+UPDATE_LOCK_TIMEOUT_SECONDS = 5.0
 
 
 class UpdateError(RuntimeError):
     """Raised when an update cannot preserve the installation contract."""
+
+
+@contextmanager
+def update_guard(target: Path, timeout_seconds: float = UPDATE_LOCK_TIMEOUT_SECONDS) -> Iterator[None]:
+    """Serialize one installation update without relying on a deletable lock inode."""
+    lock_path = target / UPDATE_LOCK_NAME
+    flags = os.O_RDWR | os.O_CREAT
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(lock_path, flags, 0o600)
+    except OSError as error:
+        raise UpdateError(f"could not open update lock: {lock_path}: {error}") from error
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+            raise UpdateError(f"update lock must be a unique regular file: {lock_path}")
+        if metadata.st_size == 0:
+            os.write(descriptor, b"\0")
+            os.fsync(descriptor)
+        deadline = time.monotonic() + timeout_seconds
+        while True:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+
+                    os.lseek(descriptor, 0, os.SEEK_SET)
+                    msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except (BlockingIOError, OSError):
+                if time.monotonic() >= deadline:
+                    raise UpdateError(
+                        f"another Patpat update holds the installation lock: {lock_path}"
+                    )
+                time.sleep(0.05)
+        try:
+            yield
+        finally:
+            if os.name == "nt":
+                import msvcrt
+
+                os.lseek(descriptor, 0, os.SEEK_SET)
+                msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+    finally:
+        os.close(descriptor)
 
 
 def skill_directories(source: Path) -> list[Path]:
@@ -517,22 +575,23 @@ def update(source: Path, target: Path, backup: Path, dry_run: bool, *, fail_afte
     source = source.resolve()
     target = target.resolve()
     backup = backup.resolve()
-    validate_paths(source, target, backup)
-    skills = skill_directories(source)
-    if not skills:
-        raise UpdateError("canonical skills directory contains no skills")
-    installation = classify_installation(source, target, skills)
-    if installation == "symlink":
-        update_symlink_installation(
-            source,
-            target,
-            backup,
-            skills,
-            dry_run,
-            fail_after=fail_after,
-        )
-        return
-    update_copy_installation(source, target, backup, skills, dry_run, fail_after=fail_after)
+    with update_guard(target):
+        validate_paths(source, target, backup)
+        skills = skill_directories(source)
+        if not skills:
+            raise UpdateError("canonical skills directory contains no skills")
+        installation = classify_installation(source, target, skills)
+        if installation == "symlink":
+            update_symlink_installation(
+                source,
+                target,
+                backup,
+                skills,
+                dry_run,
+                fail_after=fail_after,
+            )
+            return
+        update_copy_installation(source, target, backup, skills, dry_run, fail_after=fail_after)
 
 
 def create_test_skill(root: Path, name: str, version: str) -> None:
@@ -557,6 +616,14 @@ def run_self_test() -> None:
             create_test_skill(target, name, "old")
         create_test_skill(target, "unrelated-skill", "keep")
         unrelated_before = inventory(target / "unrelated-skill")
+
+        with update_guard(target):
+            try:
+                with update_guard(target, timeout_seconds=0.05):
+                    raise UpdateError("nested update unexpectedly acquired the installation lock")
+            except UpdateError as error:
+                if "another Patpat update" not in str(error):
+                    raise
 
         dry_backup = root / "dry-backup"
         update(source, target, dry_backup, True)

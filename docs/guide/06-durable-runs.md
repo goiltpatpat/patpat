@@ -43,9 +43,11 @@ python3 skills/patpat-run/scripts/validate_plan.py --self-test
 
 Plan validity proves dependency, ownership, evidence, and review structure. It never grants commit, merge, deploy, or publication authority.
 
-For a validated multi-unit plan, `skills/patpat-run/scripts/program_state.py` persists the dependency frontier, worker inbox, exact-head verification ledger, and explicit dispatch and delivery gates under Git metadata. It does not spawn agents or call a provider. When an upstream unit changes head, it invalidates downstream evidence before the frontier can advance.
+For a validated multi-unit plan, `skills/patpat-run/scripts/program_state.py` persists the dependency frontier, worker inbox, exact-head verification ledger, and explicit dispatch and delivery gates under Git metadata. It does not spawn agents or call a provider. When an upstream unit changes head, it invalidates downstream evidence before the frontier can advance. Unordered units cannot claim exact, ancestor, or conservatively overlapping glob ownership.
 
-State mutations return bounded receipts by default so long ledgers do not flood agent context. Use `status --brief`, `status --unit <id>`, and bounded inbox pages for normal coordination; request full state only for a deliberate audit. Inspect abandoned locks before recovery. Only a dead same-host owner is recoverable automatically.
+Keep dispatch closed until the integration owner supplies one bounded parallel-gate receipt. Bind that receipt to the program id, validated plan digest, integration owner, every unit's unique isolation identity, and all earned-parallelism checks. Use the same receipt for team selection and `set-gate dispatch open`; a boolean claim alone cannot open writable fan-out.
+
+State mutations return bounded receipts by default so long ledgers do not flood agent context. Plan, state, receipt, and inbox inputs are bounded and reject linked files where they cross a trust boundary. Use `status --brief`, `status --unit <id>`, and bounded inbox pages for normal coordination; request full state only for a deliberate audit. Lock acquisition has a bounded timeout. Inspect abandoned locks before recovery. Only a dead same-host owner is recoverable automatically.
 
 `delivery_admitted` remains a compatibility field for evidence plus gate state; it never means delivery authority. Check `delivery_authority_granted`, which is always false, and reacquire current delivery authority through `patpat-ship`.
 

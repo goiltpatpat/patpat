@@ -115,7 +115,7 @@ python3 scripts/update_skills.py \
   --backup /absolute/path/to/project/.agents/patpat-backup-v0.6
 ```
 
-The backup path must not exist and must share a filesystem with the target. The updater touches only the Patpat catalog it validates. Keep the backup until the fresh-session discovery check passes.
+The backup path must not exist and must share a filesystem with the target. The updater touches only the Patpat catalog it validates and its `.patpat-update.lock`; concurrent updates to the same installation serialize and time out safely instead of interleaving. Keep the backup until the fresh-session discovery check passes.
 
 ## Invocation
 

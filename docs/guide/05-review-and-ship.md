@@ -34,7 +34,7 @@ The pull request should explain the changed behavior, why it changed, how it was
 
 Provider observations must bind the provider repository, pull-request number, head, and base branch to the expected target and include PR state, unresolved review-thread count, checks, review decision, draft state, and mergeability. A different provider target, closed or merged PR, changed head or base, or any unresolved review thread fails closed before merge-ready handoff.
 
-Observation schema v2 also binds the expected base branch. Schema v1 observations fail closed and must be recollected; do not fill the new fields from guesses.
+Observation schema v3 binds the expected base branch and evaluates freshness against the watcher's own UTC clock. Set a bounded `max_observation_age_seconds`; expired observations or timestamps beyond the bounded clock skew cannot become merge-ready evidence. Schema v1 and v2 observations fail closed and must be recollected; do not fill new fields from guesses.
 
 ## Keep merge authority separate
 

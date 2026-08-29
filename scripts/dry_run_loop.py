@@ -165,7 +165,12 @@ def run_self_test() -> None:
     hook = load_hook()
     assert hook.classify_prompt("/patpat fix the timeout") == "activate"
     assert hook.classify_prompt("$patpat-loop land this") == "activate"
+    assert hook.classify_prompt("Use patpat to inspect this repository") == "activate"
     assert hook.classify_prompt("use $patpat-setup on this host") == "inactive"
+    assert hook.classify_prompt("Do not activate /patpat for this task.") == "inactive"
+    assert hook.classify_prompt("Explain what /patpat does without enabling it.") == "inactive"
+    assert hook.classify_prompt("`/patpat fix the bug`") == "inactive"
+    assert hook.classify_prompt("Example: /patpat fix the bug") == "inactive"
     assert hook.classify_prompt("disable /patpat") == "disable"
 
     cases = {

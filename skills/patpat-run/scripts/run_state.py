@@ -31,6 +31,7 @@ RUN_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 RECEIPT_PATTERN = re.compile(r"^file:/.+$")
 LOCK_TOKEN_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 MAX_LOCK_BYTES = 4096
+MAX_STATE_BYTES = 1024 * 1024
 NODES = {
     "FRAME",
     "INSPECT",
@@ -223,6 +224,8 @@ def atomic_write(path: Path, payload: bytes) -> None:
 
 def atomic_write_json(path: Path, value: dict[str, Any]) -> None:
     payload = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    if len(payload) > MAX_STATE_BYTES:
+        raise RunStateError(f"run state must not exceed {MAX_STATE_BYTES} bytes")
     atomic_write(path, payload)
 
 
@@ -455,14 +458,11 @@ def schema_errors(state: dict[str, Any], root: Path, run_id: str) -> list[str]:
 
 def load_state(root: Path, run_id: str) -> dict[str, Any]:
     path = state_path(root, run_id)
-    if not path.is_file():
+    if not path.exists() and not path.is_symlink():
         raise RunStateError(f"run does not exist: {run_id}")
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as error:
-        raise RunStateError(f"invalid state file: {error}") from error
-    if not isinstance(value, dict):
-        raise RunStateError("state root must be an object")
+    value, identity = read_lock_record(path, MAX_STATE_BYTES)
+    if value is None or identity is None or not path_has_identity(path, identity):
+        raise RunStateError("state must be a unique bounded regular JSON file")
     errors = schema_errors(value, root, run_id)
     if errors:
         raise RunStateError("; ".join(errors))
@@ -1051,6 +1051,34 @@ def run_self_test() -> None:
             os.replace = original_replace
         if atomic_path.read_bytes() != before_failure:
             raise AssertionError("failed atomic write changed authoritative state")
+
+        linked_state_target = atomic_path.with_name("state.real.json")
+        os.replace(atomic_path, linked_state_target)
+        atomic_path.symlink_to(linked_state_target)
+        try:
+            try:
+                load_state(root, "atomic-run")
+            except RunStateError:
+                pass
+            else:
+                raise AssertionError("symlinked run state was accepted")
+        finally:
+            atomic_path.unlink()
+            os.replace(linked_state_target, atomic_path)
+
+        oversized_state_target = atomic_path.with_name("state.oversized.json")
+        os.replace(atomic_path, oversized_state_target)
+        atomic_path.write_bytes(b"{" + b" " * MAX_STATE_BYTES + b"}")
+        try:
+            try:
+                load_state(root, "atomic-run")
+            except RunStateError:
+                pass
+            else:
+                raise AssertionError("oversized run state was accepted")
+        finally:
+            atomic_path.unlink()
+            os.replace(oversized_state_target, atomic_path)
 
         lock_path = run_directory(root, "atomic-run") / ".lock"
         lock_path.write_text(
