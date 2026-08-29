@@ -44,7 +44,7 @@ Compare pstack jobs to Patpat artifacts. Missing filenames are not gaps when the
 | `figure-it-out` | `patpat-plan` + bespoke-workflow | adapted |
 | `show-me-your-work` / autonomous run / pause / pickup | `patpat-run` + multi-phase-run / pause-safely / session-takeover | adapted |
 | checked multi-PR plan | `patpat-run` + `skills/patpat-run/scripts/validate_plan.py`; host-neutral units require dependencies, owned files, proof surfaces, exact-head evidence, review gate, and explicit delivery authority | adapted; no fixed model or lane count |
-| babysit / shipping / opening a PR | PR drive + PR babysit + head-SHA-bound provider-neutral watcher + authorized-delivery | adapted; host adapter owns observation and wake, land only when named |
+| babysit / shipping / opening a PR | PR drive + PR babysit + bounded GitHub.com observer + head-SHA-bound provider-neutral watcher + authorized-delivery | adapted; GitHub observation is read-only, host owns bounded wake, land only when named |
 | `reflect` | `patpat-learn` | adapted |
 | `eval` / skill authoring | `patpat-eval` / `patpat-skill` | covered |
 | `setup-pstack` / Codex marketplace packaging | `patpat-setup` + host manifests + `AGENTS.md` + `goiltpatpat/patpat` | adapted; no model-role presets |

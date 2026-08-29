@@ -27,6 +27,7 @@ CHECK_CONCLUSIONS = {
     "action_required",
     "neutral",
     "skipped",
+    "stale",
 }
 PASSING_CONCLUSIONS = {"success"}
 FAILING_CONCLUSIONS = CHECK_CONCLUSIONS - PASSING_CONCLUSIONS

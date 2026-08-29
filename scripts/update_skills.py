@@ -254,7 +254,7 @@ def classify_installation(source: Path, target: Path, skills: list[Path]) -> str
             raise UpdateError("mixed copy and symlink Patpat installations are not supported")
         sources = {skill.name: skill for skill in skills}
         for destination in existing:
-            if destination.resolve() != sources[destination.name].resolve():
+            if path_identity(destination) != path_identity(sources[destination.name]):
                 raise UpdateError(f"refusing an unowned skill symlink: {destination}")
         return "symlink"
     return "copy"
@@ -263,6 +263,17 @@ def classify_installation(source: Path, target: Path, skills: list[Path]) -> str
 def symlink_target(path: Path) -> Path:
     raw = Path(os.readlink(path))
     return raw if raw.is_absolute() else path.parent / raw
+
+
+def path_identity(path: Path) -> str:
+    """Return a comparison identity that normalizes Windows extended path prefixes."""
+    value = os.path.normcase(os.path.normpath(str(path.resolve())))
+    if os.name == "nt":
+        if value.startswith("\\\\?\\unc\\"):
+            return "\\\\" + value[8:]
+        if value.startswith("\\\\?\\"):
+            return value[4:]
+    return value
 
 
 def validate_symlink_installation(
@@ -280,7 +291,7 @@ def validate_symlink_installation(
                 continue
             if (
                 not destination.is_symlink()
-                or symlink_target(destination).resolve() != skill.resolve()
+                or path_identity(symlink_target(destination)) != path_identity(skill)
             ):
                 raise UpdateError(f"refusing an unowned skill path: {destination}")
             installed[skill.name] = {"target": str(skill.resolve())}
@@ -298,9 +309,12 @@ def validate_symlink_installation(
         destination = target / name
         if not destination.is_symlink():
             raise UpdateError(f"installed Patpat skill symlink is missing: {destination}")
-        if symlink_target(destination).resolve() != Path(entry["target"]).resolve():
+        observed_target = path_identity(symlink_target(destination))
+        recorded_target = path_identity(Path(entry["target"]))
+        if observed_target != recorded_target:
             raise UpdateError(
-                f"installed Patpat skill symlink changed since the last update: {destination}"
+                "installed Patpat skill symlink changed since the last update: "
+                f"{destination}; observed={observed_target}; recorded={recorded_target}"
             )
     collisions = [
         name for name in sorted(source_names - set(installed))
@@ -487,8 +501,8 @@ def update_symlink_installation(
     relinked = sorted(
         name
         for name in set(old_inventory) & set(source_inventory)
-        if Path(old_inventory[name]["target"]).resolve()
-        != Path(source_inventory[name]["target"]).resolve()
+        if path_identity(Path(old_inventory[name]["target"]))
+        != path_identity(Path(source_inventory[name]["target"]))
     )
     moved_names = retired + relinked
     promoted_names = added + relinked
@@ -815,7 +829,7 @@ def run_self_test() -> None:
             create_test_skill(relocated_source, name, "relocated")
         update(relocated_source, link_target, root / "relink-backup", False)
         for skill in skill_directories(relocated_source):
-            if symlink_target(link_target / skill.name).resolve() != skill.resolve():
+            if path_identity(symlink_target(link_target / skill.name)) != path_identity(skill):
                 raise UpdateError("symlink update did not follow a relocated source checkout")
 
     print("Patpat skill updater self-test passed.")

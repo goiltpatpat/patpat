@@ -1023,6 +1023,18 @@ def run_self_test(root: Path) -> list[str]:
         failures.append(
             f"self-test: pull-request watcher failed: {watch_result.stdout}{watch_result.stderr}"
         )
+    github_observer = root / "skills" / "patpat-ship" / "scripts" / "github_observe.py"
+    observer_result = subprocess.run(
+        [sys.executable, str(github_observer), "--self-test"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if observer_result.returncode != 0:
+        failures.append(
+            "self-test: GitHub pull-request observer failed: "
+            f"{observer_result.stdout}{observer_result.stderr}"
+        )
     return failures
 
 

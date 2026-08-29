@@ -198,6 +198,7 @@ python3 skills/patpat-run/scripts/run_state.py --self-test
 python3 skills/patpat-run/scripts/validate_plan.py --self-test
 python3 skills/patpat-run/scripts/program_state.py --self-test
 python3 skills/patpat-run/scripts/team_shape.py --self-test
+python3 skills/patpat-ship/scripts/github_observe.py --self-test
 python3 skills/patpat-ship/scripts/pr_watch.py --self-test
 python3 scripts/smoke_codex_plugin.py
 python3 scripts/smoke_antigravity_plugin.py
