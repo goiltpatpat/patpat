@@ -5,7 +5,7 @@ description: Trace and prove the blast radius of an existing or proposed reposit
 
 # Patpat Impact
 
-When invoked directly, read [`patpat-loop`](../patpat-loop/SKILL.md) and follow its authority boundaries and reporting contract.
+When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 
 Read [repository truth](../patpat-loop/principles/repository-truth.md), [boundary discipline](../patpat-loop/principles/boundary-discipline.md), and [proof over proxy](../patpat-loop/principles/proof-over-proxy.md). Apply the [blast-radius playbook](../patpat-loop/playbooks/blast-radius.md).
 

@@ -56,3 +56,5 @@ Default to one owner. Writable fan-out requires a separate Git worktree or host-
 ## Evidence
 
 Never claim `verified` unless the authoritative check passed. Use `partially verified`, `implemented but not verified`, or `not implemented` when that is the truth. Generated code is untrusted until reviewed. A build is support, not proof of user-visible behavior.
+
+Report implementation work under `Changed`, `Why`, `Verified`, `Docs`, and `Risks`. Point to receipts and paths; do not replay raw worker transcripts or full state ledgers.

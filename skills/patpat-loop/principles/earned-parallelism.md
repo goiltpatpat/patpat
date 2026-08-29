@@ -13,3 +13,5 @@ Use parallel work only when all gates pass:
 Keep mutating work serial when any gate fails or that repository-specific trust evidence does not exist. Read-only investigation may parallelize across independent evidence sources.
 
 Arena, swarm, and autopilot are admitted only through these gates. Missing isolation is a serial fallback, not invented coverage. The parent owns integration, verification, and any named delivery. Never enable auto-merge merely because independent checks are green.
+
+Before admitted fan-out, record whether every writable gate above passed, then run [`team_shape.py`](../../patpat-run/scripts/team_shape.py) with that receipt, observed capacity, and an explicit worker budget. A missing writable gate receipt forces `iterative`. Use `distributed` for decomposable slices and `adversarial` only when an independent oracle can falsify high-uncertainty candidates. The output recommends a smallest team and never grants execution authority. Recompute when the frontier or evidence changes.

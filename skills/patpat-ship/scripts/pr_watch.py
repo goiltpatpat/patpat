@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 KIND = "patpat.pr_watch.verdict"
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 CHECK_STATES = {"queued", "in_progress", "completed"}
@@ -35,6 +35,10 @@ REVIEW_DECISIONS = {
     "not_required",
 }
 MERGEABILITY = {"mergeable", "conflicting", "unknown"}
+PULL_REQUEST_STATES = {"open", "closed", "merged"}
+MAX_CHECKS = 100
+MAX_NAME_LENGTH = 128
+MAX_REPOSITORY_LENGTH = 256
 
 
 class ContractError(ValueError):
@@ -57,15 +61,20 @@ def _mapping(value: Any, field: str) -> dict[str, Any]:
     return value
 
 
-def _string(value: Any, field: str) -> str:
+def _string(value: Any, field: str, max_length: int | None = None) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ContractError(f"{field} must be a non-empty string")
-    return value.strip()
+    result = value.strip()
+    if max_length is not None and len(result) > max_length:
+        raise ContractError(f"{field} must be at most {max_length} characters")
+    return result
 
 
-def _integer(value: Any, field: str, minimum: int = 1) -> int:
+def _integer(value: Any, field: str, minimum: int = 1, maximum: int = 1_000_000) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
         raise ContractError(f"{field} must be an integer >= {minimum}")
+    if value > maximum:
+        raise ContractError(f"{field} must be an integer <= {maximum}")
     return value
 
 
@@ -110,10 +119,24 @@ def _binding_hint(document: Any) -> dict[str, Any]:
     binding = document.get("binding", {}) if isinstance(document, dict) else {}
     if not isinstance(binding, dict):
         binding = {}
+
+    def safe_string(value: Any, maximum: int) -> str | None:
+        if not isinstance(value, str):
+            return None
+        result = value.strip()
+        return result if result and len(result) <= maximum else None
+
+    pull_request = binding.get("pull_request")
+    if isinstance(pull_request, bool) or not isinstance(pull_request, int) or not 1 <= pull_request <= 1_000_000:
+        pull_request = None
+    head_sha = safe_string(binding.get("head_sha"), 40)
+    if head_sha is None or SHA_PATTERN.fullmatch(head_sha.lower()) is None:
+        head_sha = None
     return {
-        "repository": binding.get("repository"),
-        "pull_request": binding.get("pull_request"),
-        "head_sha": binding.get("head_sha"),
+        "repository": safe_string(binding.get("repository"), MAX_REPOSITORY_LENGTH),
+        "pull_request": pull_request,
+        "head_sha": head_sha,
+        "base_ref": safe_string(binding.get("base_ref"), MAX_NAME_LENGTH),
     }
 
 
@@ -158,11 +181,14 @@ def evaluate(document: Any) -> dict[str, Any]:
 
         binding_input = _mapping(root.get("binding"), "binding")
         binding = {
-            "repository": _string(binding_input.get("repository"), "binding.repository"),
+            "repository": _string(
+                binding_input.get("repository"), "binding.repository", MAX_REPOSITORY_LENGTH
+            ),
             "pull_request": _integer(
                 binding_input.get("pull_request"), "binding.pull_request"
             ),
             "head_sha": _sha(binding_input.get("head_sha"), "binding.head_sha"),
+            "base_ref": _string(binding_input.get("base_ref"), "binding.base_ref", MAX_NAME_LENGTH),
         }
 
         policy = _mapping(root.get("policy"), "policy")
@@ -175,8 +201,10 @@ def evaluate(document: Any) -> dict[str, Any]:
         required_checks_input = policy.get("required_checks")
         if not isinstance(required_checks_input, list):
             raise ContractError("policy.required_checks must be an array")
+        if len(required_checks_input) > MAX_CHECKS:
+            raise ContractError(f"policy.required_checks must contain at most {MAX_CHECKS} names")
         required_checks = [
-            _string(name, f"policy.required_checks[{index}]")
+            _string(name, f"policy.required_checks[{index}]", MAX_NAME_LENGTH)
             for index, name in enumerate(required_checks_input)
         ]
         if len(set(required_checks)) != len(required_checks):
@@ -189,6 +217,28 @@ def evaluate(document: Any) -> dict[str, Any]:
         observed_at = _timestamp(observed_at_raw, "observation.observed_at")
         attempt = _integer(observation.get("attempt"), "observation.attempt")
         observed_sha = _sha(observation.get("head_sha"), "observation.head_sha")
+        provider_repository = _string(
+            observation.get("provider_repository"),
+            "observation.provider_repository",
+            MAX_REPOSITORY_LENGTH,
+        )
+        provider_pull_request = _integer(
+            observation.get("provider_pull_request"), "observation.provider_pull_request"
+        )
+        provider_head_sha = _sha(
+            observation.get("provider_head_sha"), "observation.provider_head_sha"
+        )
+        pull_request_state = _enum(
+            observation.get("state"),
+            "observation.state",
+            PULL_REQUEST_STATES,
+        )
+        unresolved_threads = _integer(
+            observation.get("unresolved_threads"),
+            "observation.unresolved_threads",
+            minimum=0,
+        )
+        base_ref = _string(observation.get("base_ref"), "observation.base_ref", MAX_NAME_LENGTH)
         draft = _boolean(observation.get("draft"), "observation.draft")
         review = _enum(
             observation.get("review_decision"),
@@ -204,10 +254,14 @@ def evaluate(document: Any) -> dict[str, Any]:
         checks_input = observation.get("checks")
         if not isinstance(checks_input, list):
             raise ContractError("observation.checks must be an array")
+        if len(checks_input) > MAX_CHECKS:
+            raise ContractError(f"observation.checks must contain at most {MAX_CHECKS} entries")
         checks: dict[str, dict[str, str | None]] = {}
         for index, raw_check in enumerate(checks_input):
             check = _mapping(raw_check, f"observation.checks[{index}]")
-            name = _string(check.get("name"), f"observation.checks[{index}].name")
+            name = _string(
+                check.get("name"), f"observation.checks[{index}].name", MAX_NAME_LENGTH
+            )
             if name in checks:
                 raise ContractError(f"observation.checks contains duplicate name: {name}")
             state = _enum(
@@ -237,9 +291,34 @@ def evaluate(document: Any) -> dict[str, Any]:
             "draft": draft,
             "deadline": deadline_raw,
             "max_attempts": max_attempts,
+            "state": pull_request_state,
+            "unresolved_threads": unresolved_threads,
+            "base_ref": base_ref,
+            "provider_head_sha": provider_head_sha,
+            "provider_repository": provider_repository,
+            "provider_pull_request": provider_pull_request,
         }
 
-        if observed_sha != binding["head_sha"]:
+        if (
+            provider_repository != binding["repository"]
+            or provider_pull_request != binding["pull_request"]
+        ):
+            return _verdict(
+                document=document,
+                binding=binding,
+                observed_at=observed_at_raw,
+                attempt=attempt,
+                verdict="stale",
+                reasons=[
+                    _reason(
+                        "provider_binding_changed",
+                        "provider repository or pull request does not match the bound target",
+                    )
+                ],
+                evidence=evidence,
+            )
+
+        if observed_sha != binding["head_sha"] or provider_head_sha != observed_sha:
             return _verdict(
                 document=document,
                 binding=binding,
@@ -249,7 +328,24 @@ def evaluate(document: Any) -> dict[str, Any]:
                 reasons=[
                     _reason(
                         "head_changed",
-                        f"observed head {observed_sha} does not match bound head {binding['head_sha']}",
+                        "provider, observed, and bound heads do not match: "
+                        f"provider={provider_head_sha}, observed={observed_sha}, "
+                        f"bound={binding['head_sha']}",
+                    )
+                ],
+                evidence=evidence,
+            )
+        if base_ref != binding["base_ref"]:
+            return _verdict(
+                document=document,
+                binding=binding,
+                observed_at=observed_at_raw,
+                attempt=attempt,
+                verdict="stale",
+                reasons=[
+                    _reason(
+                        "base_changed",
+                        f"observed base {base_ref} does not match bound base {binding['base_ref']}",
                     )
                 ],
                 evidence=evidence,
@@ -282,7 +378,27 @@ def evaluate(document: Any) -> dict[str, Any]:
         pending: list[dict[str, str]] = []
         missing = sorted(set(required_checks) - set(checks))
         if missing:
-            pending.append(_reason("missing_required_checks", ", ".join(missing)))
+            preview = ", ".join(missing[:8])
+            pending.append(
+                _reason(
+                    "missing_required_checks",
+                    f"{len(missing)} missing; preview: {preview}",
+                )
+            )
+        if pull_request_state != "open":
+            blocked.append(
+                _reason(
+                    "pull_request_not_open",
+                    f"pull request state is {pull_request_state}",
+                )
+            )
+        if unresolved_threads:
+            blocked.append(
+                _reason(
+                    "unresolved_review_threads",
+                    str(unresolved_threads),
+                )
+            )
         if draft:
             blocked.append(_reason("draft_pull_request", "pull request is draft"))
         if mergeability == "conflicting":
@@ -343,11 +459,12 @@ def evaluate(document: Any) -> dict[str, Any]:
 
 def _fixture(**overrides: Any) -> dict[str, Any]:
     document: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": SCHEMA_VERSION,
         "binding": {
             "repository": "example/project",
             "pull_request": 17,
             "head_sha": "a" * 40,
+            "base_ref": "main",
         },
         "policy": {
             "required_checks": ["contracts", "tests"],
@@ -359,6 +476,12 @@ def _fixture(**overrides: Any) -> dict[str, Any]:
             "observed_at": "2026-08-28T12:00:00Z",
             "attempt": 1,
             "head_sha": "a" * 40,
+            "provider_repository": "example/project",
+            "provider_pull_request": 17,
+            "provider_head_sha": "a" * 40,
+            "state": "open",
+            "unresolved_threads": 0,
+            "base_ref": "main",
             "draft": False,
             "review_decision": "approved",
             "mergeability": "mergeable",
@@ -393,6 +516,30 @@ def self_test() -> None:
 
     stale = _fixture(observation={"head_sha": "b" * 40})
     assert evaluate(stale)["verdict"] == "stale"
+
+    provider_stale = _fixture(observation={"provider_head_sha": "b" * 40})
+    assert evaluate(provider_stale)["verdict"] == "stale"
+
+    wrong_base = _fixture(observation={"base_ref": "release"})
+    wrong_base_result = evaluate(wrong_base)
+    assert wrong_base_result["verdict"] == "stale"
+    assert wrong_base_result["reasons"][0]["code"] == "base_changed"
+
+    wrong_repository = _fixture(observation={"provider_repository": "other/project"})
+    assert evaluate(wrong_repository)["reasons"][0]["code"] == "provider_binding_changed"
+    wrong_pull_request = _fixture(observation={"provider_pull_request": 999})
+    assert evaluate(wrong_pull_request)["reasons"][0]["code"] == "provider_binding_changed"
+
+    for state in ("closed", "merged"):
+        not_open = _fixture(observation={"state": state})
+        not_open_result = evaluate(not_open)
+        assert not_open_result["verdict"] == "blocked"
+        assert not_open_result["reasons"][0]["code"] == "pull_request_not_open"
+
+    unresolved = _fixture(observation={"unresolved_threads": 2})
+    unresolved_result = evaluate(unresolved)
+    assert unresolved_result["verdict"] == "blocked"
+    assert unresolved_result["reasons"][0]["code"] == "unresolved_review_threads"
 
     failed = _fixture(
         observation={
@@ -458,6 +605,27 @@ def self_test() -> None:
     assert invalid_result["verdict"] == "blocked"
     assert invalid_result["reasons"][0]["code"] == "invalid_observation"
 
+    missing_provider_head = _fixture()
+    del missing_provider_head["observation"]["provider_head_sha"]
+    missing_provider_result = evaluate(missing_provider_head)
+    assert missing_provider_result["verdict"] == "blocked"
+    assert missing_provider_result["reasons"][0]["code"] == "invalid_observation"
+
+    invalid_base = _fixture(observation={"base_ref": ""})
+    invalid_base_result = evaluate(invalid_base)
+    assert invalid_base_result["verdict"] == "blocked"
+    assert invalid_base_result["reasons"][0]["code"] == "invalid_observation"
+
+    excessive_checks = _fixture(policy={"required_checks": [f"check-{index}" for index in range(101)]})
+    excessive_result = evaluate(excessive_checks)
+    assert excessive_result["verdict"] == "blocked"
+    assert len(json.dumps(excessive_result)) < 4096
+
+    invalid_hint = {"schema_version": SCHEMA_VERSION, "binding": {"repository": "x" * 250_000}}
+    hint_result = evaluate(invalid_hint)
+    assert hint_result["verdict"] == "blocked"
+    assert len(json.dumps(hint_result)) < 4096
+
     print("pr_watch self-test: PASS")
 
 
@@ -493,10 +661,15 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         document = _read_document(args.input)
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, ValueError) as exc:
         result = _verdict(
             document={"unreadable_input": True},
-            binding={"repository": None, "pull_request": None, "head_sha": None},
+            binding={
+                "repository": None,
+                "pull_request": None,
+                "head_sha": None,
+                "base_ref": None,
+            },
             observed_at=None,
             attempt=None,
             verdict="blocked",

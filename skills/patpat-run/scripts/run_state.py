@@ -10,6 +10,7 @@ import os
 import re
 import socket
 import subprocess
+import sys
 import tempfile
 import unicodedata
 import uuid
@@ -18,10 +19,18 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterator
 
+SCRIPT_DIRECTORY = str(Path(__file__).resolve().parent)
+if SCRIPT_DIRECTORY not in sys.path:
+    sys.path.insert(0, SCRIPT_DIRECTORY)
+
+from state_lock import path_guard, path_has_identity, read_lock_record
+
 
 SCHEMA_VERSION = 2
 RUN_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 RECEIPT_PATTERN = re.compile(r"^file:/.+$")
+LOCK_TOKEN_PATTERN = re.compile(r"^[0-9a-f]{32}$")
+MAX_LOCK_BYTES = 4096
 NODES = {
     "FRAME",
     "INSPECT",
@@ -174,7 +183,10 @@ def digest_path(digest: Any, root: Path, relative: Path, label: bytes) -> None:
 def run_directory(root: Path, run_id: str) -> Path:
     if not RUN_ID_PATTERN.fullmatch(run_id):
         raise RunStateError("run id must be lowercase kebab-case and at most 64 characters")
-    return git_store_root(root) / run_id
+    path = git_store_root(root) / run_id
+    if path.is_symlink() or (path.exists() and not path.is_dir()):
+        raise RunStateError("run store path must be a real directory without symlinks")
+    return path
 
 
 def state_path(root: Path, run_id: str) -> Path:
@@ -219,29 +231,35 @@ def run_lock(root: Path, run_id: str) -> Iterator[None]:
     directory = run_directory(root, run_id)
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / ".lock"
-    try:
-        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except FileExistsError as error:
-        raise RunStateError(f"run is locked; use the unlock command only after confirming its owner stopped: {path}") from error
-    try:
+    token = uuid.uuid4().hex
+    with path_guard(directory, RunStateError):
+        try:
+            descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError as error:
+            raise RunStateError(f"run is locked; use the unlock command only after confirming its owner stopped: {path}") from error
         payload = {
             "pid": os.getpid(),
             "host": socket.gethostname(),
             "created_at": now(),
+            "token": token,
         }
-        os.write(descriptor, (json.dumps(payload, sort_keys=True) + "\n").encode("utf-8"))
-        os.fsync(descriptor)
+        try:
+            os.write(descriptor, (json.dumps(payload, sort_keys=True) + "\n").encode("utf-8"))
+            os.fsync(descriptor)
+        except OSError as error:
+            os.close(descriptor)
+            path.unlink(missing_ok=True)
+            fsync_directory(path.parent)
+            raise RunStateError(f"could not create run lock: {error}") from error
         os.close(descriptor)
+    try:
         yield
     finally:
-        try:
-            os.close(descriptor)
-        except OSError:
-            pass
-        try:
-            path.unlink()
-        except FileNotFoundError:
-            pass
+        with path_guard(directory, RunStateError):
+            record, identity = read_lock_record(path, MAX_LOCK_BYTES)
+            if record is not None and record.get("token") == token and path_has_identity(path, identity):
+                path.unlink()
+                fsync_directory(path.parent)
 
 
 def process_is_alive(pid: int) -> bool:
@@ -255,25 +273,45 @@ def process_is_alive(pid: int) -> bool:
 
 
 def recover_stale_lock(root: Path, run_id: str) -> Path:
-    path = run_directory(root, run_id) / ".lock"
-    if not path.is_file() or path.is_symlink():
-        raise RunStateError("no regular run lock exists")
-    try:
-        record = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise RunStateError(f"lock metadata is invalid; inspect manually: {error}") from error
-    if not isinstance(record, dict) or set(record) != {"pid", "host", "created_at"}:
-        raise RunStateError("lock metadata is invalid; inspect manually")
-    pid = record.get("pid")
-    if record.get("host") != socket.gethostname():
-        raise RunStateError("lock belongs to another host and cannot be recovered automatically")
-    if not isinstance(pid, int) or pid <= 0:
-        raise RunStateError("lock pid is invalid; inspect manually")
-    if process_is_alive(pid):
-        raise RunStateError(f"lock owner pid {pid} is still running")
-    path.unlink()
-    fsync_directory(path.parent)
-    return path
+    directory = run_directory(root, run_id)
+    path = directory / ".lock"
+    with path_guard(directory, RunStateError):
+        if not path.is_file() or path.is_symlink():
+            raise RunStateError("no regular run lock exists")
+        record, identity = read_lock_record(path, MAX_LOCK_BYTES)
+        if record is None or identity is None:
+            raise RunStateError("lock metadata is invalid or too large; inspect manually")
+        if not isinstance(record, dict) or set(record) != {"pid", "host", "created_at", "token"}:
+            raise RunStateError("lock metadata is invalid; inspect manually")
+        pid = record.get("pid")
+        token = record.get("token")
+        host = record.get("host")
+        created_at = record.get("created_at")
+        if host != socket.gethostname():
+            raise RunStateError("lock belongs to another host and cannot be recovered automatically")
+        if (
+            not isinstance(pid, int)
+            or pid <= 0
+            or not isinstance(token, str)
+            or LOCK_TOKEN_PATTERN.fullmatch(token) is None
+            or not isinstance(host, str)
+            or len(host) > 255
+            or not isinstance(created_at, str)
+            or not 1 <= len(created_at) <= 64
+        ):
+            raise RunStateError("lock identity is invalid; inspect manually")
+        if process_is_alive(pid):
+            raise RunStateError(f"lock owner pid {pid} is still running")
+        current_record, current_identity = read_lock_record(path, MAX_LOCK_BYTES)
+        if (
+            current_record != record
+            or current_identity != identity
+            or not path_has_identity(path, identity)
+        ):
+            raise RunStateError("lock identity changed during recovery; inspect again")
+        path.unlink()
+        fsync_directory(path.parent)
+        return path
 
 
 def make_event(state: dict[str, Any], kind: str, summary: str, **details: Any) -> dict[str, Any]:
@@ -763,6 +801,31 @@ def status(root: Path, run_id: str) -> dict[str, Any]:
     }
 
 
+def compact_state_receipt(root: Path, state: dict[str, Any], action: str) -> dict[str, Any]:
+    """Return a bounded mutation receipt instead of replaying the event ledger."""
+    payload = json.dumps(state, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    verification = state.get("verification")
+    review = state.get("review")
+    return {
+        "schema_version": 1,
+        "kind": "patpat.run.mutation_receipt",
+        "action": action,
+        "store": str(run_directory(root, state["run_id"])),
+        "run_id": state["run_id"],
+        "node": state["node"],
+        "epoch": state["epoch"],
+        "sequence": state["sequence"],
+        "verification_verdict": verification.get("verdict") if isinstance(verification, dict) else None,
+        "review_verdict": review.get("verdict") if isinstance(review, dict) else None,
+        "blocked": state["node"] == "BLOCKED",
+        "state_sha256": hashlib.sha256(payload).hexdigest(),
+    }
+
+
+def print_state_result(root: Path, state: dict[str, Any], action: str, full: bool) -> None:
+    print(json.dumps(state if full else compact_state_receipt(root, state, action), indent=2, sort_keys=True))
+
+
 def make_test_repository(root: Path) -> None:
     subprocess.run(["git", "init", "-q", str(root)], check=True)
     subprocess.run(["git", "-C", str(root), "config", "user.email", "patpat@example.invalid"], check=True)
@@ -920,6 +983,34 @@ def run_self_test() -> None:
         if current_snapshot(root) == before_nested_change:
             raise AssertionError("embedded Git repository content bypassed the snapshot")
 
+        escaped_target = evidence_root / "escaped-run-store"
+        escaped_target.mkdir()
+        linked_store = git_store_root(root) / "linked-run"
+        linked_store.parent.mkdir(parents=True, exist_ok=True)
+        linked_store.symlink_to(escaped_target)
+        try:
+            initialize(root, "linked-run", "Reject escaped stores", "owner", [], [], [], [])
+        except RunStateError:
+            pass
+        else:
+            raise AssertionError("symlinked run store escaped Git metadata")
+        if (escaped_target / "state.json").exists():
+            raise AssertionError("symlinked run store wrote outside Git metadata")
+
+        guard_directory = run_directory(root, "guard-run")
+        guard_directory.mkdir(parents=True)
+        guard_target = evidence_root / "guard-target"
+        guard_target.write_text("unchanged\n", encoding="utf-8")
+        (guard_directory / ".lock.guard").symlink_to(guard_target)
+        try:
+            initialize(root, "guard-run", "Reject linked guard", "owner", [], [], [], [])
+        except RunStateError:
+            pass
+        else:
+            raise AssertionError("symlinked lock guard was accepted")
+        if guard_target.read_text(encoding="utf-8") != "unchanged\n":
+            raise AssertionError("symlinked lock guard target was modified")
+
         initialize(root, "blocked-run", "Bound retries", "owner", [], [], [], [])
         transition(root, "blocked-run", "INSPECT")
         record_failure(root, "blocked-run", "Same blocker", "missing-runtime")
@@ -963,7 +1054,7 @@ def run_self_test() -> None:
 
         lock_path = run_directory(root, "atomic-run") / ".lock"
         lock_path.write_text(
-            json.dumps({"pid": os.getpid(), "host": socket.gethostname(), "created_at": now()}),
+            json.dumps({"pid": os.getpid(), "host": socket.gethostname(), "created_at": now(), "token": "a" * 32}),
             encoding="utf-8",
         )
         try:
@@ -981,18 +1072,60 @@ def run_self_test() -> None:
                 raise AssertionError("live run lock was recovered")
         finally:
             lock_path.write_text(
-                json.dumps({"pid": 99999999, "host": socket.gethostname(), "created_at": now()}),
+                json.dumps({"pid": 99999999, "host": socket.gethostname(), "created_at": now(), "token": "b" * 32}),
                 encoding="utf-8",
             )
         recover_stale_lock(root, "atomic-run")
         if lock_path.exists():
             raise AssertionError("stale run lock was not recovered")
 
+        replacement_path = run_directory(root, "replacement-run") / ".lock"
+        with run_lock(root, "replacement-run"):
+            replacement_path.write_text(
+                json.dumps(
+                    {
+                        "pid": 99999999,
+                        "host": socket.gethostname(),
+                        "created_at": now(),
+                        "token": "c" * 32,
+                    }
+                ),
+                encoding="utf-8",
+            )
+        if not replacement_path.exists():
+            raise AssertionError("run owner removed a replacement lock it did not own")
+        recover_stale_lock(root, "replacement-run")
+
+        oversized_path = run_directory(root, "oversized-lock-run") / ".lock"
+        with run_lock(root, "oversized-lock-run"):
+            oversized_path.write_bytes(b"x" * (MAX_LOCK_BYTES + 1))
+        if not oversized_path.exists():
+            raise AssertionError("run owner removed an oversized replacement lock")
+        oversized_path.unlink()
+
+        linked_lock_path = run_directory(root, "linked-lock-run") / ".lock"
+        linked_lock_target = evidence_root / "linked-lock-target"
+        linked_lock_target.write_text("unchanged\n", encoding="utf-8")
+        with run_lock(root, "linked-lock-run"):
+            linked_lock_path.unlink()
+            linked_lock_path.symlink_to(linked_lock_target)
+        if not linked_lock_path.is_symlink():
+            raise AssertionError("run owner removed a symlinked replacement lock")
+        if linked_lock_target.read_text(encoding="utf-8") != "unchanged\n":
+            raise AssertionError("run owner read or modified a symlinked lock target")
+        linked_lock_path.unlink()
+
         malformed = load_state(root, "atomic-run")
         malformed["authorities"] = [{}]
         atomic_write_json(state_path(root, "atomic-run"), malformed)
         if not validation_errors(root, "atomic-run"):
             raise AssertionError("non-string authority was accepted")
+
+        receipt_source = load_state(root, "main-run")
+        receipt_source["events"] *= 100
+        compact = compact_state_receipt(root, receipt_source, "self-test")
+        if len(json.dumps(compact)) > 1024 or "events" in compact or "objective" in compact:
+            raise AssertionError("compact mutation receipt grew with the state ledger")
 
         tampered = load_state(root, "main-run")
         tampered["run_id"] = "other-run"
@@ -1015,6 +1148,7 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument("--prohibition", action="append", default=[])
     init_parser.add_argument("--intentional-change", action="append", default=[])
     init_parser.add_argument("--pre-existing-change", action="append", default=[])
+    init_parser.add_argument("--full", action="store_true", help="Print the complete state ledger")
 
     for command in ("transition", "record", "checkpoint", "status", "validate", "unlock"):
         command_parser = subparsers.add_parser(command)
@@ -1043,6 +1177,8 @@ def build_parser() -> argparse.ArgumentParser:
             command_parser.add_argument("--value")
             command_parser.add_argument("--unit")
             command_parser.add_argument("--next-decision")
+        if command in {"transition", "record"}:
+            command_parser.add_argument("--full", action="store_true", help="Print the complete state ledger")
     return parser
 
 
@@ -1062,9 +1198,12 @@ def main() -> int:
     try:
         if args.command == "init":
             state = initialize(root, args.run_id, args.objective, args.owner, args.authority, args.prohibition, args.intentional_change, args.pre_existing_change)
-            print(json.dumps({"store": str(run_directory(root, args.run_id)), "state": state}, indent=2))
+            if args.full:
+                print(json.dumps({"store": str(run_directory(root, args.run_id)), "state": state}, indent=2))
+            else:
+                print_state_result(root, state, "init", False)
         elif args.command == "transition":
-            print(json.dumps(transition(root, args.run_id, args.to), indent=2))
+            print_state_result(root, transition(root, args.run_id, args.to), "transition", args.full)
         elif args.command == "record":
             if args.kind == "proof-contract":
                 state = record_proof_contract(root, args.run_id, {"claim": args.claim, "surface": args.surface, "action": args.action, "expected": args.expected, "cleanup": args.cleanup})
@@ -1107,7 +1246,7 @@ def main() -> int:
                 if not args.summary:
                     raise RunStateError("decision requires summary")
                 state = record_decision(root, args.run_id, args.summary)
-            print(json.dumps(state, indent=2))
+            print_state_result(root, state, f"record:{args.kind}", args.full)
         elif args.command == "checkpoint":
             path = checkpoint(root, args.run_id)
             print(json.dumps({"store": str(run_directory(root, args.run_id)), "checkpoint": str(path)}, indent=2))

@@ -5,7 +5,7 @@ description: Design a falsifiable workflow for multi-phase repository work or a 
 
 # Patpat Plan
 
-When invoked directly, read [`patpat-loop`](../patpat-loop/SKILL.md) and follow its authority boundaries and reporting contract.
+When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 
 Read [repository truth](../patpat-loop/principles/repository-truth.md), [sequence verifiable units](../patpat-loop/principles/sequence-verifiable-units.md), and apply the [bespoke workflow playbook](../patpat-loop/playbooks/bespoke-workflow.md).
 

@@ -641,6 +641,12 @@ def validate_root(root: Path) -> list[str]:
     plan_validator = root / "skills" / "patpat-run" / "scripts" / "validate_plan.py"
     if not plan_validator.is_file():
         errors.append(f"{plan_validator}: missing multi-PR plan validator")
+    team_shape = root / "skills" / "patpat-run" / "scripts" / "team_shape.py"
+    if not team_shape.is_file():
+        errors.append(f"{team_shape}: missing adaptive team policy")
+    state_lock = root / "skills" / "patpat-run" / "scripts" / "state_lock.py"
+    if not state_lock.is_file():
+        errors.append(f"{state_lock}: missing state lock coordination")
 
     return errors
 
@@ -765,10 +771,10 @@ def run_self_test(root: Path) -> list[str]:
         destination.symlink_to(source)
 
     def break_router_reachability(fixture: Path) -> None:
-        router = fixture / "skills" / "patpat-loop" / "SKILL.md"
-        text = router.read_text(encoding="utf-8")
-        router.write_text(
-            text.replace("(playbooks/worktree-cleanup.md)", "(playbooks/missing-worktree-cleanup.md)", 1),
+        catalog = fixture / "skills" / "patpat-loop" / "references" / "route-catalog.md"
+        text = catalog.read_text(encoding="utf-8")
+        catalog.write_text(
+            text.replace("(../playbooks/worktree-cleanup.md)", "(../playbooks/missing-worktree-cleanup.md)", 1),
             encoding="utf-8",
         )
 
@@ -983,6 +989,17 @@ def run_self_test(root: Path) -> list[str]:
     if plan_result.returncode != 0:
         failures.append(
             f"self-test: multi-PR plan validator failed: {plan_result.stdout}{plan_result.stderr}"
+        )
+    team_shape = root / "skills" / "patpat-run" / "scripts" / "team_shape.py"
+    team_result = subprocess.run(
+        [sys.executable, str(team_shape), "--self-test"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if team_result.returncode != 0:
+        failures.append(
+            f"self-test: adaptive team policy failed: {team_result.stdout}{team_result.stderr}"
         )
     program_state = root / "skills" / "patpat-run" / "scripts" / "program_state.py"
     program_result = subprocess.run(

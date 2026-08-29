@@ -5,7 +5,7 @@ description: Run isolated competing attempts at the same brief, pick a base, gra
 
 # Patpat Arena
 
-When invoked directly, read [`patpat-loop`](../patpat-loop/SKILL.md) and follow its execution graph, authority boundaries, and reporting contract.
+When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) and [execution graph](../patpat-loop/references/execution-graph.md) in full. Do not load the router.
 
 Read [earned parallelism](../patpat-loop/principles/earned-parallelism.md) and apply the [arena playbook](../patpat-loop/playbooks/arena.md).
 

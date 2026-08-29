@@ -5,7 +5,7 @@ description: Create or revise a reusable agent skill with precise triggering, pr
 
 # Patpat Skill
 
-When invoked directly, read [`patpat-loop`](../patpat-loop/SKILL.md) and follow its authority boundaries and reporting contract.
+When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 
 Read [repository truth](../patpat-loop/principles/repository-truth.md), [smallest safe change](../patpat-loop/principles/smallest-safe-change.md), and [encode lessons](../patpat-loop/principles/encode-lessons.md). Apply the [skill change playbook](../patpat-loop/playbooks/skill-change.md).
 

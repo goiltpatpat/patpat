@@ -5,7 +5,7 @@ description: Design or scaffold a safe external automation for a concrete provid
 
 # Patpat Automation
 
-When invoked directly, read [`patpat-loop`](../patpat-loop/SKILL.md) and follow its execution graph, authority boundaries, and reporting contract.
+When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) and [execution graph](../patpat-loop/references/execution-graph.md) in full. Do not load the router.
 
 Read [boundary discipline](../patpat-loop/principles/boundary-discipline.md), [idempotent effects](../patpat-loop/principles/idempotent-effects.md), and [preserve safety](../patpat-loop/principles/preserve-safety.md). Apply the [automation design playbook](../patpat-loop/playbooks/automation-design.md). For a named issue-source triage and reproduce loop, also apply the [issue loop playbook](../patpat-loop/playbooks/issue-loop.md). Do not copy a host automation pack or enable a scheduler.
 

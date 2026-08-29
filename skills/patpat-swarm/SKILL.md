@@ -5,7 +5,7 @@ description: Fan out isolated workers across slices or races and return one aggr
 
 # Patpat Swarm
 
-When invoked directly, read [`patpat-loop`](../patpat-loop/SKILL.md) and follow its execution graph, authority boundaries, and reporting contract.
+When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) and [execution graph](../patpat-loop/references/execution-graph.md) in full. Do not load the router.
 
 Read [earned parallelism](../patpat-loop/principles/earned-parallelism.md) and apply the [swarm playbook](../patpat-loop/playbooks/swarm.md).
 

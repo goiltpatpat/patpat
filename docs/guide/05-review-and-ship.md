@@ -32,6 +32,10 @@ After explicit Patpat activation, successful proof, and independent review:
 
 The pull request should explain the changed behavior, why it changed, how it was verified, and what remains uncertain.
 
+Provider observations must bind the provider repository, pull-request number, head, and base branch to the expected target and include PR state, unresolved review-thread count, checks, review decision, draft state, and mergeability. A different provider target, closed or merged PR, changed head or base, or any unresolved review thread fails closed before merge-ready handoff.
+
+Observation schema v2 also binds the expected base branch. Schema v1 observations fail closed and must be recollected; do not fill the new fields from guesses.
+
 ## Keep merge authority separate
 
 Opening a pull request is the default delivery boundary. `Finish`, `keep going`, `overnight`, or `babysit` do not authorize merge. Only explicit `land` or `merge` language permits Patpat to merge a green reviewed pull request. Production deployment and package publication remain separate approval gates.

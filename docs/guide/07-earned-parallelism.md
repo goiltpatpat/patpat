@@ -22,7 +22,9 @@ If isolation is unavailable, run the work serially. Locks do not turn a shared m
 
 ## Choose the right topology
 
-Use `arena` when multiple isolated attempts solve the same brief and one result will become the base. Use `swarm` when independent slices or declared race arms cover different surfaces. Use `autopilot` for a checked queue whose items each close their own proof loop.
+Record a receipt that every writable gate above passed, then run `patpat-run/scripts/team_shape.py` with explicit evidence, observed capacity, and a worker budget. Without that receipt it returns serial work. Its non-authoritative recommendation selects the smallest viable topology: `iterative` for a tight test/refine loop, `distributed` for independent slices, or `adversarial` for high-uncertainty candidates that an independent oracle can falsify. Use `arena` for adversarial candidates, `swarm` for distributed coverage, and `autopilot` for a checked queue whose items each close their own proof loop.
+
+Workers return typed cards with scope, proof, receipts, objections, reusable parts, verdict, and next frontier. Preserve those artifacts; discard transcript-shaped context.
 
 Do not use parallelism to hide an unclear contract. Resolve shared shapes and integration boundaries before fan-out.
 

@@ -5,7 +5,7 @@ description: Diagnose a resource regression or drive sustained numeric optimizat
 
 # Patpat Performance
 
-When invoked directly, read [`patpat-loop`](../patpat-loop/SKILL.md) and follow its execution graph, authority boundaries, and reporting contract.
+When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) and [execution graph](../patpat-loop/references/execution-graph.md) in full. Do not load the router.
 
 Read [proof over proxy](../patpat-loop/principles/proof-over-proxy.md), [fix root causes](../patpat-loop/principles/fix-root-causes.md), and [smallest safe change](../patpat-loop/principles/smallest-safe-change.md). Apply the [performance playbook](../patpat-loop/playbooks/performance.md).
 

@@ -5,7 +5,7 @@ description: Convert a recurring failure, correction, or verification gap from t
 
 # Patpat Learn
 
-When invoked directly, read [`patpat-loop`](../patpat-loop/SKILL.md) and follow its authority boundaries and reporting contract.
+When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 
 Read [encode lessons](../patpat-loop/principles/encode-lessons.md), [repository truth](../patpat-loop/principles/repository-truth.md), and apply the [learning playbook](../patpat-loop/playbooks/learning.md).
 

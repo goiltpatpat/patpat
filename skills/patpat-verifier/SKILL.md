@@ -5,7 +5,7 @@ description: Create or maintain a project-specific verification skill that launc
 
 # Patpat Verifier
 
-When invoked directly, read [`patpat-loop`](../patpat-loop/SKILL.md) and follow its authority boundaries and reporting contract.
+When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 
 Read [proof over proxy](../patpat-loop/principles/proof-over-proxy.md), [preserve safety](../patpat-loop/principles/preserve-safety.md), and apply the [project verifier playbook](../patpat-loop/playbooks/project-verifier.md).
 

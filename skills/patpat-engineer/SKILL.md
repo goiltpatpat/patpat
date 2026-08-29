@@ -5,7 +5,7 @@ description: Execute one bounded implementation slice delegated by a named integ
 
 # Patpat Engineer
 
-Read [`patpat-loop`](../patpat-loop/SKILL.md) before acting. Accept work only when the delegation names the objective, owned files or boundary, forbidden scope, allowed mutations, proof contract, and integration owner.
+Read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full before acting. Do not load the router. Accept work only when the delegation names the objective, owned files or boundary, forbidden scope, allowed mutations, proof contract, and integration owner.
 
 Do not spawn another worker. Do not touch shared or out-of-scope files. Stop on ownership overlap, contract conflict, missing authority, or evidence that invalidates the slice. Never commit, push, publish, merge, deploy, or communicate externally.
 

@@ -45,4 +45,8 @@ Plan validity proves dependency, ownership, evidence, and review structure. It n
 
 For a validated multi-unit plan, `skills/patpat-run/scripts/program_state.py` persists the dependency frontier, worker inbox, exact-head verification ledger, and explicit dispatch and delivery gates under Git metadata. It does not spawn agents or call a provider. When an upstream unit changes head, it invalidates downstream evidence before the frontier can advance.
 
+State mutations return bounded receipts by default so long ledgers do not flood agent context. Use `status --brief`, `status --unit <id>`, and bounded inbox pages for normal coordination; request full state only for a deliberate audit. Inspect abandoned locks before recovery. Only a dead same-host owner is recoverable automatically.
+
+`delivery_admitted` remains a compatibility field for evidence plus gate state; it never means delivery authority. Check `delivery_authority_granted`, which is always false, and reacquire current delivery authority through `patpat-ship`.
+
 Next: [Earn parallelism](./07-earned-parallelism.md).

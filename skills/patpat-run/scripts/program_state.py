@@ -19,12 +19,19 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterator
 
+SCRIPT_DIRECTORY = str(Path(__file__).resolve().parent)
+if SCRIPT_DIRECTORY not in sys.path:
+    sys.path.insert(0, SCRIPT_DIRECTORY)
+
+from state_lock import path_guard, path_has_identity, read_lock_record
 from validate_plan import ACTIONS, AUTHORITIES, example_plan, validate_plan
 
 
 SCHEMA_VERSION = 1
 PROGRAM_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 HEAD_SHA = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
+LOCK_TOKEN = re.compile(r"^[0-9a-f]{32}$")
+MAX_LOCK_BYTES = 4096
 UNIT_STATES = {"pending", "running", "completed", "blocked"}
 VERDICT_KINDS = {"verification", "review"}
 VERDICTS = {"pass", "fail"}
@@ -166,25 +173,120 @@ def program_lock(root: Path, program_id: str) -> Iterator[None]:
     directory = program_directory(root, program_id)
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / ".lock"
-    try:
-        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except FileExistsError as error:
-        raise ProgramStateError(f"program is locked; inspect its owner before recovery: {path}") from error
-    try:
-        record = {"pid": os.getpid(), "host": socket.gethostname(), "created_at": now()}
-        os.write(descriptor, (json.dumps(record, sort_keys=True) + "\n").encode("utf-8"))
-        os.fsync(descriptor)
+    token = uuid.uuid4().hex
+    with path_guard(directory, ProgramStateError):
+        try:
+            descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError as error:
+            raise ProgramStateError(f"program is locked; inspect its owner before recovery: {path}") from error
+        record = {
+            "pid": os.getpid(),
+            "host": socket.gethostname(),
+            "created_at": now(),
+            "token": token,
+        }
+        try:
+            os.write(descriptor, (json.dumps(record, sort_keys=True) + "\n").encode("utf-8"))
+            os.fsync(descriptor)
+        except OSError as error:
+            os.close(descriptor)
+            path.unlink(missing_ok=True)
+            fsync_directory(path.parent)
+            raise ProgramStateError(f"could not create program lock: {error}") from error
         os.close(descriptor)
+    try:
         yield
     finally:
-        try:
-            os.close(descriptor)
-        except OSError:
-            pass
-        try:
-            path.unlink()
-        except FileNotFoundError:
-            pass
+        with path_guard(directory, ProgramStateError):
+            current, identity = read_lock_record(path, MAX_LOCK_BYTES)
+            if current is not None and current.get("token") == token and path_has_identity(path, identity):
+                path.unlink()
+                fsync_directory(path.parent)
+
+
+def process_is_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _inspect_lock_snapshot(
+    root: Path,
+    program_id: str,
+) -> tuple[dict[str, Any], tuple[int, int] | None]:
+    path = program_directory(root, program_id) / ".lock"
+    if not path.exists():
+        return {"path": str(path), "state": "absent", "recoverable": False}, None
+    if not path.is_file() or path.is_symlink():
+        return {"path": str(path), "state": "invalid", "recoverable": False}, None
+    record, identity = read_lock_record(path, MAX_LOCK_BYTES)
+    if record is None or identity is None:
+        return {"path": str(path), "state": "invalid", "recoverable": False}, None
+    if not isinstance(record, dict) or set(record) != {"pid", "host", "created_at", "token"}:
+        return {"path": str(path), "state": "invalid", "recoverable": False}, identity
+    pid = record.get("pid")
+    host = record.get("host")
+    created_at = record.get("created_at")
+    token = record.get("token")
+    if (
+        not isinstance(pid, int)
+        or pid <= 0
+        or not isinstance(host, str)
+        or len(host) > 255
+        or not isinstance(created_at, str)
+        or not 1 <= len(created_at) <= 64
+        or not isinstance(token, str)
+        or LOCK_TOKEN.fullmatch(token) is None
+    ):
+        return {"path": str(path), "state": "invalid", "recoverable": False}, identity
+    if host != socket.gethostname():
+        return {
+            "path": str(path),
+            "state": "other-host",
+            "recoverable": False,
+            "owner": record,
+        }, identity
+    alive = process_is_alive(pid)
+    return {
+        "path": str(path),
+        "state": "live" if alive else "stale",
+        "recoverable": not alive,
+        "owner": record,
+    }, identity
+
+
+def _inspect_lock_unlocked(root: Path, program_id: str) -> dict[str, Any]:
+    observation, _ = _inspect_lock_snapshot(root, program_id)
+    return observation
+
+
+def inspect_lock(root: Path, program_id: str) -> dict[str, Any]:
+    directory = program_directory(root, program_id)
+    with path_guard(directory, ProgramStateError):
+        return _inspect_lock_unlocked(root, program_id)
+
+
+def recover_stale_lock(root: Path, program_id: str) -> Path:
+    directory = program_directory(root, program_id)
+    with path_guard(directory, ProgramStateError):
+        observation, identity = _inspect_lock_snapshot(root, program_id)
+        if observation["state"] != "stale" or not observation["recoverable"]:
+            raise ProgramStateError(f"program lock is not safely recoverable: {observation['state']}")
+        path = Path(observation["path"])
+        current_record, current_identity = read_lock_record(path, MAX_LOCK_BYTES)
+        if (
+            current_record != observation.get("owner")
+            or current_identity != identity
+            or not path_has_identity(path, identity)
+        ):
+            raise ProgramStateError("program lock identity changed during recovery")
+        path.unlink()
+        fsync_directory(path.parent)
+        return path
 
 
 def canonical_identity(value: Any, label: str) -> str:
@@ -210,11 +312,13 @@ def checked_commit(root: Path, head_sha: str) -> str:
     return head_sha
 
 
-def checked_text(value: Any, label: str) -> str:
+def checked_text(value: Any, label: str, max_length: int | None = None) -> str:
     if not isinstance(value, str) or not value or value != value.strip():
         raise ProgramStateError(f"{label} must be a non-empty string without outer whitespace")
     if any(unicodedata.category(character).startswith("C") for character in value):
         raise ProgramStateError(f"{label} must not contain control characters")
+    if max_length is not None and len(value) > max_length:
+        raise ProgramStateError(f"{label} must be at most {max_length} characters")
     return value
 
 
@@ -539,7 +643,7 @@ def initialize(root: Path, program_id: str, plan_path: Path) -> dict[str, Any]:
 def set_gate(root: Path, program_id: str, name: str, opened: bool, reason: str) -> dict[str, Any]:
     if name not in GATE_NAMES:
         raise ProgramStateError(f"gate must be one of {sorted(GATE_NAMES)}")
-    reason = checked_text(reason, "gate reason")
+    reason = checked_text(reason, "gate reason", 1000)
     with program_lock(root, program_id):
         state = load_state(root, program_id)
         if opened and name == "delivery" and not delivery_ready(root, state):
@@ -674,8 +778,8 @@ def append_inbox(
     unit_id: str | None,
     head_sha: str | None,
 ) -> dict[str, Any]:
-    kind = checked_text(kind, "event kind")
-    summary = checked_text(summary, "event summary")
+    kind = checked_text(kind, "event kind", 64)
+    summary = checked_text(summary, "event summary", 1000)
     if head_sha is not None:
         head_sha = checked_head(head_sha)
     with program_lock(root, program_id):
@@ -698,8 +802,20 @@ def append_inbox(
         return event
 
 
-def peek_inbox(root: Path, program_id: str) -> list[dict[str, Any]]:
-    return list(load_state(root, program_id)["inbox"])
+def peek_inbox(
+    root: Path,
+    program_id: str,
+    after_sequence: int = 0,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    if isinstance(after_sequence, bool) or not isinstance(after_sequence, int) or after_sequence < 0:
+        raise ProgramStateError("inbox cursor must be an integer >= 0")
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+        raise ProgramStateError("inbox limit must be between 1 and 100")
+    return [
+        event for event in load_state(root, program_id)["inbox"]
+        if event["sequence"] > after_sequence
+    ][:limit]
 
 
 def acknowledge_inbox(root: Path, program_id: str, through_sequence: int) -> dict[str, int]:
@@ -721,20 +837,47 @@ def acknowledge_inbox(root: Path, program_id: str, through_sequence: int) -> dic
         }
 
 
-def status(root: Path, program_id: str) -> dict[str, Any]:
+def status(
+    root: Path,
+    program_id: str,
+    unit_id: str | None = None,
+    brief: bool = False,
+) -> dict[str, Any]:
     state = load_state(root, program_id)
+    if unit_id is not None and unit_id not in state["units"]:
+        raise ProgramStateError(f"unknown unit: {unit_id}")
     ready = delivery_ready(root, state)
-    return {
+    open_frontier = frontier(root, state)
+    result: dict[str, Any] = {
         "store": str(program_directory(root, program_id)),
         "program_id": program_id,
         "objective": state["objective"],
         "plan_digest": state["plan_digest"],
         "gates": state["gates"],
-        "frontier": frontier(root, state),
+        "frontier": open_frontier,
         "delivery_ready": ready,
+        "delivery_gate_open": state["gates"]["delivery"]["open"],
+        "delivery_authority_granted": False,
         "delivery_admitted": state["gates"]["delivery"]["open"] and ready,
         "inbox_count": len(state["inbox"]),
-        "units": {
+    }
+    if brief:
+        result.pop("frontier")
+        result.pop("objective")
+        result["frontier_count"] = len(open_frontier)
+        result["frontier_preview"] = open_frontier[:8]
+        result["frontier_truncated"] = len(open_frontier) > 8
+        result["unit_counts"] = {
+            name: sum(unit["state"] == name for unit in state["units"].values())
+            for name in sorted(UNIT_STATES)
+        }
+        return result
+    selected_units = (
+        {unit_id: state["units"][unit_id]}
+        if unit_id is not None
+        else state["units"]
+    )
+    result["units"] = {
             unit_id: {
                 "state": unit["state"],
                 "head_sha": unit["head_sha"],
@@ -746,8 +889,35 @@ def status(root: Path, program_id: str) -> dict[str, Any]:
                 "verification_fresh": verdict_is_fresh(root, unit, "verification"),
                 "review_fresh": verdict_is_fresh(root, unit, "review"),
             }
-            for unit_id, unit in sorted(state["units"].items())
+            for unit_id, unit in sorted(selected_units.items())
+    }
+    return result
+
+
+def compact_state_receipt(root: Path, state: dict[str, Any], action: str) -> dict[str, Any]:
+    """Return a bounded coordination receipt instead of the full unit ledger."""
+    payload = json.dumps(state, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    ready = delivery_ready(root, state)
+    open_frontier = frontier(root, state)
+    return {
+        "schema_version": 1,
+        "kind": "patpat.program.mutation_receipt",
+        "action": action,
+        "store": str(program_directory(root, state["program_id"])),
+        "program_id": state["program_id"],
+        "plan_digest": state["plan_digest"],
+        "frontier_count": len(open_frontier),
+        "frontier_preview": open_frontier[:8],
+        "frontier_truncated": len(open_frontier) > 8,
+        "delivery_ready": ready,
+        "delivery_gate_open": state["gates"]["delivery"]["open"],
+        "delivery_authority_granted": False,
+        "inbox_count": len(state["inbox"]),
+        "unit_counts": {
+            name: sum(unit["state"] == name for unit in state["units"].values())
+            for name in sorted(UNIT_STATES)
         },
+        "state_sha256": hashlib.sha256(payload).hexdigest(),
     }
 
 
@@ -787,6 +957,12 @@ def run_self_test() -> None:
         append_inbox(root, "release-train", "ci", "checks queued", "contract", None)
         observed_inbox = peek_inbox(root, "release-train")
         assert [event["sequence"] for event in observed_inbox] == [1, 2]
+        assert [event["sequence"] for event in peek_inbox(root, "release-train", 1, 1)] == [2]
+        expect_error(lambda: peek_inbox(root, "release-train", 0, 101), "between 1 and 100")
+        expect_error(
+            lambda: append_inbox(root, "release-train", "note", "x" * 1001, None, None),
+            "at most 1000",
+        )
         assert [event["sequence"] for event in peek_inbox(root, "release-train")] == [1, 2]
         assert acknowledge_inbox(root, "release-train", 1) == {
             "acknowledged_through": 1,
@@ -862,15 +1038,123 @@ def run_self_test() -> None:
         pruned = status(root, "release-train")
         assert not pruned["units"]["contract"]["head_present"]
         assert not pruned["delivery_ready"]
-        assert not pruned["delivery_admitted"]
+        assert not pruned["delivery_gate_open"]
         set_head(root, "release-train", "contract", head_two)
         assert status(root, "release-train")["units"]["contract"]["head_present"]
+        assert set(status(root, "release-train", "contract")["units"]) == {"contract"}
+        assert "objective" not in status(root, "release-train", brief=True)
+        compact = compact_state_receipt(root, load_state(root, "release-train"), "self-test")
+        assert "units" not in compact and len(json.dumps(compact)) < 2048
+        assert compact["delivery_authority_granted"] is False
+        large_state = json.loads(json.dumps(load_state(root, "release-train")))
+        prototype = large_state["units"]["contract"]
+        large_state["gates"]["dispatch"]["open"] = True
+        large_state["units"] = {
+            f"unit-{index}": {
+                **prototype,
+                "id": f"unit-{index}",
+                "depends_on": [],
+                "state": "pending",
+                "head_sha": None,
+                "verification": None,
+                "review": None,
+            }
+            for index in range(1000)
+        }
+        large_receipt = compact_state_receipt(root, large_state, "large-self-test")
+        assert large_receipt["frontier_count"] == 1000
+        assert large_receipt["frontier_truncated"] and len(json.dumps(large_receipt)) < 2048
 
         directory = program_directory(root, "release-train")
         lock = directory / ".lock"
         lock.write_text("occupied\n", encoding="utf-8")
         expect_error(lambda: append_inbox(root, "release-train", "note", "blocked", None, None), "locked")
+        assert inspect_lock(root, "release-train")["state"] == "invalid"
+        expect_error(lambda: recover_stale_lock(root, "release-train"), "not safely recoverable")
         lock.unlink()
+        lock.write_text(
+            json.dumps(
+                {
+                    "pid": 99999999,
+                    "host": socket.gethostname(),
+                    "created_at": now(),
+                    "token": "d" * (MAX_LOCK_BYTES + 1),
+                }
+            ),
+            encoding="utf-8",
+        )
+        large_lock_status = inspect_lock(root, "release-train")
+        assert large_lock_status == {
+            "path": str(lock),
+            "state": "invalid",
+            "recoverable": False,
+        }
+        lock.unlink()
+        lock.write_text(
+            json.dumps({"pid": os.getpid(), "host": socket.gethostname(), "created_at": now(), "token": "a" * 32}),
+            encoding="utf-8",
+        )
+        assert inspect_lock(root, "release-train")["state"] == "live"
+        expect_error(lambda: recover_stale_lock(root, "release-train"), "not safely recoverable")
+        lock.write_text(
+            json.dumps({"pid": 99999999, "host": socket.gethostname(), "created_at": now(), "token": "b" * 32}),
+            encoding="utf-8",
+        )
+        assert inspect_lock(root, "release-train")["recoverable"]
+        recover_stale_lock(root, "release-train")
+        assert not lock.exists()
+
+        lock.write_text(
+            json.dumps({"pid": 99999999, "host": socket.gethostname(), "created_at": now(), "token": "e" * 32}),
+            encoding="utf-8",
+        )
+        original_snapshot = _inspect_lock_snapshot
+
+        def replace_after_snapshot(
+            observed_root: Path,
+            observed_program_id: str,
+        ) -> tuple[dict[str, Any], tuple[int, int] | None]:
+            observation, identity = original_snapshot(observed_root, observed_program_id)
+            replacement = lock.with_name(".replacement-live-lock")
+            replacement.write_text(
+                json.dumps(
+                    {
+                        "pid": os.getpid(),
+                        "host": socket.gethostname(),
+                        "created_at": now(),
+                        "token": "f" * 32,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            os.replace(replacement, lock)
+            return observation, identity
+
+        globals()["_inspect_lock_snapshot"] = replace_after_snapshot
+        try:
+            expect_error(
+                lambda: recover_stale_lock(root, "release-train"),
+                "identity changed",
+            )
+        finally:
+            globals()["_inspect_lock_snapshot"] = original_snapshot
+        assert lock.exists(), "recovery removed a replacement live lock"
+        lock.unlink()
+
+        with program_lock(root, "release-train"):
+            lock.write_text(
+                json.dumps(
+                    {
+                        "pid": 99999999,
+                        "host": socket.gethostname(),
+                        "created_at": now(),
+                        "token": "c" * 32,
+                    }
+                ),
+                encoding="utf-8",
+            )
+        assert lock.exists(), "program owner removed a replacement lock it did not own"
+        recover_stale_lock(root, "release-train")
 
         stored_path = state_path(root, "release-train")
         valid_bytes = stored_path.read_bytes()
@@ -920,22 +1204,30 @@ def build_parser() -> argparse.ArgumentParser:
 
     initialize_parser = commands.add_parser("init")
     initialize_parser.add_argument("--plan", type=Path, required=True)
+    initialize_parser.add_argument("--full", action="store_true", help="Print the complete state ledger")
 
-    commands.add_parser("status")
+    status_parser = commands.add_parser("status")
+    status_parser.add_argument("--brief", action="store_true")
+    status_parser.add_argument("--unit")
     commands.add_parser("validate")
+    commands.add_parser("lock-status")
+    commands.add_parser("recover-lock")
 
     gate_parser = commands.add_parser("set-gate")
     gate_parser.add_argument("name", choices=sorted(GATE_NAMES))
     gate_parser.add_argument("state", choices=["open", "closed"])
     gate_parser.add_argument("--reason", required=True)
+    gate_parser.add_argument("--full", action="store_true", help="Print the complete state ledger")
 
     head_parser = commands.add_parser("set-head")
     head_parser.add_argument("unit_id")
     head_parser.add_argument("head_sha")
+    head_parser.add_argument("--full", action="store_true", help="Print the complete state ledger")
 
     unit_parser = commands.add_parser("set-unit")
     unit_parser.add_argument("unit_id")
     unit_parser.add_argument("state", choices=sorted(UNIT_STATES))
+    unit_parser.add_argument("--full", action="store_true", help="Print the complete state ledger")
 
     verdict_parser = commands.add_parser("record-verdict")
     verdict_parser.add_argument("unit_id")
@@ -944,6 +1236,7 @@ def build_parser() -> argparse.ArgumentParser:
     verdict_parser.add_argument("head_sha")
     verdict_parser.add_argument("--actor", required=True)
     verdict_parser.add_argument("--evidence", type=Path, required=True)
+    verdict_parser.add_argument("--full", action="store_true", help="Print the complete state ledger")
 
     append_parser = commands.add_parser("inbox-append")
     append_parser.add_argument("--kind", required=True)
@@ -951,7 +1244,9 @@ def build_parser() -> argparse.ArgumentParser:
     append_parser.add_argument("--unit")
     append_parser.add_argument("--head")
 
-    commands.add_parser("inbox-peek")
+    peek_parser = commands.add_parser("inbox-peek")
+    peek_parser.add_argument("--after", type=int, default=0)
+    peek_parser.add_argument("--limit", type=int, default=10)
     acknowledge_parser = commands.add_parser("inbox-ack")
     acknowledge_parser.add_argument("--through", type=int, required=True)
     return parser
@@ -970,9 +1265,13 @@ def main() -> int:
         if args.command == "init":
             result: Any = initialize(root, args.program, args.plan)
         elif args.command == "status":
-            result = status(root, args.program)
+            result = status(root, args.program, args.unit, args.brief)
         elif args.command == "validate":
             result = {"valid": True, "program_id": load_state(root, args.program)["program_id"]}
+        elif args.command == "lock-status":
+            result = inspect_lock(root, args.program)
+        elif args.command == "recover-lock":
+            result = {"recovered_lock": str(recover_stale_lock(root, args.program))}
         elif args.command == "set-gate":
             result = set_gate(root, args.program, args.name, args.state == "open", args.reason)
         elif args.command == "set-head":
@@ -987,11 +1286,14 @@ def main() -> int:
         elif args.command == "inbox-append":
             result = append_inbox(root, args.program, args.kind, args.summary, args.unit, args.head)
         elif args.command == "inbox-peek":
-            result = peek_inbox(root, args.program)
+            result = peek_inbox(root, args.program, args.after, args.limit)
         elif args.command == "inbox-ack":
             result = acknowledge_inbox(root, args.program, args.through)
         else:
             parser.error(f"unsupported command: {args.command}")
+        full_state_commands = {"init", "set-gate", "set-head", "set-unit", "record-verdict"}
+        if args.command in full_state_commands and not args.full:
+            result = compact_state_receipt(root, result, args.command)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
     except ProgramStateError as error:

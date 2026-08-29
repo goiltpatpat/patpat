@@ -5,7 +5,7 @@ description: Drive, checkpoint, validate, resume, or safely take over multi-phas
 
 # Patpat Run
 
-When invoked directly, read [`patpat-loop`](../patpat-loop/SKILL.md) and follow its authority boundaries and reporting contract.
+When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 
 Read [sequence verifiable units](../patpat-loop/principles/sequence-verifiable-units.md), [proof over proxy](../patpat-loop/principles/proof-over-proxy.md), and apply the [multi-phase run playbook](../patpat-loop/playbooks/multi-phase-run.md).
 
@@ -13,11 +13,13 @@ Use [`scripts/run_state.py`](scripts/run_state.py) for durable graph state. Requ
 
 For a checked multi-unit plan, initialize [`scripts/program_state.py`](scripts/program_state.py) from the validated plan. Keep dispatch closed until the integration owner admits the frontier. Record worker events through its inbox; peek first and acknowledge a sequence only after the integration owner has processed the handoff. Bind verification and independent review to commits present in the repository, and open delivery only when every dependency has fresh evidence. A changed dependency head invalidates downstream evidence. The program store coordinates state only; it does not spawn workers, observe providers, or grant commit, push, merge, publish, or deploy authority.
 
+Before fan-out, record the earned-parallelism gate result and run [`scripts/team_shape.py`](scripts/team_shape.py) with that receipt, observed capacity, and an explicit worker budget. Accept its serial fallback; its recommendation never grants authority. Send typed handoff cards and evidence pointers, never full worker transcripts. Mutation commands print bounded receipts by default; request `--full` only for deliberate ledger inspection. Use `status --brief` or `status --unit <id>`, and page the inbox with `--after` plus `--limit`.
+
 Record declared authority and prohibitions at initialization, but never treat that record as fresh delivery approval. Require a structured proof contract before `ACT`, a content-bound `file:/absolute/path` evidence receipt before `REVIEW`, and independent review evidence before `LEARN` or `REPORT`. Invalidate proof when committed, staged, unstaged, untracked, assume-unchanged, or embedded-repository state changes. After three consecutive failures with the same blocker, graph node, and snapshot, stop the run as `BLOCKED`.
 
 Never record secrets, tokens, raw private logs, or sensitive payloads in run state or receipts. Point only to a safe, inspectable evidence file. Treat deletion or content change as stale evidence.
 
-If a process interruption leaves a lock, run `unlock` only after confirming the recorded process stopped. Let the engine reject live, malformed, or cross-host locks; never delete them by assumption.
+If a process interruption leaves a lock, inspect it first. Use `unlock` for a run or `recover-lock` for a program only when the engine proves a same-host owner is dead. Let the engine reject live, malformed, or cross-host locks; never delete them by assumption.
 
 Route completion through `patpat-ship`. Explicit Patpat activation authorizes default commit-and-PR after proof unless a higher-priority rule blocks it. Overnight stops merge-ready. Merge only with explicit land or merge language and green checks.
 

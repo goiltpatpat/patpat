@@ -5,7 +5,7 @@ description: Inspect the active agent host and install or validate Patpat throug
 
 # Patpat Setup
 
-When invoked directly, read [`patpat-loop`](../patpat-loop/SKILL.md) and preserve its authority and reporting boundaries.
+When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 
 Inspect the host, available CLI, source location, requested scope, and existing installation before changing anything. Keep compatibility questions read-only. Native install, update, and removal require current user authority for the exact host and user scope. Prefer the host-native plugin manager for Cursor, Codex, or Antigravity. Use [`scripts/install_skills.py`](../../scripts/install_skills.py) only when the user selects an explicit compatible skills directory.
 
