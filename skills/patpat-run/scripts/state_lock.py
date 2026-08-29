@@ -12,6 +12,34 @@ from pathlib import Path
 from typing import Any, Iterator, Type
 
 
+def process_is_alive(pid: int) -> bool:
+    """Return false only when the current host proves that a process is absent."""
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+
+        process_query_limited_information = 0x1000
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        open_process = kernel32.OpenProcess
+        open_process.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        open_process.restype = wintypes.HANDLE
+        close_handle = kernel32.CloseHandle
+        close_handle.argtypes = [wintypes.HANDLE]
+        close_handle.restype = wintypes.BOOL
+        handle = open_process(process_query_limited_information, False, pid)
+        if handle:
+            close_handle(handle)
+            return True
+        return ctypes.get_last_error() != 87
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 def read_lock_record(path: Path, max_bytes: int) -> tuple[dict[str, Any] | None, tuple[int, int] | None]:
     """Read bounded JSON from a unique regular lock file without following symlinks."""
     flags = os.O_RDONLY

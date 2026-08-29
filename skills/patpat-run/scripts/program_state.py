@@ -24,7 +24,7 @@ SCRIPT_DIRECTORY = str(Path(__file__).resolve().parent)
 if SCRIPT_DIRECTORY not in sys.path:
     sys.path.insert(0, SCRIPT_DIRECTORY)
 
-from state_lock import path_guard, path_has_identity, read_lock_record
+from state_lock import path_guard, path_has_identity, process_is_alive, read_lock_record
 from team_shape import (
     PARALLEL_GATE_CHECKS,
     PARALLEL_GATE_KIND,
@@ -176,13 +176,16 @@ def fsync_directory(path: Path) -> None:
 
 
 def atomic_write_json(path: Path, value: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if os.name != "nt":
+        os.chmod(path.parent, 0o700)
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
     payload = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
     if len(payload) > MAX_PROGRAM_STATE_BYTES:
         raise ProgramStateError("program state exceeds the byte limit")
     try:
-        with temporary.open("xb") as handle:
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "wb") as handle:
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
@@ -196,7 +199,9 @@ def atomic_write_json(path: Path, value: dict[str, Any]) -> None:
 @contextmanager
 def program_lock(root: Path, program_id: str) -> Iterator[None]:
     directory = program_directory(root, program_id)
-    directory.mkdir(parents=True, exist_ok=True)
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if os.name != "nt":
+        os.chmod(directory, 0o700)
     path = directory / ".lock"
     token = uuid.uuid4().hex
     with path_guard(directory, ProgramStateError):
@@ -227,16 +232,6 @@ def program_lock(root: Path, program_id: str) -> Iterator[None]:
             if current is not None and current.get("token") == token and path_has_identity(path, identity):
                 path.unlink()
                 fsync_directory(path.parent)
-
-
-def process_is_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
 
 
 def _inspect_lock_snapshot(
@@ -1068,6 +1063,9 @@ def run_self_test() -> None:
         plan_path = root / "plan.json"
         plan_path.write_text(json.dumps(example_plan()), encoding="utf-8")
         initialize(root, "release-train", plan_path)
+        if os.name != "nt":
+            assert program_directory(root, "release-train").stat().st_mode & 0o777 == 0o700
+            assert state_path(root, "release-train").stat().st_mode & 0o777 == 0o600
         assert status(root, "release-train")["frontier"] == []
         expect_error(
             lambda: set_gate(root, "release-train", "delivery", True, "ship now"),

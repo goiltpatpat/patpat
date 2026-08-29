@@ -23,12 +23,11 @@ SCRIPT_DIRECTORY = str(Path(__file__).resolve().parent)
 if SCRIPT_DIRECTORY not in sys.path:
     sys.path.insert(0, SCRIPT_DIRECTORY)
 
-from state_lock import path_guard, path_has_identity, read_lock_record
+from state_lock import path_guard, path_has_identity, process_is_alive, read_lock_record
 
 
 SCHEMA_VERSION = 2
 RUN_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
-RECEIPT_PATTERN = re.compile(r"^file:/.+$")
 LOCK_TOKEN_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 MAX_LOCK_BYTES = 4096
 MAX_STATE_BYTES = 1024 * 1024
@@ -208,10 +207,13 @@ def fsync_directory(path: Path) -> None:
 
 
 def atomic_write(path: Path, payload: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if os.name != "nt":
+        os.chmod(path.parent, 0o700)
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
     try:
-        with temporary.open("xb") as handle:
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "wb") as handle:
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
@@ -232,7 +234,9 @@ def atomic_write_json(path: Path, value: dict[str, Any]) -> None:
 @contextmanager
 def run_lock(root: Path, run_id: str) -> Iterator[None]:
     directory = run_directory(root, run_id)
-    directory.mkdir(parents=True, exist_ok=True)
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if os.name != "nt":
+        os.chmod(directory, 0o700)
     path = directory / ".lock"
     token = uuid.uuid4().hex
     with path_guard(directory, RunStateError):
@@ -263,16 +267,6 @@ def run_lock(root: Path, run_id: str) -> Iterator[None]:
             if record is not None and record.get("token") == token and path_has_identity(path, identity):
                 path.unlink()
                 fsync_directory(path.parent)
-
-
-def process_is_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
 
 
 def recover_stale_lock(root: Path, run_id: str) -> Path:
@@ -364,9 +358,12 @@ def file_binding(path: Path) -> dict[str, Any]:
 
 
 def validate_receipt(receipt: str) -> dict[str, Any]:
-    if not RECEIPT_PATTERN.fullmatch(receipt):
-        raise RunStateError("receipt must use file:/absolute/path to an inspectable evidence file")
-    return file_binding(Path(receipt.removeprefix("file:")))
+    if not isinstance(receipt, str) or not receipt.startswith("file:") or len(receipt) == 5:
+        raise RunStateError("receipt must use file:<absolute-path> to an inspectable evidence file")
+    path = Path(receipt.removeprefix("file:"))
+    if not path.is_absolute():
+        raise RunStateError("receipt must use file:<absolute-path> to an inspectable evidence file")
+    return file_binding(path)
 
 
 def receipt_binding_is_fresh(record: dict[str, Any]) -> bool:
@@ -856,6 +853,9 @@ def run_self_test() -> None:
         experiment_receipt = evidence("experiment")
         make_test_repository(root)
         initialize(root, "main-run", "Prove state transitions", "integration-owner", ["open-pr"], ["deploy"], ["source.txt"], [])
+        if os.name != "nt":
+            assert run_directory(root, "main-run").stat().st_mode & 0o777 == 0o700
+            assert state_path(root, "main-run").stat().st_mode & 0o777 == 0o600
         try:
             transition(root, "main-run", "ACT")
         except RunStateError:

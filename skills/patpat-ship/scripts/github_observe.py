@@ -253,26 +253,32 @@ def observation_document(
     }
 
 
+def github_command(executable: str, repository: str, pull_request: int) -> list[str]:
+    owner, name = repository.split("/", 1)
+    return [
+        executable,
+        "api",
+        "graphql",
+        "--hostname",
+        "github.com",
+        "-F",
+        f"owner={owner}",
+        "-F",
+        f"name={name}",
+        "-F",
+        f"number={pull_request}",
+        "-f",
+        f"query={GRAPHQL_QUERY}",
+    ]
+
+
 def fetch_github(repository: str, pull_request: int) -> Any:
     executable = shutil.which("gh")
     if executable is None:
         raise ObserverError("GitHub CLI is required")
-    owner, name = repository.split("/", 1)
     try:
         result = subprocess.run(
-            [
-                executable,
-                "api",
-                "graphql",
-                "-F",
-                f"owner={owner}",
-                "-F",
-                f"name={name}",
-                "-F",
-                f"number={pull_request}",
-                "-f",
-                f"query={GRAPHQL_QUERY}",
-            ],
+            github_command(executable, repository, pull_request),
             check=False,
             capture_output=True,
             timeout=30,
@@ -302,6 +308,12 @@ def validate_arguments(args: argparse.Namespace) -> None:
         raise ObserverError("attempt values must be positive bounded integers")
     if not 1 <= args.max_observation_age_seconds <= 3600:
         raise ObserverError("maximum observation age must be between 1 and 3600 seconds")
+    if not args.required_check and not args.allow_no_required_checks:
+        raise ObserverError(
+            "at least one required check is required; use --allow-no-required-checks only when repository policy proves CI is not required"
+        )
+    if args.required_check and args.allow_no_required_checks:
+        raise ObserverError("--allow-no-required-checks cannot be combined with --required-check")
     if len(args.required_check) > MAX_CHECKS or len(args.required_check) != len(set(args.required_check)):
         raise ObserverError("required checks must be at most 100 unique names")
     for index, name in enumerate(args.required_check):
@@ -432,6 +444,33 @@ def self_test() -> None:
         pass
     else:
         raise AssertionError("missing pull request was accepted")
+
+    command = github_command("/usr/bin/gh", "example/project", 17)
+    assert command[:5] == [
+        "/usr/bin/gh",
+        "api",
+        "graphql",
+        "--hostname",
+        "github.com",
+    ]
+
+    empty_policy = parser().parse_args(
+        [
+            "--repository", "example/project",
+            "--pull-request", "17",
+            "--expected-head", "a" * 40,
+            "--expected-base", "main",
+            "--deadline", "2026-08-30T00:00:00Z",
+        ]
+    )
+    try:
+        validate_arguments(empty_policy)
+    except ObserverError as error:
+        assert "at least one required check" in str(error)
+    else:
+        raise AssertionError("empty required-check policy was accepted without an explicit override")
+    empty_policy.allow_no_required_checks = True
+    validate_arguments(empty_policy)
     print("GitHub PR observer self-test passed.")
 
 
@@ -442,6 +481,7 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--expected-head")
     command.add_argument("--expected-base")
     command.add_argument("--required-check", action="append", default=[])
+    command.add_argument("--allow-no-required-checks", action="store_true")
     command.add_argument("--require-review", action="store_true")
     command.add_argument("--max-attempts", type=int, default=3)
     command.add_argument("--attempt", type=int, default=1)

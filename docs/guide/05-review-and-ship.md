@@ -34,7 +34,7 @@ The pull request should explain the changed behavior, why it changed, how it was
 
 Provider observations must bind the provider repository, pull-request number, head, and base branch to the expected target and include PR state, unresolved review-thread count, checks, review decision, draft state, and mergeability. A different provider target, closed or merged PR, changed head or base, or any unresolved review thread fails closed before merge-ready handoff.
 
-On GitHub.com, `skills/patpat-ship/scripts/github_observe.py` captures this contract through a static read-only GraphQL query. It requires an explicit expected head and base, never prints credentials, and refuses incomplete pagination instead of treating a truncated result as complete. Pipe its JSON into `pr_watch.py`; keep polling and every provider mutation outside both scripts.
+On GitHub.com, `skills/patpat-ship/scripts/github_observe.py` captures this contract through a static read-only GraphQL query pinned to `github.com`. It requires an explicit expected head and base, never prints credentials, and refuses incomplete pagination instead of treating a truncated result as complete. Name required checks from verified repository policy. An empty required-check list fails closed unless `--allow-no-required-checks` explicitly records that CI is not required; do not use that override to bypass an unknown policy. Pipe the observation JSON into `pr_watch.py`; keep polling and every provider mutation outside both scripts.
 
 ```bash
 python3 skills/patpat-ship/scripts/github_observe.py \

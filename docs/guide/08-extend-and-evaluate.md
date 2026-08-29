@@ -16,7 +16,7 @@ Use the [extension reference](./extending.md) for structure and validation detai
 
 ## Prefer a project verifier
 
-The highest-value extension is often a verifier that can drive the real application, inspect the authoritative state, and clean up safely. Keep environment knowledge with the project instead of expanding the general plugin with one repository's commands.
+The highest-value extension is often a verifier that can drive the real application, inspect the authoritative state, and clean up safely. Keep environment knowledge with the project instead of expanding the general plugin with one repository's commands. Give each verifier a small feature map that links user claims to source entry points, exact exercises, proof surfaces, prerequisites, and cleanup. Prove one mapped feature before treating a new verifier as usable; maintainers later drive every mapped feature or record why it is unreachable.
 
 ```text
 /patpat create a project verifier for the import flow. It must seed a fixture, run the real command, inspect persisted rows, and remove test data.

@@ -40,7 +40,7 @@ Compare pstack jobs to Patpat artifacts. Missing filenames are not gaps when the
 | bug fix / TDD | `patpat-debug` + defect / regression-first | adapted |
 | perf / hillclimb / runtime / trace / visual parity | `patpat-perf` + `patpat-verify` + matching playbooks | covered |
 | `interrogate` | `patpat-review` | adapted |
-| `create-verification-skill` / `maintain-verification-skill` | `patpat-verifier` | covered |
+| `create-verification-skill` / `maintain-verification-skill` | `patpat-verifier`; new verifiers seed a project-local feature map, prove one mapped surface, and maintenance reconciles every mapped feature to source plus live behavior | adapted |
 | `figure-it-out` | `patpat-plan` + bespoke-workflow | adapted |
 | `show-me-your-work` / autonomous run / pause / pickup | `patpat-run` + multi-phase-run / pause-safely / session-takeover | adapted |
 | checked multi-PR plan | `patpat-run` + `skills/patpat-run/scripts/validate_plan.py`; host-neutral units require dependencies, owned files, proof surfaces, exact-head evidence, review gate, and explicit delivery authority | adapted; no fixed model or lane count |
