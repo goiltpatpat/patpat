@@ -583,15 +583,11 @@ def transition(root: Path, run_id: str, destination: str) -> dict[str, Any]:
             raise RunStateError("ACT requires a structured proof contract")
         if destination == "REVIEW" and not receipt_is_fresh(state["verification"], state, snapshot, "verified"):
             raise RunStateError("REVIEW requires verified evidence for the current epoch and snapshot")
-        if destination == "LEARN" and not receipt_is_fresh(
-            state["review"], state, snapshot, "pass", independent=True
-        ):
-            raise RunStateError("LEARN requires current independent review")
-        if destination == "REPORT":
+        if destination in {"LEARN", "REPORT"}:
             if not receipt_is_fresh(state["verification"], state, snapshot, "verified"):
-                raise RunStateError("REPORT requires current verified evidence")
+                raise RunStateError(f"{destination} requires current verified evidence")
             if not receipt_is_fresh(state["review"], state, snapshot, "pass", independent=True):
-                raise RunStateError("REPORT requires current independent review")
+                raise RunStateError(f"{destination} requires current independent review")
         if destination in {"ACT", "VERIFY"}:
             state["epoch"] += 1
             state["verification"] = None
@@ -636,11 +632,12 @@ def record_receipt(
         allowed = {"verification": {"verified", "partial", "failed"}, "review": {"pass", "changes-required"}}
         if verdict not in allowed[kind]:
             raise RunStateError(f"invalid {kind} verdict")
+        snapshot = current_snapshot(root)
         if kind == "review":
             owner_key = canonical_identity(state["owner"], "integration owner")
             verification = state.get("verification")
-            if not isinstance(verification, dict):
-                raise RunStateError("independent review requires current verification evidence")
+            if not receipt_is_fresh(verification, state, snapshot, "verified"):
+                raise RunStateError("independent review requires current verified evidence")
             verifier_key = canonical_identity(
                 verification.get("actor"), "verification actor"
             )
@@ -648,7 +645,6 @@ def record_receipt(
                 raise RunStateError(
                     "independent reviewer must differ from the integration owner and verifier"
                 )
-        snapshot = current_snapshot(root)
         state[kind] = {
             "summary": summary,
             "receipt": receipt,
@@ -938,6 +934,119 @@ def run_self_test() -> None:
         learning_review_receipt = evidence("learning-review")
         experiment_receipt = evidence("experiment")
         make_test_repository(root)
+
+        def prepare_review_run(run_id: str) -> tuple[Path, str]:
+            verification = evidence(f"{run_id}-verification")
+            review = evidence(f"{run_id}-review")
+            initialize(root, run_id, "Reject stale verification", "integration-owner", [], [], [], [])
+            transition(root, run_id, "INSPECT")
+            transition(root, run_id, "PROOF_CONTRACT")
+            record_proof_contract(
+                root,
+                run_id,
+                {
+                    "claim": "The verified receipt remains current",
+                    "surface": "test fixture",
+                    "action": "inspect the receipt",
+                    "expected": "stale evidence is rejected",
+                    "cleanup": "remove temporary evidence",
+                },
+            )
+            transition(root, run_id, "ACT")
+            transition(root, run_id, "VERIFY")
+            record_receipt(
+                root,
+                run_id,
+                "verification",
+                "Behavior observed",
+                verification,
+                "verifier",
+                "verified",
+            )
+            transition(root, run_id, "REVIEW")
+            return Path(verification.removeprefix("file:")), review
+
+        def expect_atomic_rejection(run_id: str, action: Any, label: str) -> None:
+            before = state_path(root, run_id).read_bytes()
+            try:
+                action()
+            except RunStateError:
+                pass
+            else:
+                raise AssertionError(f"{label} was accepted")
+            if state_path(root, run_id).read_bytes() != before:
+                raise AssertionError(f"{label} changed state before failing")
+
+        for failure_mode in ("modified", "missing", "snapshot-stale"):
+            review_run = f"review-{failure_mode}"
+            verification_path, review = prepare_review_run(review_run)
+            if failure_mode == "modified":
+                verification_path.write_text("modified verification\n", encoding="utf-8")
+            elif failure_mode == "missing":
+                verification_path.unlink()
+            else:
+                (root / "source.txt").write_text("stale review snapshot\n", encoding="utf-8")
+            expect_atomic_rejection(
+                review_run,
+                lambda current_run=review_run, current_review=review: record_receipt(
+                    root,
+                    current_run,
+                    "review",
+                    "Review passed",
+                    current_review,
+                    "reviewer",
+                    "pass",
+                ),
+                f"{failure_mode} verification review admission",
+            )
+            if failure_mode == "snapshot-stale":
+                (root / "source.txt").write_text("one\n", encoding="utf-8")
+
+            learn_run = f"learn-{failure_mode}"
+            verification_path, review = prepare_review_run(learn_run)
+            record_receipt(
+                root,
+                learn_run,
+                "review",
+                "Review passed",
+                review,
+                "reviewer",
+                "pass",
+            )
+            if failure_mode == "modified":
+                verification_path.write_text("modified verification\n", encoding="utf-8")
+            elif failure_mode == "missing":
+                verification_path.unlink()
+            else:
+                (root / "source.txt").write_text("stale learn snapshot\n", encoding="utf-8")
+            expect_atomic_rejection(
+                learn_run,
+                lambda current_run=learn_run: transition(root, current_run, "LEARN"),
+                f"{failure_mode} verification LEARN admission",
+            )
+            expect_atomic_rejection(
+                learn_run,
+                lambda current_run=learn_run: transition(root, current_run, "REPORT"),
+                f"{failure_mode} verification REPORT admission",
+            )
+            if failure_mode == "snapshot-stale":
+                (root / "source.txt").write_text("one\n", encoding="utf-8")
+
+        fresh_verification_path, fresh_review = prepare_review_run("fresh-admission")
+        assert fresh_verification_path.is_file()
+        record_receipt(
+            root,
+            "fresh-admission",
+            "review",
+            "Review passed",
+            fresh_review,
+            "reviewer",
+            "pass",
+        )
+        transition(root, "fresh-admission", "LEARN")
+        transition(root, "fresh-admission", "REPORT")
+        assert status(root, "fresh-admission")["node"] == "REPORT"
+
         initialize(root, "main-run", "Prove state transitions", "integration-owner", ["open-pr"], ["deploy"], ["source.txt"], [])
         if os.name != "nt":
             assert run_directory(root, "main-run").stat().st_mode & 0o777 == 0o700
