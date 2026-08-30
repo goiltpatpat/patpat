@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/goiltpatpat/patpat/security/advisories/new
+    about: Report unpatched vulnerabilities privately. Do not include secrets or private data.
+  - name: Installation guide
+    url: https://github.com/goiltpatpat/patpat/blob/main/docs/guide/installing.md
+    about: Check supported install, update, removal, and discovery routes before filing an issue.

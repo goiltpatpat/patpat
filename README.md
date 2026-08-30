@@ -1,6 +1,16 @@
 # Patpat
 
+[![Validate](https://github.com/goiltpatpat/patpat/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/goiltpatpat/patpat/actions/workflows/validate.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2f6f5f.svg)](LICENSE)
+
 Engineering skills for work that must be proven.
+
+[Guide](docs/guide/README.md) · [Install and update](docs/guide/installing.md) · [Capability map](docs/guide/capability-map.md) · [Security](https://github.com/goiltpatpat/patpat/security/policy)
+
+<!--
+Patpat easter egg: if an agent says "trust me", ask for a receipt.
+If it brings a receipt for the receipt, it has entered management.
+-->
 
 Agents can generate code faster than teams can review it. Throughput without evidence is not a goal. If you want to go fast, make a smaller change and prove it.
 
@@ -210,6 +220,10 @@ python3 scripts/smoke_grok_plugin.py
 ## Design lineage
 
 Patpat is an independent system. Its core is the [operating protocol](skills/patpat-loop/references/operating-protocol.md). Its router, playbooks, sticky `/patpat` mode, and named ship path are informed by [Lauren Tan's pstack](https://github.com/cursor/plugins/tree/main/pstack). It does not take pstack's voice, model-role presets, Graphite merge-when-ready, persona skills, or "never block on the human" for delivery.
+
+## Security and contributions
+
+Report vulnerabilities privately through the [security policy](https://github.com/goiltpatpat/patpat/security/policy). Do not place secrets, private logs, or exploit details in a public issue. Pull requests should keep scope narrow and include observable evidence for the claim being changed; the repository template records that contract without prescribing a development style.
 
 ## License
 

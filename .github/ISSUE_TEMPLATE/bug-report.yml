@@ -1,0 +1,65 @@
+name: Bug report
+description: Report reproducible Patpat behavior that differs from its documented contract.
+title: "bug: "
+body:
+  - type: dropdown
+    id: host
+    attributes:
+      label: Agent host
+      options:
+        - Codex
+        - Cursor
+        - Antigravity
+        - Grok CLI
+        - Portable Agent Skills host
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Host and Patpat version
+      description: Include the host CLI version and Patpat commit or release.
+      placeholder: "codex-cli 0.x; patpat abc1234"
+    validations:
+      required: true
+  - type: input
+    id: install
+    attributes:
+      label: Installation route
+      placeholder: "Codex marketplace, native plugin, portable copy, or development symlink"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: List deterministic steps and the smallest relevant repository context.
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Add redacted command receipts, logs, or artifact links. Never include secrets or private data.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety checks
+      options:
+        - label: I removed secrets, tokens, private logs, and personal data.
+          required: true
+        - label: I checked existing issues and the current installation guide.
+          required: true
