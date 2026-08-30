@@ -591,6 +591,16 @@ def validate_root(root: Path) -> list[str]:
         if not folder.is_dir() or not any(folder.glob("*.md")):
             errors.append(f"{folder}: missing referenced guidance")
 
+    operating_protocol = reference_root / "references" / "operating-protocol.md"
+    candor_contract = "Treat proposed approaches, including the user's, as hypotheses."
+    try:
+        protocol_text = operating_protocol.read_text(encoding="utf-8")
+    except OSError:
+        errors.append(f"{operating_protocol}: missing operating protocol")
+    else:
+        if candor_contract not in protocol_text:
+            errors.append(f"{operating_protocol}: missing candor contract")
+
     entrypoint = reference_root / "SKILL.md"
     reached = reachable_markdown(entrypoint, root) if entrypoint.is_file() else set()
     required_references = {(skill / "SKILL.md").resolve() for skill in skills}
@@ -797,6 +807,14 @@ def run_self_test(root: Path) -> list[str]:
             encoding="utf-8",
         )
 
+    def remove_candor_contract(fixture: Path) -> None:
+        protocol = fixture / "skills" / "patpat-loop" / "references" / "operating-protocol.md"
+        text = protocol.read_text(encoding="utf-8")
+        protocol.write_text(
+            text.replace("Treat proposed approaches, including the user's, as hypotheses.", "Treat every proposal as correct.", 1),
+            encoding="utf-8",
+        )
+
     def remove_cursor_agent_field(fixture: Path) -> None:
         manifest = fixture / ".cursor-plugin" / "plugin.json"
         data = json.loads(manifest.read_text(encoding="utf-8"))
@@ -950,6 +968,7 @@ def run_self_test(root: Path) -> list[str]:
             ("duplicate frontmatter", duplicate_key, "duplicate frontmatter key"),
             ("skill symlink", add_skill_symlink, "symlinks are not allowed"),
             ("router reachability", break_router_reachability, "not reachable from patpat-loop"),
+            ("missing candor contract", remove_candor_contract, "missing candor contract"),
             ("missing Cursor agents field", remove_cursor_agent_field, "Cursor manifest agents"),
             ("writable Cursor reviewer", weaken_cursor_reviewer, "readonly policy"),
             ("background Cursor agent", enable_background_agent, "must not run in background"),

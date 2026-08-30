@@ -13,6 +13,7 @@ from types import ModuleType
 ROOT = Path(__file__).resolve().parents[1]
 DRY_RUN = ROOT / "scripts" / "dry_run_loop.py"
 RUN_STATE = ROOT / "skills" / "patpat-run" / "scripts" / "run_state.py"
+TEAM_SHAPE = ROOT / "skills" / "patpat-run" / "scripts" / "team_shape.py"
 
 
 class ParallelEvalError(RuntimeError):
@@ -82,6 +83,7 @@ def initialize_repository(root: Path) -> str:
 def run_self_test() -> None:
     routing = load_module("patpat_parallel_routing", DRY_RUN)
     state = load_module("patpat_parallel_state", RUN_STATE)
+    team_shape = load_module("patpat_parallel_team_shape", TEAM_SHAPE)
 
     if routing.fan_out(
         kind="autopilot",
@@ -95,8 +97,39 @@ def run_self_test() -> None:
         worktree_or_sandbox=True,
         shared_worktree=False,
         read_only=False,
-    ) != "parallel":
-        raise ParallelEvalError("isolated writable worktrees were not admitted")
+    ) != "serial-fallback":
+        raise ParallelEvalError("isolation without earned-parallelism evidence was admitted")
+
+    receipt = {
+        "schema_version": 1,
+        "kind": team_shape.PARALLEL_GATE_KIND,
+        "program_id": "parallel-eval",
+        "plan_digest": "a" * 64,
+        "integration_owner": "integration-owner",
+        "checks": {name: True for name in team_shape.PARALLEL_GATE_CHECKS},
+        "isolation_identities": {
+            "alpha": "worktree-alpha",
+            "beta": "worktree-beta",
+        },
+    }
+    selection = team_shape.select_team_shape(
+        work_kind="writable",
+        decomposable=True,
+        stable_verifier=True,
+        worker_capacity=2,
+        worker_budget=2,
+        writable_gates_passed=True,
+        uncertainty="low",
+        consequence="medium",
+        independent_oracle=False,
+        parallel_gate_receipt=receipt,
+        expected_program_id="parallel-eval",
+        expected_plan_digest="a" * 64,
+        expected_integration_owner="integration-owner",
+        expected_units={"alpha", "beta"},
+    )
+    if selection["pattern"] != "distributed" or selection["worker_limit"] != 2:
+        raise ParallelEvalError("valid earned-parallelism evidence was not admitted")
 
     with tempfile.TemporaryDirectory(prefix="patpat-parallel-eval-") as temporary:
         sandbox = Path(temporary)
