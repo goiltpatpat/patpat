@@ -1,7 +1,7 @@
 {
   "name": "patpat",
   "version": "0.7.0",
-  "description": "Evidence-driven engineering workflows with bounded changes and explicit verification.",
+  "description": "Engineering skills for code that must survive contact with reality.",
   "author": {
     "name": "Patpat maintainers"
   },
