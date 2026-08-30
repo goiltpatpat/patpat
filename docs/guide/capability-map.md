@@ -1,70 +1,81 @@
 # Patpat Capability Map
 
-This map tracks engineering behavior, not upstream file names or counts. Patpat's core is its operating protocol. Workflow jobs are informed by [pstack](https://github.com/cursor/plugins/tree/main/pstack) and its [Codex adaptation](https://github.com/Aqua-123/pstack-for-codex), then bounded so they cannot override that protocol.
+This map defines the engineering outcomes Patpat owns, the controls that bound them, and the surfaces that remain deliberately gated or outside the core. Repository artifacts and executable behavior are authoritative. Capability is not measured by skill or file count.
 
-Upstream pstack was rechecked at repository head `68836dd` and pstack tree `950b9023` (2026-08-30). The tree is unchanged from the prior review. Compare later tree changes by invariant before changing Patpat.
+## Control model
 
-## Covered
+```text
+Protocol -> Playbooks -> Skills -> Evidence -> Host Adapters
+```
 
-- Higher-order routing with progressive disclosure
-- Repository inspection, rationale forensics, runtime forensics, and trace forensics
-- Architecture, explicit domain shape, blast radius, prototypes, bounded features, and behavior-preserving refactors
-- Regression-first defects, measured performance work, sustained metric hillclimbing, and visual equivalence
-- Direct verification, project-specific verifier maintenance, independent review, and structural learning
-- Durable execution, cold-start takeover, safe pause and resume, bounded blockers, and content-bound receipts
-- Explicit Patpat activation opts into commit-and-PR after proof; only explicit land or merge language authorizes merge
-- Fail-closed automation design with idempotency, compensation or an explicit irreversible boundary, bounded retries, and a kill switch
-- Native or portable setup across supported agent hosts
+- The [operating protocol](../../skills/patpat-loop/references/operating-protocol.md) defines judgment, safety, authority, and evidence invariants.
+- Playbooks turn those invariants into task-specific decision paths.
+- Skills expose focused entry points without replacing the protocol.
+- Evidence binds claims to an observable surface and current repository state.
+- Host adapters package the canonical `skills/` tree; they do not redefine behavior or grant authority.
 
-## Deliberately gated
+Each layer may narrow the one before it. No layer may weaken a safety gate or turn capability into permission.
 
-- Writable fan-out requires separate worktrees or host-enforced sandboxes plus earned-parallelism gates; otherwise work is serial.
-- Issue-loop remains paused until a named provider, sandbox, canary, and enable request exist. No host scheduler ships enabled.
-- Package publish, production deploy, force-push, and secret rotation still pause. Real CI failures do not land.
+## Reading the map
 
-## Outside the core
+Availability and evidence are separate dimensions:
 
-Generic technical writing, language-specific style catalogs, persona skills, chat-history mining, simulator cleanup, model-selection presets, and host-specific bot interfaces remain project or host extensions. Add them only when repeated evidence shows that a Patpat-owned constraint improves engineering outcomes.
+| Availability | Meaning |
+| --- | --- |
+| `available` | Patpat has an owned control path for the outcome. |
+| `gated` | The path exists but remains unavailable until named preconditions pass. |
+| `outside core` | The outcome belongs to the host, project, or ordinary agent competence. |
 
-## Upstream invariant mapping
+| Evidence level | Required basis |
+| --- | --- |
+| `specified` | The invariant and authority boundary are explicit. |
+| `contract-tested` | A deterministic check passes on the claimed revision. |
+| `behavior-evaluated` | A representative agent run produces an inspectable receipt. |
+| `host-verified` | A named host, revision, and lifecycle stage are observed directly. |
 
-Compare pstack jobs to Patpat artifacts. Missing filenames are not gaps when the invariant already lives in a router, skill, playbook, or principle.
+These labels are claims, not decoration. Missing or stale evidence lowers the evidence level. Evidence from one host does not transfer to another.
 
-| pstack job | Patpat home | Class |
+## Operational capabilities
+
+The table records availability and the required proof surface. It does not assign permanent evidence levels; record those in the revision-bound run or host receipt when the claim is made.
+
+| Outcome | Availability | Control owner | Proof surface and boundary |
+| --- | --- | --- | --- |
+| Route and control engineering work | `available` | [`patpat-loop`](../../skills/patpat-loop/SKILL.md), operating protocol, and [route catalog](../../skills/patpat-loop/references/route-catalog.md) | Validate routing and protocol reachability. Explicit activation is required; resemblance to a workflow does not activate Patpat. |
+| Understand and design | `available` | [`patpat-inspect`](../../skills/patpat-inspect/SKILL.md), [`patpat-impact`](../../skills/patpat-impact/SKILL.md), [`patpat-plan`](../../skills/patpat-plan/SKILL.md), and [`patpat-architect`](../../skills/patpat-architect/SKILL.md) | Inspect repository evidence and return falsifiable findings, boundaries, or plans. Read-only work does not mutate or ship. |
+| Change, debug, and improve performance | `available` | [`patpat-change`](../../skills/patpat-change/SKILL.md), [`patpat-debug`](../../skills/patpat-debug/SKILL.md), and [`patpat-perf`](../../skills/patpat-perf/SKILL.md) | Prove changed behavior on the repository's authoritative test or runtime surface. Builds and static checks alone do not prove user-visible behavior. |
+| Verify and challenge claims | `available` | [`patpat-verify`](../../skills/patpat-verify/SKILL.md), [`patpat-review`](../../skills/patpat-review/SKILL.md), and [`patpat-verifier`](../../skills/patpat-verifier/SKILL.md) | Bind verification to current inputs and artifacts. Independent review must use a distinct actor; declared identity is not host-attested independence. |
+| Execute durable work | `available` | [`patpat-run`](../../skills/patpat-run/SKILL.md), the [execution graph](../../skills/patpat-loop/references/execution-graph.md), and checked run/program state | [`run_state.py`](../../skills/patpat-run/scripts/run_state.py), [`validate_plan.py`](../../skills/patpat-run/scripts/validate_plan.py), and [`program_state.py`](../../skills/patpat-run/scripts/program_state.py) enforce transitions and freshness. State coordinates work; it does not spawn agents or grant delivery authority. |
+| Deliver verified work | `available` | [`patpat-ship`](../../skills/patpat-ship/SKILL.md) and the provider-neutral [`pr_watch.py`](../../skills/patpat-ship/scripts/pr_watch.py) evaluator | Explicit activation may authorize commit, non-force push, and one ready PR after proof and review. Merge requires explicit `land` or `merge` language and current green evidence. |
+| Extend and learn | `available` | [`patpat-skill`](../../skills/patpat-skill/SKILL.md), [`patpat-eval`](../../skills/patpat-eval/SKILL.md), and [`patpat-learn`](../../skills/patpat-learn/SKILL.md) | Add the smallest reusable constraint for a reproduced failure. A prose change alone does not prove behavioral improvement. |
+| Design bounded automation | `available` | [`patpat-automation`](../../skills/patpat-automation/SKILL.md) | Specify idempotency, retries, compensation or an irreversible boundary, observability, and a kill switch. Design and scaffolding do not authorize enabling, scheduling, or external writes. |
+| Install and update | `available` | [`patpat-setup`](../../skills/patpat-setup/SKILL.md), host manifests, staging, installer, updater, and smoke scripts | Follow the [installation reference](./installing.md). Package validation, discovery, execution, sticky state, mutation, delivery, and live evaluation remain separate claims. |
+
+## Guarded capabilities
+
+Every capability in this section is `gated` and remains fail closed until its admission evidence is current.
+
+| Capability | Admission gate | Safe fallback |
 | --- | --- | --- |
-| `poteto-mode` routing + playbooks | `patpat-loop` + playbooks | adapted |
-| `how` / `why` investigation | `patpat-inspect` + investigation (how/placement/ownership/layering/critique deepened) / rationale-forensics (why deepened; material sources recorded without unrelated connector fan-out) | adapted |
-| `teach` presentation | no Patpat-specific workflow | outside the core; use host or project teaching guidance when requested |
-| `blast-radius` | `patpat-impact` | covered |
-| `architect` | `patpat-architect` | adapted |
-| feature / refactor / prototype | `patpat-change` + bounded-change / behavior-preserving-refactor / prototype | covered |
-| bug fix / TDD | `patpat-debug` + defect / regression-first | adapted |
-| perf / hillclimb / runtime / trace / visual parity | `patpat-perf` + `patpat-verify` + matching playbooks | covered |
-| `interrogate` | `patpat-review` | adapted |
-| `create-verification-skill` / `maintain-verification-skill` | `patpat-verifier`; new verifiers seed a project-local feature map, prove one mapped surface, and maintenance reconciles every mapped feature to source plus live behavior | adapted |
-| `figure-it-out` | `patpat-plan` + bespoke-workflow | adapted |
-| `show-me-your-work` / autonomous run / pause / pickup | `patpat-run` + multi-phase-run / pause-safely / session-takeover | adapted |
-| checked multi-PR plan | `patpat-run` + `skills/patpat-run/scripts/validate_plan.py`; host-neutral units require dependencies, owned files, proof surfaces, exact-head evidence, review gate, and explicit delivery authority | adapted; no fixed model or lane count |
-| babysit / shipping / opening a PR | PR drive + PR babysit + bounded GitHub.com observer + head-SHA-bound provider-neutral watcher + authorized-delivery | adapted; GitHub observation is read-only, host owns bounded wake, land only when named |
-| `reflect` | `patpat-learn` | adapted |
-| `eval` / skill authoring | `patpat-eval` / `patpat-skill` | covered |
-| `setup-pstack` / Codex marketplace packaging | `patpat-setup` + host manifests + `AGENTS.md` + `goiltpatpat/patpat` | adapted; no model-role presets |
-| `automate-me` | no Patpat-specific workflow | outside the core; transcript-mined personal modes are not engineering control protocol |
-| Benny | issue-loop under `patpat-automation`; provider-named design, existing-fix ownership check, draft-only provider-triggered issue-loop PRs, and separate interactive authority for ready delivery | gated; paused until a real integration is enabled |
-| `arena` / `swarm` | `patpat-arena` / `patpat-swarm`; writable work requires isolated worktrees or sandboxes | structural isolation and live Codex serial fallback verified; writable fan-out remains gated |
-| orchestrate / autopilot | autopilot playbook + host-neutral program store; checked plans, dependency frontier, inbox, exact-head ledger, structural worktree behavior, serial fallback, and explicit merge authority | coordination runtime covered; execution remains gated pending live-model evidence |
-| sticky mode / hooks | explicit `/patpat` activation + host hook state; fail closed without a supported host data root | adapted; Grok execution verified, Cursor live runtime pending |
-| pstack opening-a-pr / shipping / overnight land | explicit activation enables default delivery; overnight stops merge-ready; explicit land or merge can merge green | adapted |
-| `unslop` / `bro` / `no-comments` / `technical-writing` / `typescript-best-practices` / `recall` chat mining | not a Patpat workflow | outside the core |
-| `worktree-cleanup` | worktree-cleanup playbook; git worktrees only, simulators remain outside the core | adapted |
-| `never-block-on-the-human` | default commit-and-PR after proof; still pause for deploy, force-push, secrets | adapted |
-| redesign-from-first-principles / migrate-then-delete / build-the-lever | architecture-change, sequence-verifiable-units | adapted |
-| type-system-discipline / comment encoding | shape-before-logic, smallest-safe-change | adapted |
-| Codex `agents/openai.yaml` explicit-only policy | entry skills set `allow_implicit_invocation: false` | covered |
-| `make-bot-ui` | no core workflow; a Grok Bot webhook, sender-key handoff, local server, and Tailscale UI are host-specific integration concerns | outside the core; add as an optional project extension only when requested |
+| Writable arena, swarm, or coordinated fan-out | A content-bound earned-parallelism receipt validated by [`team_shape.py`](../../skills/patpat-run/scripts/team_shape.py), isolated workspaces and resources, a named integration owner, stable verification, and whole-system proof | Run serially. Read-only investigation may fan out across independent evidence sources. |
+| Pull-request readiness verdict | Provider evidence must bind repository, pull request, base, and exact head. Provider restrictions are authoritative lower bounds. | Read-only observation may return unknown or blocked. A watcher `ready` verdict returns a handoff and never grants merge authority. |
+| Provider-triggered issue automation | A named provider, exact write contract, sandbox, canary, explicit enable request, and fresh authority | Stay paused or triage read-only. Provider-triggered pull requests remain draft without separate interactive delivery authority. |
+| Irreversible or high-risk mutation or delivery | Explicit approval for force-push, package publish, production deploy, secret rotation, destructive operations, or risky auth, billing, and permission changes | Pause and report blast radius, rollback, and required proof. |
 
-Packaging is already host-native: Codex marketplace + `.codex-plugin/plugin.json`, Cursor `.cursor-plugin/plugin.json`, Antigravity root `plugin.json`, portable `scripts/install_skills.py`, and allowlisted sticky hooks. Do not copy pstack-for-codex Node/Bun validators, TOML agent profiles, or Benny.
+## Host adapter boundary
 
-## Maintenance rule
+The canonical behavior lives in `skills/`. A host manifest, command wrapper, hook, or reviewer adapter may expose that behavior only within capabilities the host can prove. Installation does not prove prompt-time discovery; discovery does not prove execution; execution does not prove sticky state, mutation, delivery, or live evaluation. Record host claims with the host name, Patpat revision, lifecycle stage, and receipt.
 
-Compare new upstream behavior by invariant. Classify it as covered, adapted, deliberately gated, or outside the core. Add a skill, playbook, principle, agent, or automation only when a concrete decision or failure mode cannot be expressed cleanly through an existing Patpat artifact.
+## Deliberate non-goals
+
+These surfaces are `outside core`. Patpat does not own generic teaching or technical writing, language style catalogs, personas, model presets, chat-history preference mining, generic memory, simulator maintenance, or host-specific bot interfaces and schedulers. Keep them as ordinary agent capabilities or project/host extensions unless a repeated engineering failure demonstrates a Patpat-specific control need.
+
+## Maintenance contract
+
+1. Start from a reproduced decision or failure mode that existing controls cannot express cleanly.
+2. Place the correction at the lowest effective layer: protocol, principle, playbook, skill, deterministic script, or host adapter.
+3. Define the invariant, falsifier, proof surface, freshness rule, and authority boundary before adding an artifact.
+4. Classify availability separately from evidence. Deterministic fixtures are contract evidence, not behavioral agent evidence.
+5. Bind behavioral and host claims to the tested revision. Downgrade stale, missing, or cross-host evidence.
+6. Reject expansion when an existing artifact can express the rule or when complexity exceeds demonstrated value.
+7. Validate map changes with `python3 scripts/validate.py --self-test` and `git diff --check`.
