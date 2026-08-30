@@ -413,7 +413,7 @@ def validate_root(root: Path) -> list[str]:
         "cursor": {
             "name", "displayName", "version", "description", "author", "homepage",
             "repository", "license", "keywords", "category", "tags", "skills",
-            "agents", "hooks",
+            "agents", "hooks", "logo",
         },
         "codex": {
             "name", "version", "description", "author", "homepage", "repository",
@@ -424,6 +424,25 @@ def validate_root(root: Path) -> list[str]:
         unknown = set(manifest) - allowed_manifest_keys[host]
         if unknown:
             errors.append(f"{manifests[host]}: unsupported manifest fields {sorted(unknown)}")
+    cursor_logo = parsed.get("cursor", {}).get("logo")
+    if cursor_logo is not None:
+        cursor_manifest_path = manifests["cursor"]
+        if not isinstance(cursor_logo, str):
+            errors.append(f"{cursor_manifest_path}: logo must be the relative path assets/logo.svg")
+        else:
+            logo_path = Path(cursor_logo)
+            if logo_path.is_absolute() or bool(logo_path.anchor):
+                errors.append(f"{cursor_manifest_path}: logo must not use an absolute path")
+            elif ".." in logo_path.parts:
+                errors.append(f"{cursor_manifest_path}: logo must not use .. or an absolute path")
+            elif cursor_logo != "assets/logo.svg":
+                errors.append(
+                    f"{cursor_manifest_path}: logo must be the relative path assets/logo.svg"
+                )
+            else:
+                logo_file = root / cursor_logo
+                if not logo_file.is_file() or logo_file.is_symlink():
+                    errors.append(f"{cursor_manifest_path}: logo file is missing: {cursor_logo}")
     if parsed.get("antigravity", {}).get("$schema") != "https://antigravity.google/schemas/v1/plugin.json":
         errors.append(f"{manifests['antigravity']}: unexpected schema")
     for host in ("cursor", "codex"):
@@ -868,6 +887,42 @@ def run_self_test(root: Path) -> list[str]:
             encoding="utf-8",
         )
 
+    def add_logo_to_antigravity(fixture: Path) -> None:
+        manifest = fixture / "plugin.json"
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data["logo"] = "assets/logo.svg"
+        manifest.write_text(json.dumps(data), encoding="utf-8")
+
+    def add_logo_to_codex(fixture: Path) -> None:
+        manifest = fixture / ".codex-plugin" / "plugin.json"
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data["logo"] = "assets/logo.svg"
+        manifest.write_text(json.dumps(data), encoding="utf-8")
+
+    def cursor_logo_absolute(fixture: Path) -> None:
+        manifest = fixture / ".cursor-plugin" / "plugin.json"
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data["logo"] = "/tmp/logo.svg"
+        manifest.write_text(json.dumps(data), encoding="utf-8")
+
+    def cursor_logo_parent(fixture: Path) -> None:
+        manifest = fixture / ".cursor-plugin" / "plugin.json"
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data["logo"] = "../logo.svg"
+        manifest.write_text(json.dumps(data), encoding="utf-8")
+
+    def cursor_logo_wrong_relative(fixture: Path) -> None:
+        manifest = fixture / ".cursor-plugin" / "plugin.json"
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data["logo"] = "docs/logo.svg"
+        manifest.write_text(json.dumps(data), encoding="utf-8")
+
+    def cursor_logo_missing_file(fixture: Path) -> None:
+        logo = fixture / "assets" / "logo.svg"
+        if logo.exists() or logo.is_symlink():
+            logo.unlink()
+
+
     cases.extend(
         [
             ("skill-name mismatch", break_name, "name must match folder patpat-inspect"),
@@ -910,6 +965,12 @@ def run_self_test(root: Path) -> list[str]:
             ("read-only boundary drift", remove_read_only_boundary, "canonical read-only mutation boundary"),
             ("mutating proof closure", break_proof_closure, "missing proof closure"),
             ("unclassified skill", remove_skill_policy_target, "Skill policy registry mismatch"),
+            ("Antigravity logo field", add_logo_to_antigravity, "unsupported manifest fields"),
+            ("Codex logo field", add_logo_to_codex, "unsupported manifest fields"),
+            ("Cursor logo absolute path", cursor_logo_absolute, "logo must not use an absolute path"),
+            ("Cursor logo parent path", cursor_logo_parent, "logo must not use .."),
+            ("Cursor logo wrong relative", cursor_logo_wrong_relative, "logo must be the relative path assets/logo.svg"),
+            ("Cursor logo missing file", cursor_logo_missing_file, "logo file is missing"),
         ]
     )
 
