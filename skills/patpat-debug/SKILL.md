@@ -9,11 +9,11 @@ When invoked directly, read the [operating protocol](../patpat-loop/references/o
 
 Read [repository truth](../patpat-loop/principles/repository-truth.md), [proof over proxy](../patpat-loop/principles/proof-over-proxy.md), [fix root causes](../patpat-loop/principles/fix-root-causes.md), [smallest safe change](../patpat-loop/principles/smallest-safe-change.md), and [preserve safety](../patpat-loop/principles/preserve-safety.md). Apply the [defect playbook](../patpat-loop/playbooks/defect.md). When the user requests test-first work or a cheap deterministic regression target exists, apply [regression first](../patpat-loop/playbooks/regression-first.md).
 
-Reproduce before editing. If reproduction is blocked, gather the strongest available evidence and state the limitation. Trace the earliest incorrect state instead of patching the last visible symptom.
+Reproduce before editing when safe and practical. Otherwise trace the contract or code path, or use an isolated non-harmful surrogate, and state that direct runtime proof is unavailable. Trace the earliest incorrect state instead of patching the last visible symptom.
 
 If the user limited the request to diagnosis, stop after proving or bounding the root cause. Recommend the smallest patch without editing.
 
-Change one causal variable at a time and re-run the original reproduction after the patch. Never label an unobserved fix as verified.
+Change one causal variable at a time. Re-run the original reproduction when it remains safe and practical; otherwise run the predeclared non-triggering check and state the missing runtime proof. Never label an unobserved fix as verified.
 
 When the defect is a mismatch against a reference image or migrated UI, apply the [visual equivalence playbook](../patpat-loop/playbooks/visual-equivalence.md) after reproducing the defect. Preserve the pre-edit reference and comparison harness.
 
