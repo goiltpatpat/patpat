@@ -24,6 +24,7 @@ PACKAGE_ENTRIES = (
     "README.md",
     "adapters",
     "agents",
+    "assets",
     "docs",
     "hooks",
     "hooks.json",
