@@ -485,6 +485,13 @@ def evaluate(document: Any, *, evaluated_at: datetime | str | None = None) -> di
         blocked: list[dict[str, str]] = []
         pending: list[dict[str, str]] = []
         missing = sorted(set(required_checks) - set(checks))
+        if not required_checks:
+            blocked.append(
+                _reason(
+                    "required_checks_unproven",
+                    "no provider policy evidence permits an empty required-check set",
+                )
+            )
         if missing:
             preview = ", ".join(missing[:8])
             pending.append(
@@ -515,7 +522,7 @@ def evaluate(document: Any, *, evaluated_at: datetime | str | None = None) -> di
             pending.append(_reason("mergeability_pending", "mergeability is unknown"))
         if review == "changes_requested":
             blocked.append(_reason("changes_requested", "review requests changes"))
-        elif required_review and review != "approved":
+        elif review == "review_required" or (required_review and review != "approved"):
             pending.append(_reason("review_pending", "approval is required"))
 
         for name in required_checks:
@@ -628,7 +635,13 @@ def self_test() -> None:
         policy={"required_checks": [], "allow_no_required_checks": True},
         observation={"checks": []},
     )
-    assert check(explicit_no_checks)["verdict"] == "ready"
+    explicit_no_checks_result = check(explicit_no_checks)
+    if explicit_no_checks_result["verdict"] != "blocked":
+        raise AssertionError(
+            "caller no-check exemption was accepted without provider policy proof: "
+            f"{explicit_no_checks_result['verdict']}"
+        )
+    assert explicit_no_checks_result["reasons"][0]["code"] == "required_checks_unproven"
     contradictory_no_checks = _fixture(policy={"allow_no_required_checks": True})
     assert check(contradictory_no_checks)["verdict"] == "blocked"
 
@@ -698,7 +711,50 @@ def self_test() -> None:
         policy={"required_review": False},
         observation={"review_decision": "changes_requested"},
     )
-    assert check(changes_requested)["verdict"] == "blocked"
+    changes_requested_result = check(changes_requested)
+    assert changes_requested_result["verdict"] == "blocked"
+    assert changes_requested_result["reasons"][0]["code"] == "changes_requested"
+
+    provider_review_required = _fixture(
+        policy={"required_review": False},
+        observation={"review_decision": "review_required"},
+    )
+    provider_review_required_result = check(provider_review_required)
+    if provider_review_required_result["verdict"] != "pending":
+        raise AssertionError(
+            "provider review_required was weakened by caller policy: "
+            f"{provider_review_required_result['verdict']}"
+        )
+    assert provider_review_required_result["reasons"][0]["code"] == "review_pending"
+
+    caller_review_required = _fixture(observation={"review_decision": "not_required"})
+    caller_review_required_result = check(caller_review_required)
+    assert caller_review_required_result["verdict"] == "pending"
+    assert caller_review_required_result["reasons"][0]["code"] == "review_pending"
+
+    approved_without_caller_requirement = _fixture(policy={"required_review": False})
+    assert check(approved_without_caller_requirement)["verdict"] == "ready"
+
+    missing_review_decision = _fixture()
+    del missing_review_decision["observation"]["review_decision"]
+    missing_review_result = check(missing_review_decision)
+    assert missing_review_result["verdict"] == "blocked"
+    assert missing_review_result["reasons"][0]["code"] == "invalid_observation"
+
+    unknown_review_decision = _fixture(observation={"review_decision": "unknown"})
+    unknown_review_result = check(unknown_review_decision)
+    assert unknown_review_result["verdict"] == "blocked"
+    assert unknown_review_result["reasons"][0]["code"] == "invalid_observation"
+
+    draft = _fixture(observation={"draft": True})
+    draft_result = check(draft)
+    assert draft_result["verdict"] == "blocked"
+    assert draft_result["reasons"][0]["code"] == "draft_pull_request"
+
+    conflicting = _fixture(observation={"mergeability": "conflicting"})
+    conflicting_result = check(conflicting)
+    assert conflicting_result["verdict"] == "blocked"
+    assert conflicting_result["reasons"][0]["code"] == "merge_conflict"
 
     missing = _fixture(
         observation={

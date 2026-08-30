@@ -216,7 +216,7 @@ def observation_document(
         "APPROVED": "approved",
         "CHANGES_REQUESTED": "changes_requested",
         "REVIEW_REQUIRED": "review_required",
-        None: "review_required" if required_review else "not_required",
+        None: "review_required",
     }.get(raw_review)
     if review_decision is None:
         raise ObserverError(f"pullRequest.reviewDecision is unsupported: {raw_review!r}")
@@ -416,6 +416,30 @@ def self_test() -> None:
     ready_document = observation_document(ready_fixture, **common)
     assert evaluate(ready_document, evaluated_at=common["observed_at"])["verdict"] == "ready"
 
+    absent_review_fixture = fixture()
+    absent_review_pr = absent_review_fixture["data"]["repository"]["pullRequest"]
+    absent_review_pr["reviewThreads"]["nodes"] = []
+    absent_review_pr["reviewDecision"] = None
+    absent_review_contexts = absent_review_pr["commits"]["nodes"][0]["commit"][
+        "statusCheckRollup"
+    ]["contexts"]["nodes"]
+    absent_review_contexts[1]["state"] = "SUCCESS"
+    absent_review_document = observation_document(
+        absent_review_fixture,
+        **{**common, "required_review": False},
+    )
+    if absent_review_document["observation"]["review_decision"] != "review_required":
+        raise AssertionError(
+            "missing provider review decision was weakened by caller policy: "
+            f"{absent_review_document['observation']['review_decision']}"
+        )
+    absent_review_result = evaluate(
+        absent_review_document,
+        evaluated_at=common["observed_at"],
+    )
+    assert absent_review_result["verdict"] == "pending"
+    assert absent_review_result["reasons"][0]["code"] == "review_pending"
+
     paged = fixture()
     paged["data"]["repository"]["pullRequest"]["reviewThreads"]["pageInfo"]["hasNextPage"] = True
     try:
@@ -479,9 +503,19 @@ def self_test() -> None:
         "required_checks": [],
         "allow_no_required_checks": True,
     }
-    no_check_document = observation_document(ready_fixture, **no_check_common)
+    no_check_fixture = fixture()
+    no_check_pr = no_check_fixture["data"]["repository"]["pullRequest"]
+    no_check_pr["reviewThreads"]["nodes"] = []
+    no_check_pr["commits"]["nodes"][0]["commit"]["statusCheckRollup"] = None
+    no_check_document = observation_document(no_check_fixture, **no_check_common)
     assert no_check_document["policy"]["allow_no_required_checks"] is True
-    assert evaluate(no_check_document, evaluated_at=common["observed_at"])["verdict"] == "ready"
+    no_check_result = evaluate(no_check_document, evaluated_at=common["observed_at"])
+    if no_check_result["verdict"] != "blocked":
+        raise AssertionError(
+            "caller no-check exemption was accepted without provider policy proof: "
+            f"{no_check_result['verdict']}"
+        )
+    assert no_check_result["reasons"][0]["code"] == "required_checks_unproven"
     print("GitHub PR observer self-test passed.")
 
 
