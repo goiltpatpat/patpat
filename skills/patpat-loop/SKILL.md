@@ -7,7 +7,7 @@ description: Run the explicit Patpat evidence-driven engineering loop. Use only 
 
 `/patpat` and `/patpat-loop` are the same entry point. Codex uses `$patpat` or `$patpat-loop`.
 
-Patpat is one system. The [operating protocol](references/operating-protocol.md) is the spine: judgment, safety, git, and evidence. The playbooks and principles are the machinery, informed by pstack jobs, renamed and bounded so they cannot override that spine.
+Patpat is one system. The [operating protocol](references/operating-protocol.md) is the spine: judgment, safety, git, and evidence. Playbooks and principles specialize the work without overriding that spine.
 
 This mode stays on across later turns after explicit invocation. Trusted host hooks may persist it across resume and compaction. Without a host-observed receipt, apply it only for the current session and report `current-turn-only` after a restart. Say `disable /patpat` to opt out. Do not infer activation from a task that merely resembles a playbook.
 

@@ -4,14 +4,14 @@ Read [repository truth](../principles/repository-truth.md), [proof over proxy](.
 
 Use this playbook for "babysit this", "get it green", "watch CI", "address review comments", or "check on PR X". Status-only inspection can stay on [PR drive](pr-drive.md). A request to land or merge is [authorized delivery](authorized-delivery.md), which begins where this playbook ends.
 
-Babysitting never authorizes merge. No Graphite. No `gh pr merge`. No merge-when-ready.
+Babysitting never authorizes merge. Do not invoke `gh pr merge`, a merge queue, or any merge-when-ready mechanism.
 
 1. Declare the mode in the first line, before any poll.
    - `check`: one status pass and a report.
    - `threads-only`: answer review comments; touch nothing else.
    - `drive`: loop until merge-ready, then stop.
    Undeclared defaults to `check`, not `drive`. Small or docs-only PRs stay in `check`.
-2. Work the lowest unmerged PR until it is merge-ready. Do not fix upstack at the cost of the frontier. One babysitter per stack.
+2. Work the earliest unmerged dependency frontier until it is merge-ready. Do not change later dependent pull requests at the cost of that frontier. Assign one babysitter per dependency chain.
 3. Never mutate stack topology. No restack, no force-push, no rewrite of merged history. Fix on the owning branch. If a conflict needs a rebase, name the branch and stop; do not resolve a restack from here.
 4. Order is conflicts, then review threads, then CI. Batch known fixes into one push wave. Trust GitHub's mergeability, not a green check list that can hide a blocking cancelled duplicate.
 5. Classify CI before any retrigger. Infrastructure flake earns one fresh build, never a job retry on the same snapshot. A failure outside the diff is a stale base until `git merge-base --is-ancestor` says otherwise. Only a failure in the diff's own code gets a commit, and only when delivery authority already exists.

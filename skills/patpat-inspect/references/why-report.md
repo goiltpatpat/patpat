@@ -1,6 +1,6 @@
 # Why-report contract
 
-Use this shape for rationale-forensics. Do not omit a section. Do not add a slash skill named `/why`. How-shaped questions use the how-report contract instead.
+Use this shape for rationale forensics. Do not omit a section. Questions about how the current code works use the how-report contract instead.
 
 ## Required sections
 
@@ -14,14 +14,7 @@ Paths, symbols, blame, and focused log. Cite files and commits.
 
 ### Sources Consulted
 
-List every source, including nulls. Required:
-
-- Git (used)
-- GitHub PRs/issues on the target repo (used or null with reason)
-- Slack (skipped: not connected; user has not asked)
-- Notion (skipped: not connected; user has not asked)
-
-No connector calls for skipped sources.
+List every material source used. Record a material but unavailable source with the reason it could not be consulted. Repository code and Git history are required when available; use repository pull requests or issues when they bear on the question. Do not call unrelated external connectors merely to populate this section.
 
 ### Competing hypotheses
 
@@ -33,4 +26,4 @@ The account that survives the code anchors. Evidence before narrative.
 
 ### Gaps
 
-What remains unknown and which skipped sources would have been next if the user had asked.
+What remains unknown and which material evidence could resolve it.

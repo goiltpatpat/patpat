@@ -1,6 +1,6 @@
 # Issue Loop Playbook
 
-This is the Benny job under Patpat's protocol: triage incoming reports, then reproduce confirmed defects with real evidence. It is not a Slack-specific pack and it does not enable itself.
+Triage incoming reports, then reproduce confirmed defects with real evidence. This playbook does not enable itself.
 
 Read [automation design](automation-design.md), [defect](defect.md), [preserve safety](../principles/preserve-safety.md), [idempotent effects](../principles/idempotent-effects.md), and the [operating protocol](../references/operating-protocol.md).
 

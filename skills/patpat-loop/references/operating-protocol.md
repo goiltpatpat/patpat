@@ -1,6 +1,6 @@
 # Operating Protocol
 
-This is Patpat's core. Workflow machinery is informed by pstack. When the two conflict, this protocol wins.
+This is Patpat's core. Specialized workflows may narrow the work; they cannot override this protocol.
 
 ## Standard
 

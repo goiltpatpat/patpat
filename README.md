@@ -18,7 +18,7 @@ Patpat turns an agent host into a disciplined engineering loop: inspect the real
 
 If the evidence is "the agent felt confident," the run is still in progress.
 
-The core is Patpat's operating protocol: judgment, safety, git, and honest evidence. The workflow machinery is informed by [pstack](https://github.com/cursor/plugins/tree/main/pstack). When those conflict, the protocol wins.
+The core is Patpat's operating protocol: judgment, safety, git, and honest evidence. Playbooks may specialize the work; none of them can outrank the protocol.
 
 Use [`/patpat`](skills/patpat/SKILL.md) for non-trivial work. It is the same entry as [`/patpat-loop`](skills/patpat-loop/SKILL.md). Call a focused skill directly when the task is already narrow.
 
@@ -100,14 +100,14 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 
 | Playbook | For |
 | --- | --- |
-| [Investigation](skills/patpat-loop/playbooks/investigation.md) | Read-only how-equivalent: how it works, where it lives, who owns it, which layer. Why-shaped questions stay on rationale-forensics. |
+| [Investigation](skills/patpat-loop/playbooks/investigation.md) | Read-only explanation: how it works, where it lives, who owns it, and which layer. Rationale questions stay on rationale forensics. |
 | [Defect](skills/patpat-loop/playbooks/defect.md) | Reproduce a failure, prove the root cause, and fix it with runtime evidence. |
 | [Regression first](skills/patpat-loop/playbooks/regression-first.md) | A cheap deterministic test exists. Write the failing check, then the fix. |
 | [Performance](skills/patpat-loop/playbooks/performance.md) | A measured slowness against a comparable baseline. |
 | [Metric hillclimb](skills/patpat-loop/playbooks/metric-hillclimb.md) | Sustained improvement of one metric, one accepted win at a time. |
 | [Runtime forensics](skills/patpat-loop/playbooks/runtime-forensics.md) | A live symptom: leak, idle spin, glitch. |
 | [Trace forensics](skills/patpat-loop/playbooks/trace-forensics.md) | A captured profile, trace, or heap snapshot. |
-| [Rationale forensics](skills/patpat-loop/playbooks/rationale-forensics.md) | Why-equivalent: code-anchor first, evidence before narrative. No `/why` slash. Slack and Notion skipped. |
+| [Rationale forensics](skills/patpat-loop/playbooks/rationale-forensics.md) | Explain why code reached its current shape: code anchors first, evidence before narrative. |
 | [Blast radius](skills/patpat-loop/playbooks/blast-radius.md) | What else this change could break, proven rather than asserted. |
 | [Architecture change](skills/patpat-loop/playbooks/architecture-change.md) | Contracts, migrations, or a redesign that must settle before code. |
 | [Bounded change](skills/patpat-loop/playbooks/bounded-change.md) | New or changed behavior from a named data shape. |
@@ -238,12 +238,6 @@ python3 scripts/smoke_grok_plugin.py
 `eval_why.py` requires a source checkout with Git history; do not use it as an installed-artifact smoke test.
 
 </details>
-
-## Design lineage
-
-Patpat is an independent system. Its router and verification discipline are informed by [Lauren Tan's pstack](https://github.com/cursor/plugins/tree/main/pstack). Its cross-host protocol, delivery gates, durable state, and safety boundaries are its own. It does not take pstack's voice, model-role presets, Graphite merge-when-ready, persona skills, or "never block on the human" for delivery.
-
-Patpat borrows the pressure test, not the costume.
 
 ## Security and contributions
 

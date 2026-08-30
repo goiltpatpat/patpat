@@ -9,11 +9,11 @@ When invoked directly, read the [operating protocol](../patpat-loop/references/o
 
 Read [repository truth](../patpat-loop/principles/repository-truth.md) and apply the [investigation playbook](../patpat-loop/playbooks/investigation.md). Report with the [how-report contract](references/how-report.md).
 
-This skill owns the how-equivalent: how it works, where it lives, who owns it, which layer it occupies, and critique after that explanation. There is no `/how` slash skill. Do not rewrite [rationale-forensics](../patpat-loop/playbooks/rationale-forensics.md); why-shaped questions still go there.
+This skill explains how repository behavior works, where it lives, who owns it, which layer it occupies, and any critique that follows that explanation. Questions about why the code reached its current shape go to [rationale forensics](../patpat-loop/playbooks/rationale-forensics.md).
 
 For a live resource symptom, apply [runtime forensics](../patpat-loop/playbooks/runtime-forensics.md) and capture passively. For a supplied trace, profile, spindump, or heap snapshot, apply [trace forensics](../patpat-loop/playbooks/trace-forensics.md). Do not hot-patch, inject, or alter a live process inside this read-only workflow.
 
-When the question asks why code or a contract reached its current shape, apply [rationale forensics](../patpat-loop/playbooks/rationale-forensics.md) and report with the [why-report contract](references/why-report.md). That playbook is the why-equivalent: code-anchor first, evidence before narrative, competing hypotheses, and Sources Consulted with Slack and Notion recorded as skipped. There is no `/why` slash skill. Do not call Slack or Notion connectors.
+When the question asks why code or a contract reached its current shape, apply [rationale forensics](../patpat-loop/playbooks/rationale-forensics.md) and report with the [why-report contract](references/why-report.md): code anchors first, evidence before narrative, competing hypotheses, and an honest account of material sources used or unavailable. Keep rationale questions in this skill; do not create a separate `/why` skill. Do not call unrelated external connectors to fill the report.
 
 Keep the task read-only. Inspect version-control state first when available. Load only the repository instructions, continuity files, code paths, tests, configuration, logs, and runtime state needed to answer the question.
 

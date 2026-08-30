@@ -1,6 +1,6 @@
 # Default Delivery Playbook
 
-Invoked at the end of mutating work after verify and review pass when the current request explicitly activated `/patpat`, `/patpat-loop`, `$patpat`, or `$patpat-loop`, a trusted active-session receipt proves that earlier explicit activation, or the user explicitly requested the named commit, push, or pull-request action. This is the pstack opening-a-PR job, bounded by Patpat's authority and pause gates.
+Invoke this at the end of mutating work after verify and review pass when the current request explicitly activated `/patpat`, `/patpat-loop`, `$patpat`, or `$patpat-loop`, a trusted active-session receipt proves that earlier explicit activation, or the user explicitly requested the named commit, push, or pull-request action. Patpat's authority and pause gates still apply.
 
 Read [preserve safety](../principles/preserve-safety.md), [proof over proxy](../principles/proof-over-proxy.md), and the [operating protocol](../references/operating-protocol.md).
 

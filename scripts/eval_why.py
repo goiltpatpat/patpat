@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Behavioral eval for the rationale-forensics why-equivalent. No git writes. No connectors."""
+"""Deterministic contract eval for rationale forensics. No Git writes or provider calls."""
 
 from __future__ import annotations
 
@@ -28,14 +28,6 @@ SECTIONS = (
     "Supported rationale",
     "Gaps",
 )
-FORBIDDEN = (
-    "setup-pstack",
-    "make-bot-ui",
-    "never-block-on-the-human",
-    "never-block-on-human",
-    "Graphite",
-    "unslop-as-skill",
-)
 WHY_PROMPT = "Why does dry_run_loop.ship_plan require explicit land/merge?"
 HOW_NEIGHBOR = "how does routing work?"
 
@@ -54,38 +46,26 @@ def assert_playbook_contract() -> None:
     contract = _text(CONTRACT)
     blob = "\n".join((playbook, skill, contract))
     for needle in (
-        "why-equivalent",
         "code-anchor first",
         "Evidence before narrative",
         "Sources Consulted",
         "competing hypotheses",
-        "Slack is skipped",
-        "Notion is skipped",
+        "material source",
+        "unavailable",
         "confirmed",
         "inferred",
         "unknown",
-        "There is no `/why` slash skill",
     ):
         if needle.lower() not in blob.lower() and needle not in blob:
-            # allow mixed case on skip lines
             if needle not in playbook and needle not in skill and needle not in contract:
                 raise AssertionError(f"missing required phrase {needle!r}")
-    if "Slack is skipped" not in playbook and "Slack is skipped" not in contract:
-        if "Slack" not in playbook or "skipped" not in playbook:
-            raise AssertionError("playbook must name Slack as skipped")
-    if "Notion is skipped" not in playbook and "Notion is skipped" not in contract:
-        if "Notion" not in playbook or "skipped" not in playbook:
-            raise AssertionError("playbook must name Notion as skipped")
     for heading in SECTIONS:
         if f"### {heading}" not in contract:
             raise AssertionError(f"why-report missing ### {heading}")
     if (ROOT / "skills" / "why").exists():
-        raise AssertionError("skills/why must not exist")
+        raise AssertionError("rationale questions must remain in patpat-inspect")
     if re.search(r"(?m)^# /why\b", blob):
-        raise AssertionError("introduced a /why skill")
-    for needle in FORBIDDEN:
-        if needle in blob:
-            raise AssertionError(f"forbidden token {needle!r} in why slice")
+        raise AssertionError("introduced a separate /why skill")
     if "how-report.md" not in _text(HOW_CONTRACT) and not HOW_CONTRACT.exists():
         raise AssertionError("how-report contract missing; C neighbor must remain")
 
@@ -110,9 +90,11 @@ def why_ship_plan_report(anchors: dict[str, str]) -> str:
     blame = anchors["blame"]
     focused = anchors["focused"]
     log = anchors["log"]
-    pr5 = "PR #5" if "23ff30c" in focused or "never auto-merge" in log.lower() or "23ff30c" in log else "in-repo PR unnamed"
+    change_ref = "an unnamed Git change"
+    if "23ff30c" in focused or "never auto-merge" in log.lower() or "23ff30c" in log:
+        change_ref = "Git commit `23ff30c`"
     if "23ff30c" in focused or "23ff30c" in log or "23ff30c" in blame:
-        pr5 = "PR #5 (23ff30c feat(loop): port pause/pr-babysit/worktree playbooks and never auto-merge)"
+        change_ref = "Git commit `23ff30c`"
     return f"""### Question
 {WHY_PROMPT}
 Current behavior: `ship_plan()` returns `merge` only when `explicit_merge` is true and CI is green; overnight/`continuation` drives merge-ready, not merge.
@@ -126,15 +108,13 @@ Current behavior: `ship_plan()` returns `merge` only when `explicit_merge` is tr
 {blame}
 - Recent file log:
 {log}
-- In-repo PR/issue: {pr5}
+- Provider record: not independently consulted; {change_ref}
 
 ### Sources Consulted
 - Git: used (blame, focused log, file log on `scripts/dry_run_loop.py`)
-- GitHub PRs/issues on the target repo: used (commit `23ff30c` / {pr5}; no extra connector)
-- Slack: skipped (not connected; user has not asked)
-- Notion: skipped (not connected; user has not asked)
+- Repository provider: unavailable in this fixture (no provider evidence receipt supplied; Git history is not provider evidence)
 
-Connector calls: none
+External provider calls: none
 
 ### Competing hypotheses
 1. [confirmed] `explicit_merge` was added so land/merge language is the only merge authority. Evidence: `23ff30c` introduced `explicit_merge` and mapped `continuation` to merge-ready, not merge. Live code: `if explicit_merge:` can return `merge`; `if continuation:` cannot.
@@ -142,10 +122,10 @@ Connector calls: none
 3. [unknown] Whether an unpublished local packaging tree intended a different merge rule. Out of scope; not read.
 
 ### Supported rationale
-`ship_plan` requires explicit land/merge because PAT-002 A+B (`23ff30c`, {pr5}) split merge authority from overnight continuation. Evidence before narrative: the live `if explicit_merge:` / `if continuation:` branches, blame, and focused log agree. A how-shaped neighbor (`{HOW_NEIGHBOR}`) stays on investigation / how-report (C), not this playbook.
+`ship_plan` requires explicit land/merge because {change_ref} split merge authority from overnight continuation. Evidence before narrative: the live `if explicit_merge:` / `if continuation:` branches, blame, and focused log agree. A how-shaped neighbor (`{HOW_NEIGHBOR}`) stays on investigation / how-report (C), not this playbook.
 
 ### Gaps
-Slack and Notion were not consulted. No connector calls. The dirty Desktop worktree was not read.
+The repository-provider record was not independently consulted, so this report does not claim provider evidence. The dirty Desktop worktree was not read.
 """
 
 
@@ -174,9 +154,9 @@ def run_self_test() -> None:
             raise AssertionError(f"fixture missing {heading}")
     for needle in (
         "scripts/dry_run_loop.py",
-        "Slack: skipped",
-        "Notion: skipped",
-        "Connector calls: none",
+        "Git: used",
+        "Repository provider: unavailable",
+        "External provider calls: none",
         "[confirmed]",
         "[inferred]",
         "[unknown]",
@@ -184,6 +164,8 @@ def run_self_test() -> None:
     ):
         if needle not in report:
             raise AssertionError(f"fixture missing {needle!r}")
+    if "Repository provider: used" in report or "PR #" in report:
+        raise AssertionError("fixture must not promote Git references into provider evidence")
     if "23ff30c" not in report and "explicit_merge" not in anchors["focused"]:
         raise AssertionError("fixture missing live git citation")
     print("Patpat why eval self-test passed.")
@@ -197,12 +179,10 @@ def run_self_test() -> None:
     print("- reject /patpat babysit -> pr-babysit (A+B untouched)")
     print("- reject /patpat prune abandoned worktrees -> worktree-cleanup (A+B untouched)")
     print("- overnight continuation -> merge-ready not merge")
-    print("== skip map ==")
-    print("Slack: skipped (not connected; user has not asked)")
-    print("Notion: skipped (not connected; user has not asked)")
-    print("Connector calls: none")
+    print("== source ledger ==")
     print("Git: used")
-    print("GitHub PRs/issues on target repo: used (from git log/blame; no connector call)")
+    print("Repository provider: unavailable (no provider evidence receipt supplied)")
+    print("External provider calls: none")
 
 
 def main() -> int:
