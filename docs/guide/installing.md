@@ -2,6 +2,8 @@
 
 Patpat keeps one canonical `skills/` tree and thin host adapters. Select one installation route; do not combine native and copied installations in the same host scope.
 
+Patpat's scripts and hooks require Python 3.11 or newer.
+
 Agents should follow [`AGENTS.md`](../../AGENTS.md). The published source is `https://github.com/goiltpatpat/patpat`. The Codex plugin id is `patpat@patpat`.
 
 Stage a working tree that contains Memory Bank or other ignored files before native Codex or Antigravity install. A clean clone of the published repository does not need staging.

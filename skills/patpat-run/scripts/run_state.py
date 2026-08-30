@@ -830,16 +830,26 @@ def checkpoint(root: Path, run_id: str) -> Path:
 def status(root: Path, run_id: str) -> dict[str, Any]:
     state = load_state(root, run_id)
     snapshot = current_snapshot(root)
+    verification = state["verification"]
+    review = state["review"]
     return {
         "store": str(run_directory(root, run_id)),
         "run_id": run_id,
         "objective": state["objective"],
         "node": state["node"],
         "epoch": state["epoch"],
+        "declared_authorities": state["authorities"],
+        "declared_prohibitions": state["prohibitions"],
         "current_snapshot": snapshot,
-        "verification_stale": bool(state["verification"]) and not receipt_is_fresh(state["verification"], state, snapshot, "verified"),
-        "review_stale": bool(state["review"]) and not receipt_is_fresh(
-            state["review"], state, snapshot, "pass", independent=True
+        "verification_present": verification is not None,
+        "verification_verdict": verification.get("verdict") if isinstance(verification, dict) else None,
+        "verification_actor": verification.get("actor") if isinstance(verification, dict) else None,
+        "verification_stale": verification is not None and not receipt_is_fresh(verification, state, snapshot, "verified"),
+        "review_present": review is not None,
+        "review_verdict": review.get("verdict") if isinstance(review, dict) else None,
+        "review_actor": review.get("actor") if isinstance(review, dict) else None,
+        "review_stale": review is not None and not receipt_is_fresh(
+            review, state, snapshot, "pass", independent=True
         ),
         "errors": validation_errors(root, run_id),
     }
@@ -1048,6 +1058,14 @@ def run_self_test() -> None:
         assert status(root, "fresh-admission")["node"] == "REPORT"
 
         initialize(root, "main-run", "Prove state transitions", "integration-owner", ["open-pr"], ["deploy"], ["source.txt"], [])
+        initial_status = status(root, "main-run")
+        if (
+            initial_status["declared_authorities"] != ["open-pr"]
+            or initial_status["declared_prohibitions"] != ["deploy"]
+        ):
+            raise AssertionError("status omitted declared authority boundaries")
+        if initial_status["verification_present"] or initial_status["review_present"]:
+            raise AssertionError("status reported absent evidence as present")
         if os.name != "nt":
             assert run_directory(root, "main-run").stat().st_mode & 0o777 == 0o700
             assert state_path(root, "main-run").stat().st_mode & 0o777 == 0o600
@@ -1085,6 +1103,13 @@ def run_self_test() -> None:
             "verify the retained state",
         )
         record_receipt(root, "main-run", "verification", "Behavior observed", verification_receipt, "integration-owner", "verified")
+        verified_status = status(root, "main-run")
+        if (
+            not verified_status["verification_present"]
+            or verified_status["verification_verdict"] != "verified"
+            or verified_status["verification_actor"] != "integration-owner"
+        ):
+            raise AssertionError("status omitted verification evidence identity")
         transition(root, "main-run", "REVIEW")
         try:
             record_receipt(root, "main-run", "review", "Self review", self_review_receipt, "integration-owner", "pass")
@@ -1099,6 +1124,13 @@ def run_self_test() -> None:
         else:
             raise AssertionError("whitespace reviewer alias bypassed independence")
         record_receipt(root, "main-run", "review", "Independent review passed", review_receipt, "reviewer", "pass")
+        reviewed_status = status(root, "main-run")
+        if (
+            not reviewed_status["review_present"]
+            or reviewed_status["review_verdict"] != "pass"
+            or reviewed_status["review_actor"] != "reviewer"
+        ):
+            raise AssertionError("status omitted independent review identity")
         transition(root, "main-run", "LEARN")
         transition(root, "main-run", "VERIFY")
         try:
@@ -1154,7 +1186,7 @@ def run_self_test() -> None:
         tampered_receipt = load_state(root, "main-run")
         tampered_receipt["review"]["receipt"] = "artifact:bogus"
         atomic_write_json(main_state_path, tampered_receipt)
-        if not validation_errors(root, "main-run"):
+        if not validation_errors(root, "main-run") or not status(root, "main-run")["review_stale"]:
             raise AssertionError("receipt URI diverged from its content binding")
         atomic_write(main_state_path, untampered_main)
         tampered_reviewer = load_state(root, "main-run")
@@ -1168,6 +1200,20 @@ def run_self_test() -> None:
         atomic_write_json(main_state_path, tampered_reviewer)
         if not validation_errors(root, "main-run"):
             raise AssertionError("tampered verifier self-review was accepted")
+        atomic_write(main_state_path, untampered_main)
+
+        malformed_evidence = load_state(root, "main-run")
+        malformed_evidence["verification"] = {}
+        malformed_evidence["review"] = None
+        atomic_write_json(main_state_path, malformed_evidence)
+        malformed_status = status(root, "main-run")
+        if not (
+            malformed_status["verification_present"]
+            and malformed_status["verification_stale"]
+            and not malformed_status["review_present"]
+            and not malformed_status["review_stale"]
+        ):
+            raise AssertionError("malformed present evidence was not reported stale")
         atomic_write(main_state_path, untampered_main)
 
         (root / "source.txt").write_text("dirty\n", encoding="utf-8")

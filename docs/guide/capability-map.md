@@ -33,7 +33,8 @@ Compare pstack jobs to Patpat artifacts. Missing filenames are not gaps when the
 | pstack job | Patpat home | Class |
 | --- | --- | --- |
 | `poteto-mode` routing + playbooks | `patpat-loop` + playbooks | adapted |
-| `how` / `why` / `teach` investigation | `patpat-inspect` + investigation (how/placement/ownership/layering/critique deepened) / rationale-forensics (why deepened; material sources recorded without unrelated connector fan-out) | adapted |
+| `how` / `why` investigation | `patpat-inspect` + investigation (how/placement/ownership/layering/critique deepened) / rationale-forensics (why deepened; material sources recorded without unrelated connector fan-out) | adapted |
+| `teach` presentation | no Patpat-specific workflow | outside the core; use host or project teaching guidance when requested |
 | `blast-radius` | `patpat-impact` | covered |
 | `architect` | `patpat-architect` | adapted |
 | feature / refactor / prototype | `patpat-change` + bounded-change / behavior-preserving-refactor / prototype | covered |
@@ -48,7 +49,8 @@ Compare pstack jobs to Patpat artifacts. Missing filenames are not gaps when the
 | `reflect` | `patpat-learn` | adapted |
 | `eval` / skill authoring | `patpat-eval` / `patpat-skill` | covered |
 | `setup-pstack` / Codex marketplace packaging | `patpat-setup` + host manifests + `AGENTS.md` + `goiltpatpat/patpat` | adapted; no model-role presets |
-| `automate-me` / Benny | issue-loop under `patpat-automation`; provider-named design, existing-fix ownership check, draft-only provider-triggered issue-loop PRs, and separate interactive authority for ready delivery | gated; paused until a real integration is enabled |
+| `automate-me` | no Patpat-specific workflow | outside the core; transcript-mined personal modes are not engineering control protocol |
+| Benny | issue-loop under `patpat-automation`; provider-named design, existing-fix ownership check, draft-only provider-triggered issue-loop PRs, and separate interactive authority for ready delivery | gated; paused until a real integration is enabled |
 | `arena` / `swarm` | `patpat-arena` / `patpat-swarm`; writable work requires isolated worktrees or sandboxes | structural isolation and live Codex serial fallback verified; writable fan-out remains gated |
 | orchestrate / autopilot | autopilot playbook + host-neutral program store; checked plans, dependency frontier, inbox, exact-head ledger, structural worktree behavior, serial fallback, and explicit merge authority | coordination runtime covered; execution remains gated pending live-model evidence |
 | sticky mode / hooks | explicit `/patpat` activation + host hook state; fail closed without a supported host data root | adapted; Grok execution verified, Cursor live runtime pending |

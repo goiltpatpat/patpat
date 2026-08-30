@@ -15,7 +15,15 @@ EXPLICIT_MERGE = re.compile(
     r"(?:^|\s)(?:land|merge)(?:\s+(?:this|it|the\s+(?:pr|pull request|stack)|pr\s*#?\d+))?(?=$|[.!?])",
     re.IGNORECASE,
 )
-MERGE_DENIAL = re.compile(r"(?:do\s+not|don't|never)\s+(?:land|merge)", re.IGNORECASE)
+MERGE_DENIAL = re.compile(
+    r"(?:do\s+not|don't|dont|never|not|no|without|avoid(?:ing)?)\b"
+    r"[^.!?;\n]*\b(?:land|merge)\b",
+    re.IGNORECASE,
+)
+DISABLE_MODE = re.compile(
+    r"^\s*(?:disable\s+(?:/|\$)?patpat(?:-loop)?|opt\s+out(?:\s+of)?\s+patpat(?:-loop)?)\s*[.!?]?\s*$",
+    re.IGNORECASE,
+)
 
 
 def load_hook():
@@ -29,7 +37,7 @@ def load_hook():
 
 def route(prompt: str) -> str:
     text = prompt.lower()
-    if "disable" in text or "opt out" in text:
+    if DISABLE_MODE.fullmatch(prompt):
         return "disable"
     if "issue-loop" in text or "triage github issues" in text or "benny" in text:
         return "issue-loop"
@@ -119,8 +127,6 @@ def fan_out(*, kind: str, worktree_or_sandbox: bool, shared_worktree: bool, read
         return "serial"
     if read_only and kind == "swarm":
         return "parallel-readonly"
-    if worktree_or_sandbox and not shared_worktree:
-        return "parallel"
     return "serial-fallback"
 
 
@@ -206,7 +212,10 @@ def run_self_test() -> None:
         "/patpat merge this": "ship",
         "do not merge; keep the work local": "loop",
         "make this merge-ready without landing": "loop",
+        "/patpat fix settings when users disable alerts": "debug",
+        "/patpat do not disable the safety gate": "loop",
         "disable /patpat": "disable",
+        "opt out of patpat": "disable",
     }
     for prompt, expected in cases.items():
         got = route(prompt)
@@ -251,11 +260,16 @@ def run_self_test() -> None:
     assert explicit_merge_intent("work overnight") is False
     assert explicit_merge_intent("don't stop until merge-ready") is False
     assert explicit_merge_intent("do not merge") is False
+    assert explicit_merge_intent("don't ever merge") is False
+    assert explicit_merge_intent("never automatically merge") is False
+    assert explicit_merge_intent("do not under any circumstances merge") is False
+    assert explicit_merge_intent("never, ever merge") is False
+    assert explicit_merge_intent("continue without merge") is False
     assert explicit_merge_intent("ship it") is False
     assert continuation_intent("work overnight") is True
     assert continuation_intent("merge this") is False
 
-    assert fan_out(kind="arena", worktree_or_sandbox=True, shared_worktree=False, read_only=False) == "parallel"
+    assert fan_out(kind="arena", worktree_or_sandbox=True, shared_worktree=False, read_only=False) == "serial-fallback"
     assert fan_out(kind="arena", worktree_or_sandbox=False, shared_worktree=True, read_only=False) == "serial-fallback"
     assert fan_out(kind="arena", worktree_or_sandbox=True, shared_worktree=True, read_only=False) == "serial-fallback"
     assert fan_out(kind="swarm", worktree_or_sandbox=False, shared_worktree=True, read_only=True) == "parallel-readonly"
