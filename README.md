@@ -3,7 +3,7 @@
 [![Validate](https://github.com/goiltpatpat/patpat/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/goiltpatpat/patpat/actions/workflows/validate.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2f6f5f.svg)](LICENSE)
 
-Engineering skills for work that must be proven.
+Engineering skills for code that must survive contact with reality.
 
 [Guide](docs/guide/README.md) · [Install and update](docs/guide/installing.md) · [Capability map](docs/guide/capability-map.md) · [Security](https://github.com/goiltpatpat/patpat/security/policy)
 
@@ -12,9 +12,11 @@ Patpat easter egg: if an agent says "trust me", ask for a receipt.
 If it brings a receipt for the receipt, it has entered management.
 -->
 
-Agents can generate code faster than teams can review it. Throughput without evidence is not a goal. If you want to go fast, make a smaller change and prove it.
+Agents can produce a heroic amount of plausible code before lunch. The team still has to prove it.
 
 Patpat turns an agent host into a disciplined engineering loop: inspect the real system, name the proof before editing, change the smallest safe surface, and verify the result where the user would see it.
+
+If the evidence is "the agent felt confident," the run is still in progress.
 
 The core is Patpat's operating protocol: judgment, safety, git, and honest evidence. The workflow machinery is informed by [pstack](https://github.com/cursor/plugins/tree/main/pstack). When those conflict, the protocol wins.
 
@@ -32,6 +34,9 @@ codex plugin add patpat@patpat
 ```
 
 Start a new task, then invoke `$patpat`. Package installation and prompt-time discovery are separate checks.
+
+<details>
+<summary>Other hosts and portable installation</summary>
 
 Grok CLI, from this repository:
 
@@ -61,6 +66,8 @@ A working tree that still contains Memory Bank or other ignored files must be st
 
 Update through the owner of the installed state: Codex marketplace upgrade plus remove/add, `grok plugin update patpat`, pull/validate/install on the same Antigravity clone, or the transactional portable updater. Development symlinks follow source content and use the updater when the skill catalog changes. Cursor native update remains unverified. See the [update matrix](docs/guide/installing.md#update).
 
+</details>
+
 ## Get started
 
 Two steps:
@@ -76,17 +83,20 @@ That is enough. Explicit activation opts the session into verified auto ship: co
 
 ## Usage
 
-[`/patpat`](skills/patpat/SKILL.md) is the default entry point. It reads the request, copies a playbook, and routes through inspection, proof, implementation, verification, and review. Trusted host hooks persist the mode across resume. Without a hook receipt the mode still applies for the rest of the current session.
+[`/patpat`](skills/patpat/SKILL.md) is the default entry point. It reads the request, tracks the matched playbook, and routes through inspection, proof, implementation, verification, and review. Trusted host hooks persist the mode across resume. Without a hook receipt the mode still applies for the rest of the current session.
 
 ```text
 FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY -> REVIEW -> LEARN? -> REPORT
 ```
 
-A proof contract names the claim, authoritative surface, action, expected observation, and cleanup. A build supports a claim. It does not prove user-visible behavior.
+A proof contract names the claim, authoritative surface, action, expected observation, and cleanup. A build supports a claim. It does not prove user-visible behavior. Green is a signal, not an alibi.
 
 Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`. Portable hosts use `Use patpat to ...`.
 
 ### Playbooks
+
+<details>
+<summary>Browse all playbooks</summary>
 
 | Playbook | For |
 | --- | --- |
@@ -114,7 +124,7 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 | [Arena](skills/patpat-loop/playbooks/arena.md) | Competing isolated attempts at one brief, then a verified synthesis. |
 | [Swarm](skills/patpat-loop/playbooks/swarm.md) | Parallel slices or races, one aggregated report. |
 | [Autopilot](skills/patpat-loop/playbooks/autopilot.md) | A verified queue or stack. Merge only when named. |
-| [Issue loop](skills/patpat-loop/playbooks/issue-loop.md) | Named-provider triage and reproduce. Stays paused until enabled. |
+| [Issue loop](skills/patpat-loop/playbooks/issue-loop.md) | Named-provider triage and reproduce. Avoids competing fixes, stays paused until enabled, and defaults provider-triggered issue-loop PRs to draft. |
 | [Default delivery](skills/patpat-loop/playbooks/default-delivery.md) | After explicit activation and proof, commit and open or update one ready PR unless blocked or opted out. |
 | [Authorized delivery](skills/patpat-loop/playbooks/authorized-delivery.md) | Merge a green verified PR only on explicit land or merge; pause for deploy. |
 | [Independent review](skills/patpat-loop/playbooks/independent-review.md) | Challenge an implementation and its proof without editing. |
@@ -124,9 +134,14 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 | [Learning](skills/patpat-loop/playbooks/learning.md) | Encode a recurring failure as the smallest durable constraint. |
 | [Automation design](skills/patpat-loop/playbooks/automation-design.md) | Design fail-closed automation for a named integration. |
 
+</details>
+
 ## Skills
 
 `patpat-loop` runs most of these when a step needs them. Reach for one directly when the task is already that operation.
+
+<details>
+<summary>Browse all skills</summary>
 
 | Skill | Use it when |
 | --- | --- |
@@ -152,6 +167,8 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 | [`patpat-learn`](skills/patpat-learn/SKILL.md) | Encode a recurring failure. |
 | [`patpat-automation`](skills/patpat-automation/SKILL.md) | Design fail-closed automation. Do not enable it yet. |
 | [`patpat-engineer`](skills/patpat-engineer/SKILL.md) | Execute one isolated slice for a named owner. |
+
+</details>
 
 Principles live under [`skills/patpat-loop/principles/`](skills/patpat-loop/principles/). They are references, not discoverable skills. The [capability map](docs/guide/capability-map.md) records what is covered, gated, or left outside the core.
 
@@ -181,18 +198,21 @@ The program store adds a dependency frontier, inbox, explicit dispatch and deliv
 
 `team_shape.py` recommends iterative, distributed, or adversarial work from an earned-parallelism gate receipt, explicit evidence, observed capacity, and a caller-owned worker budget. It never grants authority. Coordination uses compact receipts and typed handoff cards rather than replaying full agent transcripts.
 
-## Not shipped
+## Where Patpat stops
 
-These stay bounded by the operating protocol:
+Patpat does not turn capability into authority. These boundaries are deliberate:
 
 - Writable arena, swarm, and autopilot require separate worktrees or host-enforced sandboxes and fall back to serial work
-- Issue-loop stays paused until a named provider, sandbox, canary, and enable request exist
+- Issue-loop stays paused until a named provider, sandbox, canary, and enable request exist; provider-triggered PRs stay draft without fresh interactive authority
 - Merge of a red CI, package publish, and production deploy
 - Model-selection presets and persona skills
 
 After verify and review, explicitly activated `/patpat` commits and opens or updates a ready PR. Overnight work stops merge-ready. Only explicit land or merge language can merge when checks are green. Patpat still pauses for production deploy, force-push, secret rotation, and risky auth or billing changes.
 
 ## Validate
+
+<details>
+<summary>Full validation suite</summary>
 
 ```bash
 python3 scripts/validate.py --self-test
@@ -217,9 +237,13 @@ python3 scripts/smoke_grok_plugin.py
 
 `eval_why.py` requires a source checkout with Git history; do not use it as an installed-artifact smoke test.
 
+</details>
+
 ## Design lineage
 
-Patpat is an independent system. Its core is the [operating protocol](skills/patpat-loop/references/operating-protocol.md). Its router, playbooks, sticky `/patpat` mode, and named ship path are informed by [Lauren Tan's pstack](https://github.com/cursor/plugins/tree/main/pstack). It does not take pstack's voice, model-role presets, Graphite merge-when-ready, persona skills, or "never block on the human" for delivery.
+Patpat is an independent system. Its router and verification discipline are informed by [Lauren Tan's pstack](https://github.com/cursor/plugins/tree/main/pstack). Its cross-host protocol, delivery gates, durable state, and safety boundaries are its own. It does not take pstack's voice, model-role presets, Graphite merge-when-ready, persona skills, or "never block on the human" for delivery.
+
+Patpat borrows the pressure test, not the costume.
 
 ## Security and contributions
 

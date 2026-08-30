@@ -2,7 +2,7 @@
 
 This map tracks engineering behavior, not upstream file names or counts. Patpat's core is its operating protocol. Workflow jobs are informed by [pstack](https://github.com/cursor/plugins/tree/main/pstack) and its [Codex adaptation](https://github.com/Aqua-123/pstack-for-codex), then bounded so they cannot override that protocol.
 
-Upstream pstack was rechecked at repository head `68836dd` and pstack tree `950b9023` (2026-08-29). That tree matches the prior `397c8660` review snapshot. Compare later tree changes by invariant before changing Patpat.
+Upstream pstack was rechecked at repository head `68836dd` and pstack tree `950b9023` (2026-08-30). The tree is unchanged from the prior review. Compare later tree changes by invariant before changing Patpat.
 
 ## Covered
 
@@ -13,7 +13,7 @@ Upstream pstack was rechecked at repository head `68836dd` and pstack tree `950b
 - Direct verification, project-specific verifier maintenance, independent review, and structural learning
 - Durable execution, cold-start takeover, safe pause and resume, bounded blockers, and content-bound receipts
 - Explicit Patpat activation opts into commit-and-PR after proof; only explicit land or merge language authorizes merge
-- Fail-closed automation design with idempotency, compensation, bounded retries, and a kill switch
+- Fail-closed automation design with idempotency, compensation or an explicit irreversible boundary, bounded retries, and a kill switch
 - Native or portable setup across supported agent hosts
 
 ## Deliberately gated
@@ -48,7 +48,7 @@ Compare pstack jobs to Patpat artifacts. Missing filenames are not gaps when the
 | `reflect` | `patpat-learn` | adapted |
 | `eval` / skill authoring | `patpat-eval` / `patpat-skill` | covered |
 | `setup-pstack` / Codex marketplace packaging | `patpat-setup` + host manifests + `AGENTS.md` + `goiltpatpat/patpat` | adapted; no model-role presets |
-| `automate-me` / Benny | issue-loop under `patpat-automation`; provider-named design, paused until a real integration is enabled | gated |
+| `automate-me` / Benny | issue-loop under `patpat-automation`; provider-named design, existing-fix ownership check, draft-only provider-triggered issue-loop PRs, and separate interactive authority for ready delivery | gated; paused until a real integration is enabled |
 | `arena` / `swarm` | `patpat-arena` / `patpat-swarm`; writable work requires isolated worktrees or sandboxes | structural isolation and live Codex serial fallback verified; writable fan-out remains gated |
 | orchestrate / autopilot | autopilot playbook + host-neutral program store; checked plans, dependency frontier, inbox, exact-head ledger, structural worktree behavior, serial fallback, and explicit merge authority | coordination runtime covered; execution remains gated pending live-model evidence |
 | sticky mode / hooks | explicit `/patpat` activation + host hook state; fail closed without a supported host data root | adapted; Grok execution verified, Cursor live runtime pending |

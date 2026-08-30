@@ -17,7 +17,7 @@ Open a todo list. The first items are:
 
 1. Read the [operating protocol](references/operating-protocol.md) in full.
 2. Read the principle index below.
-3. Match a playbook, open it, and copy its steps into the todo list before any task-specific work. A skipped step stays listed with `skip: <reason>`.
+3. Match a playbook, open it, and track a compact checklist keyed to its numbered steps before any task-specific work. A skipped step stays listed with `skip: <reason>`.
 
 Do not apply Patpat outside software engineering or repository operations.
 

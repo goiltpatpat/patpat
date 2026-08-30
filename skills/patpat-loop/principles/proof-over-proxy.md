@@ -11,4 +11,6 @@ Define the claim before choosing a check.
 
 Classify the oracle as repository, runtime, independent reference, or lockstep. Claims of runtime equivalence require an independent reference or lockstep comparison; a build, local implementation, or same-context reviewer cannot prove equivalence.
 
+Bind durable evidence to the exact revision or snapshot it checked, the relevant inputs and environment, and the oracle used. A material change to any binding makes the evidence stale; recollect it instead of carrying a green result forward.
+
 Do not treat compilation, test success, file timestamps, cached output, or an agent summary as proof of a different claim.

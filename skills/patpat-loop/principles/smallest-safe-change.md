@@ -9,6 +9,6 @@ Stop at the first approach that fully satisfies the proof contract.
 5. Add one local patch.
 6. Add a dependency or abstraction only when the earlier options cannot meet the requirement.
 
-Preserve stable interfaces and avoid unrelated cleanup. Minimal means the smallest change that remains correct, safe, readable, and verifiable.
+Preserve stable interfaces and avoid unrelated cleanup. Choose for the consumer outcome and the next maintainer, not implementation convenience. Collapse pass-through layers and shrink hidden mutable state when doing so lowers reader load without widening the diff. Minimal means the smallest change that remains correct, safe, readable, and verifiable.
 
-Keep a comment only when it encodes a constraint the code cannot show. If the comment claims a rule, encode that rule as a type, test, lint, or runtime check and delete the comment.
+Keep a comment only when it encodes a constraint the code cannot show. Encode a claimed rule as a type, test, lint, or runtime check when practical; otherwise keep one concise comment that names the source of the constraint or the condition for removing it.

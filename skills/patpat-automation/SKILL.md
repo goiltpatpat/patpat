@@ -9,11 +9,11 @@ When invoked directly, read the [operating protocol](../patpat-loop/references/o
 
 Read [boundary discipline](../patpat-loop/principles/boundary-discipline.md), [idempotent effects](../patpat-loop/principles/idempotent-effects.md), and [preserve safety](../patpat-loop/principles/preserve-safety.md). Apply the [automation design playbook](../patpat-loop/playbooks/automation-design.md). For a named issue-source triage and reproduce loop, also apply the [issue loop playbook](../patpat-loop/playbooks/issue-loop.md). Do not copy a host automation pack or enable a scheduler.
 
-Require a concrete provider, immutable trigger identity, trusted coordinator, exact allowed writes, secret source outside the repository, idempotency key, dedupe behavior, immediate preflight, compensation path, bounded retries and cost, safe test surface, verifier, and kill switch. Fail closed when any write-critical field is missing: return a configuration checklist and do not produce runnable or enabled automation.
+Require a concrete provider, immutable trigger identity, trusted coordinator, exact allowed writes, secret source outside the repository, idempotency key, dedupe behavior, immediate preflight, bounded retries and cost, safe test surface, verifier, and kill switch. Require compensation when reversal is possible; otherwise name the irreversible boundary and fail before it when state or authority is uncertain. Fail closed when any write-critical field is missing: return a configuration checklist and do not produce runnable or enabled automation.
 
 Keep external writes under one coordinator. Give workers no credentials, write tools, or posting instructions. Default generated automation to disabled and test it against a sandbox or dry-run surface.
 
-Enabling, scheduling, posting, filing, publishing, or deployment requires explicit authority immediately before the action.
+Enabling, scheduling, posting, filing, publishing, or deployment requires explicit authority immediately before the action. A provider-triggered issue loop may open only a draft pull request by default. Ready-PR delivery requires separate fresh interactive authority.
 
 ## Proof closure
 

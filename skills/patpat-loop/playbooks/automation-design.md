@@ -5,7 +5,7 @@ Read [boundary discipline](../principles/boundary-discipline.md), [idempotent ef
 1. Name the provider, immutable trigger identity, trusted coordinator, and exact allowed writes.
 2. Define external secret sources and keep credentials out of workers, prompts, logs, and repository files.
 3. Define idempotency keys, dedupe, trusted handoff markers, and preflight immediately before every write.
-4. Define compensation for partial success and prove retries converge safely.
+4. Define compensation for reversible partial success and prove retries converge safely. Name irreversible effects and fail before them when state or authority is uncertain.
 5. Bound time, retries, cost, scope, and follow-up windows.
 6. Define a sandbox or dry-run surface, real verifier, observability, and kill switch.
 7. Fail closed with a configuration checklist if any write-critical field is missing.

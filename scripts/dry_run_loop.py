@@ -77,6 +77,8 @@ def ship_plan(
     continuation: bool,
     ci: str,
     existing_pr: bool = False,
+    existing_pr_is_draft: bool = False,
+    explicit_ready_pr: bool = False,
     action: str = "edit",
 ) -> str:
     if path == "read-only" or action == "inspect":
@@ -93,13 +95,21 @@ def ship_plan(
         return "local-only-no-authority"
     if explicit_merge:
         if ci == "green":
+            if existing_pr and existing_pr_is_draft:
+                return "mark-ready-then-merge"
             return "merge"
         if ci == "flake":
+            if existing_pr and existing_pr_is_draft:
+                return "retry-then-mark-ready-and-merge-if-flake"
             return "retry-then-merge-if-flake"
         return "no-land-real-fail"
+    if existing_pr and existing_pr_is_draft and not (patpat_activated or explicit_ready_pr):
+        return "update-draft"
     if continuation:
         return "drive-existing-pr-to-merge-ready" if existing_pr else "commit-pr-then-drive-to-merge-ready"
     if existing_pr:
+        if existing_pr_is_draft:
+            return "mark-ready-and-recheck"
         return "update-existing-pr"
     return "commit-and-pr"
 
@@ -123,13 +133,19 @@ def issue_loop(
     requested_write: str = "",
     allowed_writes: tuple[str, ...] = (),
     fresh_authority: bool = False,
+    existing_fix: bool = False,
+    interactive_delivery_authority: bool = False,
 ) -> str:
     if not provider or not sandbox:
         return "fail-closed"
     if not canary or not enabled:
         return "paused"
+    if existing_fix:
+        return "verify-existing-fix"
     if not requested_write:
         return "triage-readonly"
+    if requested_write == "ready-pr" and not interactive_delivery_authority:
+        return "ready-pr-denied"
     if requested_write in allowed_writes and fresh_authority:
         return "coordinator-write-authorized"
     return "triage-readonly-write-denied"
@@ -208,7 +224,21 @@ def run_self_test() -> None:
     ) == "commit-and-pr"
     assert ship_plan(**{**base_ship, "repo_allows_delivery": False}) == "stop-repository-policy"
     assert ship_plan(**{**base_ship, "existing_pr": True}) == "update-existing-pr"
+    assert ship_plan(**{**base_ship, "existing_pr": True, "existing_pr_is_draft": True}) == "mark-ready-and-recheck"
+    draft_ship = {
+        **base_ship,
+        "patpat_activated": False,
+        "explicit_delivery": True,
+        "existing_pr": True,
+        "existing_pr_is_draft": True,
+    }
+    assert ship_plan(**draft_ship) == "update-draft"
+    assert ship_plan(**{**draft_ship, "continuation": True}) == "update-draft"
+    assert ship_plan(**{**draft_ship, "explicit_ready_pr": True}) == "mark-ready-and-recheck"
     assert ship_plan(**{**base_ship, "explicit_merge": True, "ci": "green"}) == "merge"
+    draft_merge = {**base_ship, "explicit_merge": True, "existing_pr": True, "existing_pr_is_draft": True}
+    assert ship_plan(**{**draft_merge, "ci": "green"}) == "mark-ready-then-merge"
+    assert ship_plan(**{**draft_merge, "ci": "flake"}) == "retry-then-mark-ready-and-merge-if-flake"
     assert ship_plan(**{**base_ship, "explicit_merge": True, "ci": "red"}) == "no-land-real-fail"
     assert ship_plan(**{**base_ship, "explicit_merge": True, "ci": "flake"}) == "retry-then-merge-if-flake"
     assert ship_plan(**{**base_ship, "continuation": True, "ci": "green"}) == "commit-pr-then-drive-to-merge-ready"
@@ -233,17 +263,14 @@ def run_self_test() -> None:
 
     assert issue_loop(provider="", enabled=False, sandbox=False, canary=False) == "fail-closed"
     assert issue_loop(provider="github", enabled=False, sandbox=True, canary=True) == "paused"
-    assert issue_loop(provider="github", enabled=True, sandbox=True, canary=True) == "triage-readonly"
-    assert issue_loop(provider="github", enabled=True, sandbox=True, canary=True, requested_write="comment") == "triage-readonly-write-denied"
-    assert issue_loop(
-        provider="github",
-        enabled=True,
-        sandbox=True,
-        canary=True,
-        requested_write="comment",
-        allowed_writes=("comment",),
-        fresh_authority=True,
-    ) == "coordinator-write-authorized"
+    active_issue = {"provider": "github", "enabled": True, "sandbox": True, "canary": True}
+    assert issue_loop(**active_issue) == "triage-readonly"
+    assert issue_loop(**active_issue, existing_fix=True) == "verify-existing-fix"
+    assert issue_loop(**active_issue, requested_write="comment") == "triage-readonly-write-denied"
+    ready_write = {**active_issue, "requested_write": "ready-pr", "allowed_writes": ("ready-pr",), "fresh_authority": True}
+    assert issue_loop(**ready_write) == "ready-pr-denied"
+    assert issue_loop(**ready_write, interactive_delivery_authority=True) == "coordinator-write-authorized"
+    assert issue_loop(**active_issue, requested_write="comment", allowed_writes=("comment",), fresh_authority=True) == "coordinator-write-authorized"
 
     print("Patpat loop dry-run self-test passed.")
 
@@ -268,6 +295,8 @@ def main() -> int:
             ("arena isolated", "arena", fan_out(kind="arena", worktree_or_sandbox=True, shared_worktree=False, read_only=False)),
             ("arena shared worktree", "arena", fan_out(kind="arena", worktree_or_sandbox=True, shared_worktree=True, read_only=False)),
             ("issue-loop unnamed", "issue-loop", issue_loop(provider="", enabled=False, sandbox=False, canary=False)),
+            ("issue-loop competing fix", "issue-loop", issue_loop(provider="github", enabled=True, sandbox=True, canary=True, existing_fix=True)),
+            ("issue-loop ready PR without interactive authority", "issue-loop", issue_loop(provider="github", enabled=True, sandbox=True, canary=True, requested_write="ready-pr", allowed_writes=("ready-pr",), fresh_authority=True)),
         ]
         for name, routed, decision in rows:
             print(f"- {name}: route={routed} decision={decision}")
