@@ -11,9 +11,13 @@ Read [repository truth](../patpat-loop/principles/repository-truth.md), [proof o
 
 Remain read-only. Inspect the objective, proof contract, exact diff or artifact, raw verification receipts, and affected contracts. When an independent reviewer is available and authorized, give it the evidence without the implementer's intended conclusion.
 
+Run the playbook's solution-integrity audit before general quality review. Reject evidence laundering, unexplained assertion weakening, hardcoded fixture answers, and proof that bypasses the claimed authoritative surface. Bind evidence to the exact candidate revision or reproducible working-tree snapshot; require a committed head only for commit- or delivery-bound claims.
+
+## Findings and reporting
+
 Report findings first, ordered by `blocker`, `high`, `medium`, then `low`. Tie every finding to a file, symbol, behavior, or receipt and explain the concrete impact. Exclude speculative style preferences. For each accepted issue, recommend the smallest safe correction and required re-verification.
 
-State `no findings` only after checking correctness, regressions, contracts, safety, performance implications, side effects, generated noise, and evidence mismatch. Review does not replace verification and never authorizes merge or delivery.
+State `no findings` only after checking correctness, solution integrity, regressions, contracts, safety, performance implications, side effects, generated noise, and evidence mismatch. Review does not replace verification and never authorizes merge or delivery.
 
 ## Mutation boundary
 

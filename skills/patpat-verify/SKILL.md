@@ -15,10 +15,19 @@ Read [proof over proxy](../patpat-loop/principles/proof-over-proxy.md) and [pres
 2. Identify the authoritative artifact or user surface.
 3. Capture a baseline or reproduce the prior state when relevant.
 4. Run the smallest targeted automated check.
-5. Exercise the changed behavior through the real interface when practical.
-6. Observe visible output and material side effects.
+5. For behavioral claims, exercise the changed logic through the authoritative interface under representative conditions when safe and practical. For static claims, use the strongest deterministic check on the authoritative artifact.
+6. Observe visible output and material side effects directly.
 7. Inspect the final diff and version-control state for unrelated changes.
 8. Record the command or action, observed result, cleanup, and limitation.
+
+## Claim-adaptive verification and proxy rejection
+
+Match verification depth to the claim and risk:
+
+- **Behavioral claims**: Vary material inputs, relevant error branches, or state transitions when safe and practical. Static contract checks may support the result but do not alone prove runtime behavior.
+- **Static claims**: Use deterministic structure, schema, type, or content checks when that is the authoritative surface. Do not manufacture runtime theater for a non-runtime claim.
+- **Proxy evidence**: Fixtures and mocks may isolate a contract, but they do not replace the real system when the claim concerns that system. Reject narrative summaries, hardcoded fixture answers, and clean compilation as sole behavioral proof.
+- **Fresh binding**: Bind evidence to the exact candidate revision or a reproducible working-tree snapshot, plus material inputs, environment, and oracle. Require the committed head for commit-, push-, PR-, or delivery-bound claims. Reject stale, cached, or transferred logs.
 
 Do not accept an implementing agent's report as evidence. Inspect the artifact and results directly. For high-risk boundaries, obtain an independent review without leaking the intended conclusion.
 

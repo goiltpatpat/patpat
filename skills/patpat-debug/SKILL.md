@@ -13,7 +13,7 @@ Reproduce before editing when safe and practical. Otherwise trace the contract o
 
 If the user limited the request to diagnosis, stop after proving or bounding the root cause. Recommend the smallest patch without editing.
 
-Change one causal variable at a time. Re-run the original reproduction when it remains safe and practical; otherwise run the predeclared non-triggering check and state the missing runtime proof. Never label an unobserved fix as verified.
+Change one causal variable at a time. Preserve only material failed hypotheses through the defect playbook as bounded, redacted evidence; do not retain raw logs or trivial attempts. Re-run the original reproduction when it remains safe and practical; otherwise run the predeclared non-triggering check and state the missing runtime proof. Never label an unobserved fix as verified.
 
 When the defect is a mismatch against a reference image or migrated UI, apply the [visual equivalence playbook](../patpat-loop/playbooks/visual-equivalence.md) after reproducing the defect. Preserve the pre-edit reference and comparison harness.
 
