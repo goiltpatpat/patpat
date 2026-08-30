@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 MAX_API_BYTES = 1024 * 1024
 MAX_CHECKS = 100
 MAX_NAME_LENGTH = 128
@@ -146,6 +146,7 @@ def observation_document(
     expected_head: str,
     expected_base: str,
     required_checks: list[str],
+    allow_no_required_checks: bool,
     required_review: bool,
     max_attempts: int,
     attempt: int,
@@ -230,6 +231,7 @@ def observation_document(
         },
         "policy": {
             "required_checks": required_checks,
+            "allow_no_required_checks": allow_no_required_checks,
             "required_review": required_review,
             "max_attempts": max_attempts,
             "max_observation_age_seconds": max_observation_age_seconds,
@@ -384,6 +386,7 @@ def self_test() -> None:
         "expected_head": "a" * 40,
         "expected_base": "main",
         "required_checks": ["tests", "policy"],
+        "allow_no_required_checks": False,
         "required_review": True,
         "max_attempts": 3,
         "attempt": 1,
@@ -471,6 +474,14 @@ def self_test() -> None:
         raise AssertionError("empty required-check policy was accepted without an explicit override")
     empty_policy.allow_no_required_checks = True
     validate_arguments(empty_policy)
+    no_check_common = {
+        **common,
+        "required_checks": [],
+        "allow_no_required_checks": True,
+    }
+    no_check_document = observation_document(ready_fixture, **no_check_common)
+    assert no_check_document["policy"]["allow_no_required_checks"] is True
+    assert evaluate(no_check_document, evaluated_at=common["observed_at"])["verdict"] == "ready"
     print("GitHub PR observer self-test passed.")
 
 
@@ -512,6 +523,7 @@ def main() -> int:
             expected_head=args.expected_head,
             expected_base=args.expected_base,
             required_checks=args.required_check,
+            allow_no_required_checks=args.allow_no_required_checks,
             required_review=args.require_review,
             max_attempts=args.max_attempts,
             attempt=args.attempt,

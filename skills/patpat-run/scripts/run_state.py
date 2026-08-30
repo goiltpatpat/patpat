@@ -391,6 +391,14 @@ def receipt_is_fresh(
     try:
         actor_key = canonical_identity(record.get("actor"), "receipt actor")
         owner_key = canonical_identity(state.get("owner"), "integration owner")
+        verifier_key = None
+        if independent:
+            verification = state.get("verification")
+            if not isinstance(verification, dict):
+                return False
+            verifier_key = canonical_identity(
+                verification.get("actor"), "verification actor"
+            )
     except RunStateError:
         return False
     return (
@@ -398,7 +406,10 @@ def receipt_is_fresh(
         and record.get("epoch") == state.get("epoch")
         and record.get("verdict") == verdict
         and isinstance(record.get("receipt"), str)
-        and (not independent or actor_key != owner_key)
+        and (
+            not independent
+            or (actor_key != owner_key and actor_key != verifier_key)
+        )
         and receipt_binding_is_fresh(record)
     )
 
@@ -417,10 +428,39 @@ def schema_errors(state: dict[str, Any], root: Path, run_id: str) -> list[str]:
         errors.append("invalid graph node")
     if not isinstance(state.get("objective"), str) or not state.get("objective"):
         errors.append("objective is required")
+    owner_key: str | None = None
     try:
-        canonical_identity(state.get("owner"), "integration owner")
+        owner_key = canonical_identity(state.get("owner"), "integration owner")
     except RunStateError as error:
         errors.append(str(error))
+    for kind in ("verification", "review"):
+        record = state.get(kind)
+        if record is not None and not isinstance(record, dict):
+            errors.append(f"{kind} record must be an object or null")
+    review = state.get("review")
+    verification = state.get("verification")
+    if isinstance(review, dict):
+        try:
+            review_key = canonical_identity(review.get("actor"), "review actor")
+        except RunStateError as error:
+            errors.append(str(error))
+        else:
+            if not isinstance(verification, dict):
+                errors.append("review record requires a verification record")
+            else:
+                try:
+                    verifier_key = canonical_identity(
+                        verification.get("actor"), "verification actor"
+                    )
+                except RunStateError as error:
+                    errors.append(str(error))
+                else:
+                    if review_key == verifier_key or (
+                        owner_key is not None and review_key == owner_key
+                    ):
+                        errors.append(
+                            "review actor must differ from the integration owner and verifier"
+                        )
     for key in ("authorities", "prohibitions", "intentional_changes", "pre_existing_changes", "events"):
         if not isinstance(state.get(key), list):
             errors.append(f"{key} must be a list")
@@ -596,8 +636,18 @@ def record_receipt(
         allowed = {"verification": {"verified", "partial", "failed"}, "review": {"pass", "changes-required"}}
         if verdict not in allowed[kind]:
             raise RunStateError(f"invalid {kind} verdict")
-        if kind == "review" and actor_key == canonical_identity(state["owner"], "integration owner"):
-            raise RunStateError("independent reviewer must differ from the integration owner")
+        if kind == "review":
+            owner_key = canonical_identity(state["owner"], "integration owner")
+            verification = state.get("verification")
+            if not isinstance(verification, dict):
+                raise RunStateError("independent review requires current verification evidence")
+            verifier_key = canonical_identity(
+                verification.get("actor"), "verification actor"
+            )
+            if actor_key in {owner_key, verifier_key}:
+                raise RunStateError(
+                    "independent reviewer must differ from the integration owner and verifier"
+                )
         snapshot = current_snapshot(root)
         state[kind] = {
             "summary": summary,
@@ -948,8 +998,22 @@ def run_self_test() -> None:
             pass
         else:
             raise AssertionError("old verification crossed an epoch boundary")
-        record_receipt(root, "main-run", "verification", "Learning verified", learning_verification_receipt, "integration-owner", "verified")
+        record_receipt(root, "main-run", "verification", "Learning verified", learning_verification_receipt, "verifier", "verified")
         transition(root, "main-run", "REVIEW")
+        try:
+            record_receipt(
+                root,
+                "main-run",
+                "review",
+                "Verifier self review",
+                learning_review_receipt,
+                "VERIFIER",
+                "pass",
+            )
+        except RunStateError:
+            pass
+        else:
+            raise AssertionError("verification actor was accepted as independent reviewer")
         record_receipt(root, "main-run", "review", "Learning reviewed", learning_review_receipt, "reviewer", "pass")
         transition(root, "main-run", "REPORT")
         if not checkpoint(root, "main-run").is_file():
@@ -989,6 +1053,12 @@ def run_self_test() -> None:
         atomic_write_json(main_state_path, tampered_reviewer)
         if not validation_errors(root, "main-run"):
             raise AssertionError("tampered reviewer identity was accepted")
+        atomic_write(main_state_path, untampered_main)
+        tampered_reviewer = load_state(root, "main-run")
+        tampered_reviewer["review"]["actor"] = "VERIFIER"
+        atomic_write_json(main_state_path, tampered_reviewer)
+        if not validation_errors(root, "main-run"):
+            raise AssertionError("tampered verifier self-review was accepted")
         atomic_write(main_state_path, untampered_main)
 
         (root / "source.txt").write_text("dirty\n", encoding="utf-8")

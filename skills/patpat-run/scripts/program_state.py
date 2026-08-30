@@ -143,6 +143,21 @@ def git_commit_exists(root: Path, head_sha: str) -> bool:
     return result.returncode == 0
 
 
+def git_is_ancestor(root: Path, ancestor: str, descendant: str) -> bool:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "merge-base", "--is-ancestor", ancestor, descendant],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError as error:
+        raise ProgramStateError(f"git is required for dependency ancestry: {error}") from error
+    if result.returncode not in {0, 1}:
+        raise ProgramStateError("git could not evaluate dependency ancestry")
+    return result.returncode == 0
+
+
 def require_git_root(root: Path) -> Path:
     root = root.resolve()
     top = git_text(root, "rev-parse", "--show-toplevel")
@@ -498,9 +513,25 @@ def verdict_is_fresh(root: Path, unit: dict[str, Any], kind: str) -> bool:
     )
 
 
-def unit_is_complete(root: Path, unit: dict[str, Any]) -> bool:
+def head_includes_dependencies(
+    root: Path,
+    state: dict[str, Any],
+    unit: dict[str, Any],
+    head_sha: str,
+) -> bool:
+    return all(
+        isinstance(state["units"][dependency].get("head_sha"), str)
+        and git_commit_exists(root, state["units"][dependency]["head_sha"])
+        and git_is_ancestor(root, state["units"][dependency]["head_sha"], head_sha)
+        for dependency in unit["depends_on"]
+    )
+
+
+def unit_is_complete(root: Path, state: dict[str, Any], unit: dict[str, Any]) -> bool:
     return (
         unit.get("state") == "completed"
+        and isinstance(unit.get("head_sha"), str)
+        and head_includes_dependencies(root, state, unit, unit["head_sha"])
         and verdict_is_fresh(root, unit, "verification")
         and verdict_is_fresh(root, unit, "review")
     )
@@ -508,7 +539,7 @@ def unit_is_complete(root: Path, unit: dict[str, Any]) -> bool:
 
 def dependencies_complete(root: Path, state: dict[str, Any], unit: dict[str, Any]) -> bool:
     return all(
-        unit_is_complete(root, state["units"][dependency])
+        unit_is_complete(root, state, state["units"][dependency])
         for dependency in unit["depends_on"]
     )
 
@@ -525,7 +556,7 @@ def frontier(root: Path, state: dict[str, Any]) -> list[str]:
 
 def delivery_ready(root: Path, state: dict[str, Any]) -> bool:
     return bool(state["units"]) and all(
-        unit_is_complete(root, unit) for unit in state["units"].values()
+        unit_is_complete(root, state, unit) for unit in state["units"].values()
     )
 
 
@@ -771,6 +802,32 @@ def schema_errors(
                         or evidence.get("size", -1) < 0
                     ):
                         errors.append(f"unit {unit_id} {kind} evidence binding is invalid")
+            if version == SCHEMA_VERSION and isinstance(unit.get("review"), dict):
+                verification = unit.get("verification")
+                current_assignment = assignment_snapshot(unit)
+                if not isinstance(verification, dict) or current_assignment is None:
+                    errors.append(f"unit {unit_id} review requires verification and assignment")
+                else:
+                    try:
+                        review_key = canonical_identity(
+                            unit["review"].get("actor"), f"unit {unit_id} review actor"
+                        )
+                        verifier_key = canonical_identity(
+                            verification.get("actor"), f"unit {unit_id} verification actor"
+                        )
+                    except ProgramStateError:
+                        pass
+                    else:
+                        prohibited_reviewers = {
+                            verifier_key,
+                            current_assignment["actor"],
+                        }
+                        if normalized_integration_owner is not None:
+                            prohibited_reviewers.add(normalized_integration_owner)
+                        if review_key in prohibited_reviewers:
+                            errors.append(
+                                f"unit {unit_id} review actor is not independent"
+                            )
         if version == SCHEMA_VERSION and dispatch_binding is not None:
             if set(normalized_dispatch_identities) != known:
                 errors.append("dispatch binding must map every program unit exactly once")
@@ -1208,6 +1265,10 @@ def set_head(
         require_current_assignment(state, unit, assignment_generation)
         if unit["head_sha"] != expected_head_sha:
             raise ProgramStateError("stale expected unit head")
+        if not head_includes_dependencies(root, state, unit, head_sha):
+            raise ProgramStateError(
+                "unit head must contain every dependency head in its Git ancestry"
+            )
         if unit["head_sha"] != head_sha:
             timestamp = now()
             unit["head_sha"] = head_sha
@@ -1258,15 +1319,28 @@ def record_verdict(
         current_assignment = require_current_assignment(state, unit, assignment_generation)
         if unit["head_sha"] != head_sha:
             raise ProgramStateError("verdict head does not match the unit head")
+        if not head_includes_dependencies(root, state, unit, head_sha):
+            raise ProgramStateError(
+                "verdict head must contain every dependency head in its Git ancestry"
+            )
         if unit[kind] is not None:
             raise ProgramStateError(
                 "verdict slot is already recorded for the current head and assignment"
             )
-        binding = evidence_binding(evidence_path)
-        if kind == "review" and unit["verification"] is not None:
+        if kind == "review":
+            if not verdict_is_fresh(root, unit, "verification"):
+                raise ProgramStateError("review requires a fresh passing verification verdict")
             verifier_key = canonical_identity(unit["verification"]["actor"], "verification actor")
-            if actor_key == verifier_key:
-                raise ProgramStateError("review actor must differ from the verification actor")
+            prohibited_reviewers = {
+                verifier_key,
+                current_assignment["actor"],
+                state["dispatch_binding"]["integration_owner"],
+            }
+            if actor_key in prohibited_reviewers:
+                raise ProgramStateError(
+                    "review actor must differ from the verifier, assigned worker, and integration owner"
+                )
+        binding = evidence_binding(evidence_path)
         timestamp = now()
         unit[kind] = {
             "actor": actor,
@@ -1319,6 +1393,12 @@ def set_unit_state(
         if destination == "completed":
             if not dependencies_complete(root, state, unit):
                 raise ProgramStateError("unit dependencies are not complete with fresh evidence")
+            if not isinstance(unit.get("head_sha"), str) or not head_includes_dependencies(
+                root, state, unit, unit["head_sha"]
+            ):
+                raise ProgramStateError(
+                    "unit completion requires a head containing every dependency head"
+                )
             if not verdict_is_fresh(root, unit, "verification") or not verdict_is_fresh(root, unit, "review"):
                 raise ProgramStateError("unit completion requires fresh verification and independent review passes")
         timestamp = now()
@@ -1789,9 +1869,24 @@ def run_self_test() -> None:
             ),
             "verdict slot is already recorded",
         )
+        for non_reviewer in ("Verifier", "Worker Contract", "Integration Owner"):
+            expect_error(
+                lambda actor=non_reviewer: record_verdict(
+                    root, "release-train", "contract", "review", "pass",
+                    head_one, actor, evidence, 3,
+                ),
+                "review actor must differ",
+            )
         record_verdict(
             root, "release-train", "contract", "review", "pass",
             head_one, "Reviewer", evidence, 3,
+        )
+        expect_error(
+            lambda: record_verdict(
+                root, "release-train", "contract", "review", "fail",
+                head_one, "Reviewer", evidence, 3,
+            ),
+            "verdict slot is already recorded",
         )
         set_unit_state(root, "release-train", "contract", "completed", 3)
         assert status(root, "release-train")["frontier"] == ["consumer"]
@@ -1815,6 +1910,13 @@ def run_self_test() -> None:
         set_unit_state(root, "release-train", "consumer", "completed", 1)
         set_gate(root, "release-train", "delivery", True, "all evidence is fresh")
         assert status(root, "release-train")["delivery_ready"]
+        completed_state_path = state_path(root, "release-train")
+        completed_state_bytes = completed_state_path.read_bytes()
+        tampered_review = json.loads(completed_state_bytes)
+        tampered_review["units"]["contract"]["review"]["actor"] = "WORKER CONTRACT"
+        atomic_write_json(completed_state_path, tampered_review)
+        expect_error(lambda: status(root, "release-train"), "review actor is not independent")
+        completed_state_path.write_bytes(completed_state_bytes)
 
         marker.write_text("changed dependency\n", encoding="utf-8")
         subprocess.run(["git", "-C", str(root), "add", "marker.txt"], check=True)
@@ -1847,16 +1949,12 @@ def run_self_test() -> None:
             root, "release-train", "contract", "verification", "fail",
             head_two, "Verifier", evidence, 3,
         )
-        record_verdict(
-            root, "release-train", "contract", "review", "fail",
-            head_two, "Reviewer", evidence, 3,
-        )
         expect_error(
             lambda: record_verdict(
                 root, "release-train", "contract", "review", "pass",
                 head_two, "Reviewer", evidence, 3,
             ),
-            "verdict slot is already recorded",
+            "fresh passing verification",
         )
         append_inbox(
             root, "release-train", "worker-update", "head-two proof", "contract", head_two,
@@ -2125,6 +2223,49 @@ def run_self_test() -> None:
         assert all(unit["review"] is None for unit in migrated["units"].values())
         assert all(unit["assignment"] == empty_assignment() for unit in migrated["units"].values())
         assert schema_errors(migrated, root, "legacy-program") == []
+
+        initialize(root, "ancestry-program", plan_path)
+        ancestry_state = load_state(root, "ancestry-program")
+        ancestry_receipt = {
+            **parallel_receipt,
+            "program_id": "ancestry-program",
+            "plan_digest": ancestry_state["plan_digest"],
+        }
+        ancestry_receipt_path = root / "ancestry-parallel-gate.json"
+        ancestry_receipt_path.write_text(json.dumps(ancestry_receipt), encoding="utf-8")
+        set_gate(
+            root,
+            "ancestry-program",
+            "dispatch",
+            True,
+            "ancestry test",
+            ancestry_receipt_path,
+            "Integration Owner",
+        )
+        assign_unit(
+            root, "ancestry-program", "contract", "Worker Contract", "worktree-contract", 0
+        )
+        set_head(root, "ancestry-program", "contract", head_two, None, 1)
+        set_unit_state(root, "ancestry-program", "contract", "running", 1)
+        record_verdict(
+            root, "ancestry-program", "contract", "verification", "pass",
+            head_two, "Verifier", evidence, 1,
+        )
+        record_verdict(
+            root, "ancestry-program", "contract", "review", "pass",
+            head_two, "Reviewer", evidence, 1,
+        )
+        set_unit_state(root, "ancestry-program", "contract", "completed", 1)
+        assign_unit(
+            root, "ancestry-program", "consumer", "Worker Consumer", "worktree-consumer", 0
+        )
+        expect_error(
+            lambda: set_head(
+                root, "ancestry-program", "consumer", head_one, None, 1
+            ),
+            "contain every dependency head",
+        )
+        set_head(root, "ancestry-program", "consumer", head_two, None, 1)
 
         stored_path = state_path(root, "release-train")
         valid_bytes = stored_path.read_bytes()

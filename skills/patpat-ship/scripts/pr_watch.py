@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 KIND = "patpat.pr_watch.verdict"
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 CHECK_STATES = {"queued", "in_progress", "completed"}
@@ -264,6 +264,10 @@ def evaluate(document: Any, *, evaluated_at: datetime | str | None = None) -> di
         required_review = _boolean(
             policy.get("required_review"), "policy.required_review"
         )
+        allow_no_required_checks = _boolean(
+            policy.get("allow_no_required_checks"),
+            "policy.allow_no_required_checks",
+        )
         required_checks_input = policy.get("required_checks")
         if not isinstance(required_checks_input, list):
             raise ContractError("policy.required_checks must be an array")
@@ -275,6 +279,14 @@ def evaluate(document: Any, *, evaluated_at: datetime | str | None = None) -> di
         ]
         if len(set(required_checks)) != len(required_checks):
             raise ContractError("policy.required_checks must contain unique names")
+        if not required_checks and not allow_no_required_checks:
+            raise ContractError(
+                "policy.required_checks must not be empty without an explicit no-check override"
+            )
+        if required_checks and allow_no_required_checks:
+            raise ContractError(
+                "policy.allow_no_required_checks must be false when checks are required"
+            )
 
         observation = _mapping(root.get("observation"), "observation")
         observed_at_raw = _string(
@@ -350,6 +362,7 @@ def evaluate(document: Any, *, evaluated_at: datetime | str | None = None) -> di
 
         evidence = {
             "required_checks": required_checks,
+            "allow_no_required_checks": allow_no_required_checks,
             "observed_checks": sorted(checks),
             "required_review": required_review,
             "review_decision": review,
@@ -563,6 +576,7 @@ def _fixture(**overrides: Any) -> dict[str, Any]:
         },
         "policy": {
             "required_checks": ["contracts", "tests"],
+            "allow_no_required_checks": False,
             "required_review": True,
             "max_attempts": 3,
             "max_observation_age_seconds": 900,
@@ -604,6 +618,19 @@ def self_test() -> None:
     assert first["binding"]["head_sha"] == "a" * 40
     assert first["mutations_performed"] == []
     assert first == check(ready)
+
+    empty_checks = _fixture(
+        policy={"required_checks": [], "allow_no_required_checks": False},
+        observation={"checks": []},
+    )
+    assert check(empty_checks)["verdict"] == "blocked"
+    explicit_no_checks = _fixture(
+        policy={"required_checks": [], "allow_no_required_checks": True},
+        observation={"checks": []},
+    )
+    assert check(explicit_no_checks)["verdict"] == "ready"
+    contradictory_no_checks = _fixture(policy={"allow_no_required_checks": True})
+    assert check(contradictory_no_checks)["verdict"] == "blocked"
 
     pending = _fixture(
         observation={

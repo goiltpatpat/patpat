@@ -47,7 +47,7 @@ python3 skills/patpat-ship/scripts/github_observe.py \
   | python3 skills/patpat-ship/scripts/pr_watch.py --input -
 ```
 
-Observation schema v3 binds the expected base branch and evaluates freshness against the watcher's own UTC clock. Set a bounded `max_observation_age_seconds`; expired observations or timestamps beyond the bounded clock skew cannot become merge-ready evidence. Schema v1 and v2 observations fail closed and must be recollected; do not fill new fields from guesses.
+Observation schema v4 binds the expected base branch and the explicit no-required-check override, then evaluates freshness against the watcher's own UTC clock. Set a bounded `max_observation_age_seconds`; expired observations or timestamps beyond the bounded clock skew cannot become merge-ready evidence. Older observations fail closed and must be recollected; do not fill new fields from guesses.
 
 ## Keep merge authority separate
 
