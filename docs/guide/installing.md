@@ -72,7 +72,7 @@ From a dirty working tree, stage first, then validate and install that staged pa
 
 ## Cursor
 
-The Cursor manifest at `.cursor-plugin/plugin.json` is structurally validated and includes one read-only reviewer adapter. Live native loading is unverified. Until a live project load is proven, install project-scoped skills through the portable route and reload Cursor. Do not claim `/add-plugin patpat`.
+Native marketplace publish is [cursor.com/marketplace/publish](https://cursor.com/marketplace/publish). After listing, install from Customize the same way as pstack. Until SearchPlugins returns patpat, do not claim the Grok Bot Installed tab. Keep the portable route below as the proven fallback. Do not claim `/add-plugin patpat`.
 
 ## Portable Agent Skills
 
