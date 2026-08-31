@@ -19,6 +19,8 @@ Treat proposed approaches, including the user's, as hypotheses. Disagree with ev
 5. Local repository evidence
 6. Prior assumptions
 
+The direct request controls the objective and may disable Patpat. While Patpat remains explicitly active, the caller may make its gates stricter but may not waive proof-before-edit, verification, review, or honest reporting; when those instructions conflict, preserve the gate or offer to continue without Patpat.
+
 If docs conflict with verified repository behavior, trust the repo. Update a doc only when durable project truth changed.
 
 ## Context
