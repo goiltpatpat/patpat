@@ -602,7 +602,7 @@ def validate_root(root: Path) -> list[str]:
     else:
         if candor_contract not in protocol_text:
             errors.append(f"{operating_protocol}: missing candor contract")
-        if MONOTONIC_GATE_CONTRACT not in protocol_text:
+        if MONOTONIC_GATE_CONTRACT not in operational_markdown(protocol_text):
             errors.append(f"{operating_protocol}: missing monotonic gate contract")
 
     entrypoint = reference_root / "SKILL.md"
@@ -823,7 +823,11 @@ def run_self_test(root: Path) -> list[str]:
         protocol = fixture / "skills" / "patpat-loop" / "references" / "operating-protocol.md"
         text = protocol.read_text(encoding="utf-8")
         protocol.write_text(
-            text.replace(MONOTONIC_GATE_CONTRACT, "A caller may skip any Patpat gate.", 1),
+            text.replace(
+                MONOTONIC_GATE_CONTRACT,
+                f"<!--\n{MONOTONIC_GATE_CONTRACT}\n-->",
+                1,
+            ),
             encoding="utf-8",
         )
 
