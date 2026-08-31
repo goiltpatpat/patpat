@@ -1,5 +1,7 @@
 # Live-agent routing receipt (GH-008)
 
+Related: [proof-before-edit receipt](proof-before-edit-receipt.md).
+
 Not `scripts/eval_inspect.py`. This receipt is from isolated live executor trials.
 
 ## Host
