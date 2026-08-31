@@ -70,6 +70,8 @@ REVIEWER_DESCRIPTION = (
     "Independently challenge an implementation and its verification evidence "
     "without modifying repository or external state."
 )
+MONOTONIC_GATE_CONTRACT = """The direct request controls the objective and may disable Patpat. While Patpat remains explicitly active, the caller may make its gates stricter but may not waive proof-before-edit, verification, review, or honest reporting; when those instructions conflict, preserve the gate or offer to disable Patpat.
+Do not infer disablement from a request to skip a gate. Disable only when the caller explicitly says `disable Patpat` or `disable /patpat`; otherwise keep the gate and stop before mutation if the conflict remains."""
 PROOF_CLOSURE_BLOCK = """## Proof closure
 
 Close repository mutations through:
@@ -600,6 +602,8 @@ def validate_root(root: Path) -> list[str]:
     else:
         if candor_contract not in protocol_text:
             errors.append(f"{operating_protocol}: missing candor contract")
+        if MONOTONIC_GATE_CONTRACT not in protocol_text:
+            errors.append(f"{operating_protocol}: missing monotonic gate contract")
 
     entrypoint = reference_root / "SKILL.md"
     reached = reachable_markdown(entrypoint, root) if entrypoint.is_file() else set()
@@ -815,6 +819,14 @@ def run_self_test(root: Path) -> list[str]:
             encoding="utf-8",
         )
 
+    def remove_monotonic_gate_contract(fixture: Path) -> None:
+        protocol = fixture / "skills" / "patpat-loop" / "references" / "operating-protocol.md"
+        text = protocol.read_text(encoding="utf-8")
+        protocol.write_text(
+            text.replace(MONOTONIC_GATE_CONTRACT, "A caller may skip any Patpat gate.", 1),
+            encoding="utf-8",
+        )
+
     def remove_cursor_agent_field(fixture: Path) -> None:
         manifest = fixture / ".cursor-plugin" / "plugin.json"
         data = json.loads(manifest.read_text(encoding="utf-8"))
@@ -969,6 +981,7 @@ def run_self_test(root: Path) -> list[str]:
             ("skill symlink", add_skill_symlink, "symlinks are not allowed"),
             ("router reachability", break_router_reachability, "not reachable from patpat-loop"),
             ("missing candor contract", remove_candor_contract, "missing candor contract"),
+            ("missing monotonic gate contract", remove_monotonic_gate_contract, "missing monotonic gate contract"),
             ("missing Cursor agents field", remove_cursor_agent_field, "Cursor manifest agents"),
             ("writable Cursor reviewer", weaken_cursor_reviewer, "readonly policy"),
             ("background Cursor agent", enable_background_agent, "must not run in background"),
