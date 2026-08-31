@@ -14,7 +14,7 @@ If it brings a receipt for the receipt, it has entered management.
 
 Agents can produce a heroic amount of plausible code before lunch. The team still has to prove it.
 
-Patpat turns an agent host into a disciplined engineering loop: inspect the real system, name the proof before editing, change the smallest safe surface, and verify the result where the user would see it.
+Patpat gives an agent host a disciplined engineering protocol: inspect the real system, name the proof before editing, change the smallest safe surface, and verify the result where the user would see it. These are required agent behaviors. Patpat does not claim that prose alone prevents edit-first mutation; that guarantee requires a host-enforced pre-tool gate plus a receipt proving the gate ran.
 
 If the evidence is "the agent felt confident," the run is still in progress.
 

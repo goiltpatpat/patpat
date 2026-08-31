@@ -70,6 +70,9 @@ REVIEWER_DESCRIPTION = (
     "Independently challenge an implementation and its verification evidence "
     "without modifying repository or external state."
 )
+EVAL_VERDICT_CONTRACT = """Freeze the rubric before the first trial. Record `PASS` only when inspectable evidence satisfies every predeclared criterion; record `FAIL` when observed behavior violates any criterion and `INCONCLUSIVE` when required evidence is missing or uninspectable. Never weaken or reinterpret the rubric after observing output. Do not rewrite a failed trial as a pass; record a corrected candidate as a new trial.
+
+Promote the skill only when structural validation passes and the behavioral evidence receives `PASS` under the frozen rubric."""
 PROOF_CLOSURE_BLOCK = """## Proof closure
 
 Close repository mutations through:
@@ -601,6 +604,12 @@ def validate_root(root: Path) -> list[str]:
         if candor_contract not in protocol_text:
             errors.append(f"{operating_protocol}: missing candor contract")
 
+    eval_skill = root / "skills" / "patpat-eval" / "SKILL.md"
+    if eval_skill.is_file():
+        eval_operational = operational_markdown(eval_skill.read_text(encoding="utf-8"))
+        if EVAL_VERDICT_CONTRACT not in eval_operational:
+            errors.append(f"{eval_skill}: missing fail-closed eval verdict contract")
+
     entrypoint = reference_root / "SKILL.md"
     reached = reachable_markdown(entrypoint, root) if entrypoint.is_file() else set()
     required_references = {(skill / "SKILL.md").resolve() for skill in skills}
@@ -815,6 +824,14 @@ def run_self_test(root: Path) -> list[str]:
             encoding="utf-8",
         )
 
+    def remove_eval_verdict_contract(fixture: Path) -> None:
+        skill = fixture / "skills" / "patpat-eval" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        skill.write_text(
+            text.replace(EVAL_VERDICT_CONTRACT, f"<!--\n{EVAL_VERDICT_CONTRACT}\n-->", 1),
+            encoding="utf-8",
+        )
+
     def remove_cursor_agent_field(fixture: Path) -> None:
         manifest = fixture / ".cursor-plugin" / "plugin.json"
         data = json.loads(manifest.read_text(encoding="utf-8"))
@@ -969,6 +986,7 @@ def run_self_test(root: Path) -> list[str]:
             ("skill symlink", add_skill_symlink, "symlinks are not allowed"),
             ("router reachability", break_router_reachability, "not reachable from patpat-loop"),
             ("missing candor contract", remove_candor_contract, "missing candor contract"),
+            ("missing eval verdict contract", remove_eval_verdict_contract, "missing fail-closed eval verdict contract"),
             ("missing Cursor agents field", remove_cursor_agent_field, "Cursor manifest agents"),
             ("writable Cursor reviewer", weaken_cursor_reviewer, "readonly policy"),
             ("background Cursor agent", enable_background_agent, "must not run in background"),
