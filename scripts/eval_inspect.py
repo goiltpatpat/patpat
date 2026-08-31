@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Behavioral eval for the patpat-inspect how-equivalent. No git writes."""
+"""Deterministic contract eval for the patpat-inspect how-equivalent. No git writes."""
 
 from __future__ import annotations
 

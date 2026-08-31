@@ -214,7 +214,7 @@ def run_self_test() -> None:
         if not state.status(integration, run_id)["verification_stale"]:
             raise ParallelEvalError("repository drift did not invalidate integration evidence")
 
-    print("Patpat writable-parallelism behavioral self-test passed.")
+    print("Patpat writable-parallelism structural self-test passed.")
 
 
 def main() -> int:

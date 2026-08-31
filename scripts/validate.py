@@ -663,10 +663,10 @@ def validate_root(root: Path) -> list[str]:
         errors.append(f"{dry_run}: missing loop dry-run")
     inspect_eval = root / "scripts" / "eval_inspect.py"
     if not inspect_eval.is_file():
-        errors.append(f"{inspect_eval}: missing inspect behavioral eval")
+        errors.append(f"{inspect_eval}: missing inspect contract eval")
     why_eval = root / "scripts" / "eval_why.py"
     if not why_eval.is_file():
-        errors.append(f"{why_eval}: missing rationale behavioral eval")
+        errors.append(f"{why_eval}: missing rationale contract eval")
     plan_validator = root / "skills" / "patpat-run" / "scripts" / "validate_plan.py"
     if not plan_validator.is_file():
         errors.append(f"{plan_validator}: missing multi-PR plan validator")
@@ -951,8 +951,8 @@ def run_self_test(root: Path) -> list[str]:
             ("missing stage script", remove_stage_script, "missing allowlisted plugin staging script"),
             ("missing portable updater", remove_update_script, "missing portable skill updater"),
             ("missing loop dry-run", remove_dry_run, "missing loop dry-run"),
-            ("missing inspect eval", remove_inspect_eval, "missing inspect behavioral eval"),
-            ("missing why eval", remove_why_eval, "missing rationale behavioral eval"),
+            ("missing inspect eval", remove_inspect_eval, "missing inspect contract eval"),
+            ("missing why eval", remove_why_eval, "missing rationale contract eval"),
             ("missing plan validator", remove_plan_validator, "missing multi-PR plan validator"),
             ("missing agent install contract", remove_agents_guide, "missing agent install contract"),
             ("Codex defaultPrompt drift", drop_codex_default_prompt, "defaultPrompt must include $patpat"),
