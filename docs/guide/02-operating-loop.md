@@ -42,7 +42,7 @@ A proof contract records:
 - the expected observation;
 - cleanup and safety constraints.
 
-The contract prevents an easy test from silently replacing the real outcome.
+The contract makes proxy substitution visible when the workflow follows it. `patpat-run` enforces the `PROOF_CONTRACT -> ACT` transition inside its state machine; it does not intercept arbitrary host tool calls.
 
 ## Control delivery explicitly
 

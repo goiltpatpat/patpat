@@ -13,4 +13,6 @@ Define the target behavior and rubric before running a trial. Include at least o
 
 Judge produced artifacts, commands, observations, scope control, and cleanup. Do not treat an agent's explanation or confidence as evidence. Record environmental limits and keep comparisons sequential unless isolation and integration proof have earned parallel execution.
 
-Promote the skill only when structural validation passes and the behavioral evidence satisfies the predeclared rubric.
+Freeze the rubric before the first trial. Record `PASS` only when inspectable evidence satisfies every predeclared criterion; record `FAIL` when observed behavior violates any criterion and `INCONCLUSIVE` when required evidence is missing or uninspectable. Never weaken or reinterpret the rubric after observing output. Do not rewrite a failed trial as a pass; record a corrected candidate as a new trial.
+
+Promote the skill only when structural validation passes and the behavioral evidence receives `PASS` under the frozen rubric.
