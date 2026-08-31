@@ -10,3 +10,5 @@ Read [proof over proxy](../principles/proof-over-proxy.md) and [earned paralleli
 6. Compare results against the declared rubric; do not score self-reports.
 7. Record verifier or environment limitations separately from skill defects.
 8. Promote, revise, or reject the change based on observed behavior.
+
+Live-agent receipts must record host, Patpat revision, declared rubric, +prompt, −prompt, observed artifacts and commands (not self-report), cleanup, and verdict.
