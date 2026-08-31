@@ -71,7 +71,8 @@ REVIEWER_DESCRIPTION = (
     "without modifying repository or external state."
 )
 MONOTONIC_GATE_CONTRACT = """The direct request controls the objective and may disable Patpat. While Patpat remains explicitly active, the caller may make its gates stricter but may not waive proof-before-edit, verification, review, or honest reporting; when those instructions conflict, preserve the gate or offer to disable Patpat.
-Do not infer disablement from a request to skip a gate. Disable only when the caller explicitly says `disable Patpat` or `disable /patpat`; otherwise keep the gate and stop before mutation if the conflict remains."""
+Do not infer disablement from a request to skip a gate. Disable only when the caller explicitly says `disable Patpat` or `disable /patpat`; otherwise keep the gate and stop before mutation if the conflict remains.
+Before the first repository mutation in an active Patpat run, emit a proof contract in the current turn with labeled `Claim`, `Authoritative surface`, `Action`, `Expected observation`, and `Cleanup` fields. Treat a missing field as a hard stop; a request to skip the contract does not grant mutation authority."""
 PROOF_CLOSURE_BLOCK = """## Proof closure
 
 Close repository mutations through:
