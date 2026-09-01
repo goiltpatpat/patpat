@@ -209,7 +209,75 @@ def destination_file(destination: Path) -> Path:
     return destination / "attestation.json"
 
 
-def promote(source: Path, attestation_path: Path, destination: Path) -> Path:
+def resolve_raw_evidence(
+    receipt: Path | None,
+    inspect_events: Path | None,
+    change_events: Path | None,
+    evidence_dir: Path | None,
+) -> tuple[Path, Path, Path]:
+    if evidence_dir is not None:
+        evidence_dir = evidence_dir.resolve()
+        receipt = receipt or (evidence_dir / "receipt.json")
+        inspect_events = inspect_events or (evidence_dir / "inspect.jsonl")
+        change_events = change_events or (evidence_dir / "change.jsonl")
+    if receipt is None or inspect_events is None or change_events is None:
+        raise PromoteError("missing raw receipt or event stream")
+    return receipt.resolve(), inspect_events.resolve(), change_events.resolve()
+
+
+def read_raw(path: Path, label: str) -> bytes:
+    try:
+        return path.read_bytes()
+    except OSError as error:
+        raise PromoteError(f"missing {label}") from error
+
+
+def check_digest(raw: bytes, claimed: object, label: str) -> None:
+    if not isinstance(claimed, dict):
+        raise PromoteError(f"{label} digest mismatch")
+    sha256 = claimed.get("sha256")
+    size = claimed.get("bytes")
+    if probe.digest_bytes(raw) != sha256 or len(raw) != size:
+        raise PromoteError(f"{label} digest mismatch")
+
+
+def verify_raw_digests(
+    attestation: dict[str, Any],
+    receipt_path: Path,
+    inspect_path: Path,
+    change_path: Path,
+) -> None:
+    evidence = attestation.get("evidence")
+    if not isinstance(evidence, dict):
+        raise PromoteError("receipt.json digest mismatch")
+    check_digest(read_raw(receipt_path, "receipt.json"), evidence.get("private_receipt"), "receipt.json")
+    paths = {"inspect": inspect_path, "change": change_path}
+    trials = evidence.get("trials")
+    if not isinstance(trials, list):
+        raise PromoteError("event stream digest mismatch")
+    for trial in trials:
+        if not isinstance(trial, dict):
+            raise PromoteError("event stream digest mismatch")
+        kind = trial.get("kind")
+        if kind not in paths:
+            raise PromoteError("missing raw receipt or event stream")
+        check_digest(
+            read_raw(paths[kind], f"{kind} event stream"),
+            trial.get("event_stream"),
+            f"{kind} event stream",
+        )
+
+
+def promote(
+    source: Path,
+    attestation_path: Path,
+    destination: Path,
+    *,
+    receipt: Path | None = None,
+    inspect_events: Path | None = None,
+    change_events: Path | None = None,
+    evidence_dir: Path | None = None,
+) -> Path:
     source = source.resolve()
     attestation_path = attestation_path.resolve()
     destination = destination.resolve()
@@ -238,6 +306,10 @@ def promote(source: Path, attestation_path: Path, destination: Path) -> Path:
         raise PromoteError("malformed or incomplete attestation")
     if verdict != "PASS":
         raise PromoteError("verdict is not PASS")
+    receipt_path, inspect_path, change_path = resolve_raw_evidence(
+        receipt, inspect_events, change_events, evidence_dir
+    )
+    verify_raw_digests(attestation, receipt_path, inspect_path, change_path)
     target = destination_file(destination)
     refuse_private_request(attestation_path, target)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -308,21 +380,89 @@ def run_self_test() -> None:
         base = Path(directory)
         source = base / "repo"
         revision, tree = init_repo(source)
+        inspect_raw = b'{"trial":"inspect"}\n'
+        change_raw = b'{"trial":"change"}\n'
         receipt = passing_receipt(revision, tree)
-        attestation = probe.redacted_attestation(receipt, probe.encoded_json(receipt))
+        receipt["trials"][0]["events"] = {
+            "sha256": probe.digest_bytes(inspect_raw),
+            "bytes": len(inspect_raw),
+        }
+        receipt["trials"][1]["events"] = {
+            "sha256": probe.digest_bytes(change_raw),
+            "bytes": len(change_raw),
+        }
+        receipt_bytes = probe.encoded_json(receipt)
+        raw = base / "raw"
+        raw.mkdir()
+        (raw / "receipt.json").write_bytes(receipt_bytes)
+        (raw / "inspect.jsonl").write_bytes(inspect_raw)
+        (raw / "change.jsonl").write_bytes(change_raw)
+        attestation = probe.redacted_attestation(receipt, receipt_bytes)
         assert attestation["verdict"] == "PASS"
         assert attestation_complete(attestation)
         candidate = base / "candidate" / "attestation.json"
         candidate.parent.mkdir()
         write_json(candidate, attestation)
         public = base / "public"
-        copied = promote(source, candidate, public)
+        copied = promote(source, candidate, public, evidence_dir=raw)
         assert copied == public / "attestation.json"
         assert copied.is_file()
         assert json.loads(copied.read_text(encoding="utf-8"))["verdict"] == "PASS"
         assert git(source, "status", "--porcelain=v1") == ""
         assert git(source, "diff", "--cached", "--name-only") == ""
         print("PASS: promote copies attestation.json without git add")
+
+        tampered_receipt = base / "tamper-receipt"
+        tampered_receipt.mkdir()
+        tamper_receipt = bytearray(receipt_bytes)
+        tamper_receipt[0] ^= 1
+        (tampered_receipt / "receipt.json").write_bytes(bytes(tamper_receipt))
+        (tampered_receipt / "inspect.jsonl").write_bytes(inspect_raw)
+        (tampered_receipt / "change.jsonl").write_bytes(change_raw)
+        expect_fail(
+            "one-byte receipt tamper",
+            lambda: promote(source, candidate, base / "out-receipt-tamper", evidence_dir=tampered_receipt),
+        )
+        assert not (base / "out-receipt-tamper" / "attestation.json").exists()
+
+        tampered_events = base / "tamper-events"
+        tampered_events.mkdir()
+        (tampered_events / "receipt.json").write_bytes(receipt_bytes)
+        tamper_events = bytearray(inspect_raw)
+        tamper_events[0] ^= 1
+        (tampered_events / "inspect.jsonl").write_bytes(bytes(tamper_events))
+        (tampered_events / "change.jsonl").write_bytes(change_raw)
+        expect_fail(
+            "one-byte event stream tamper",
+            lambda: promote(source, candidate, base / "out-events-tamper", evidence_dir=tampered_events),
+        )
+        assert not (base / "out-events-tamper" / "attestation.json").exists()
+
+        digest_lie = json.loads(json.dumps(attestation))
+        digest_lie["evidence"]["private_receipt"]["sha256"] = "a" * 64
+        digest_file = base / "digest-lie.json"
+        write_json(digest_file, digest_lie)
+        expect_fail(
+            "attestation digest mismatch",
+            lambda: promote(source, digest_file, base / "out-digest-lie", evidence_dir=raw),
+        )
+        assert not (base / "out-digest-lie" / "attestation.json").exists()
+
+        expect_fail(
+            "missing receipt",
+            lambda: promote(source, candidate, base / "out-missing-receipt"),
+        )
+        expect_fail(
+            "missing event stream",
+            lambda: promote(
+                source,
+                candidate,
+                base / "out-missing-events",
+                receipt=raw / "receipt.json",
+                inspect_events=raw / "inspect.jsonl",
+                change_events=raw / "missing-change.jsonl",
+            ),
+        )
 
         dirty = base / "dirty"
         dirty_rev, dirty_tree = init_repo(dirty)
@@ -423,6 +563,10 @@ def main() -> int:
     parser.add_argument("--source", default=str(Path(__file__).resolve().parents[1]))
     parser.add_argument("--attestation")
     parser.add_argument("--destination")
+    parser.add_argument("--receipt")
+    parser.add_argument("--inspect-events")
+    parser.add_argument("--change-events")
+    parser.add_argument("--evidence-dir")
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
     if args.self_test:
@@ -430,7 +574,15 @@ def main() -> int:
         return 0
     if not args.attestation or not args.destination:
         parser.error("--attestation and --destination are required")
-    copied = promote(Path(args.source), Path(args.attestation), Path(args.destination))
+    copied = promote(
+        Path(args.source),
+        Path(args.attestation),
+        Path(args.destination),
+        receipt=Path(args.receipt) if args.receipt else None,
+        inspect_events=Path(args.inspect_events) if args.inspect_events else None,
+        change_events=Path(args.change_events) if args.change_events else None,
+        evidence_dir=Path(args.evidence_dir) if args.evidence_dir else None,
+    )
     print(copied)
     return 0
 
