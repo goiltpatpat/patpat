@@ -52,14 +52,19 @@ def is_private_path(path: Path) -> bool:
 
 
 def listed_private_paths(root: Path) -> list[str]:
-    tracked = git(root, "ls-files", "-c", "-o", "--exclude-standard")
-    hits = []
-    for line in tracked.splitlines():
-        if not line:
-            continue
-        candidate = Path(line)
-        if candidate.name == "receipt.json" or line.endswith(".jsonl"):
-            hits.append(line)
+    listings = (
+        git(root, "ls-files", "-c", "-o", "--exclude-standard"),
+        git(root, "ls-files", "-o", "--ignored", "--exclude-standard"),
+    )
+    hits: list[str] = []
+    seen: set[str] = set()
+    for listing in listings:
+        for line in listing.splitlines():
+            if not line or line in seen:
+                continue
+            if Path(line).name == "receipt.json" or line.endswith(".jsonl"):
+                seen.add(line)
+                hits.append(line)
     return hits
 
 
@@ -351,6 +356,36 @@ def run_self_test() -> None:
             lambda: promote(source, candidate, base / "out-private"),
         )
         planted.unlink()
+
+        ignored = base / "ignored-repo"
+        ignored.mkdir()
+        (ignored / "README.md").write_text("seed\n", encoding="utf-8")
+        repo_gitignore = Path(__file__).resolve().parents[1] / ".gitignore"
+        ignore_text = repo_gitignore.read_text(encoding="utf-8") if repo_gitignore.is_file() else ""
+        if "receipt.json" not in ignore_text or "*.jsonl" not in ignore_text:
+            ignore_text += "\nreceipt.json\n*.jsonl\n"
+        (ignored / ".gitignore").write_text(ignore_text, encoding="utf-8")
+        git(ignored, "init", "-q", "-b", "main")
+        git(ignored, "config", "user.name", "Patpat Probe")
+        git(ignored, "config", "user.email", "probe@example.invalid")
+        git(ignored, "add", "README.md", ".gitignore")
+        git(ignored, "commit", "-q", "-m", "seed with gitignore")
+        ignored_rev = git(ignored, "rev-parse", "HEAD")
+        ignored_tree = git(ignored, "rev-parse", "HEAD^{tree}")
+        ignored_att = probe.redacted_attestation(
+            passing_receipt(ignored_rev, ignored_tree),
+            probe.encoded_json(passing_receipt(ignored_rev, ignored_tree)),
+        )
+        ignored_file = base / "ignored-attestation.json"
+        write_json(ignored_file, ignored_att)
+        (ignored / "receipt.json").write_text("{}\n", encoding="utf-8")
+        (ignored / "events.jsonl").write_text("{}\n", encoding="utf-8")
+        assert git(ignored, "status", "--porcelain=v1", "--untracked-files=all") == ""
+        expect_fail(
+            "ignored untracked receipt.json and JSONL",
+            lambda: promote(ignored, ignored_file, base / "out-ignored"),
+        )
+        assert not (base / "out-ignored" / "attestation.json").exists()
 
         malformed = base / "malformed.json"
         malformed.write_text("{not-json", encoding="utf-8")
