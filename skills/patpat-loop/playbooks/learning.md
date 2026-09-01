@@ -10,3 +10,9 @@ Read [encode lessons](../principles/encode-lessons.md), [repository truth](../pr
 6. Obtain explicit authority before changing shared or user-global instructions.
 7. Reproduce the original failure condition and prove the new mechanism catches it.
 8. Record remaining exposure without storing secrets or transient task history.
+
+## Existing files after approval
+
+Mine this conversation for recurring working-style or failure rules. If the user asks, also mine recent in-scope transcripts from the workspace `agent-transcripts/` path named in the session. Do not glob across other projects or private chats.
+
+Propose edits to existing files only. Present the proposal and wait for approval. Do not auto-apply. There is no new SKILL.md and no *-mode mint on this path. Never create a new SKILL.md. Never mint a personal `*-mode` skill. Skip one-offs. Prefer enforcement (test, lint, validator, script) over a reminder. Patpat protocol wins.
