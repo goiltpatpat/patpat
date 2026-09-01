@@ -676,6 +676,9 @@ def validate_root(root: Path) -> list[str]:
     why_eval = root / "scripts" / "eval_why.py"
     if not why_eval.is_file():
         errors.append(f"{why_eval}: missing rationale contract eval")
+    publish_attestation = root / "scripts" / "publish_codex_attestation.py"
+    if not publish_attestation.is_file():
+        errors.append(f"{publish_attestation}: missing Codex attestation promote gate")
     plan_validator = root / "skills" / "patpat-run" / "scripts" / "validate_plan.py"
     if not plan_validator.is_file():
         errors.append(f"{plan_validator}: missing multi-PR plan validator")
@@ -730,6 +733,9 @@ def run_self_test(root: Path) -> list[str]:
 
     def remove_why_eval(fixture: Path) -> None:
         (fixture / "scripts" / "eval_why.py").unlink()
+
+    def remove_publish_attestation(fixture: Path) -> None:
+        (fixture / "scripts" / "publish_codex_attestation.py").unlink()
 
     def remove_plan_validator(fixture: Path) -> None:
         (fixture / "skills" / "patpat-run" / "scripts" / "validate_plan.py").unlink()
@@ -970,6 +976,7 @@ def run_self_test(root: Path) -> list[str]:
             ("missing loop dry-run", remove_dry_run, "missing loop dry-run"),
             ("missing inspect eval", remove_inspect_eval, "missing inspect contract eval"),
             ("missing why eval", remove_why_eval, "missing rationale contract eval"),
+            ("missing attestation promote", remove_publish_attestation, "missing Codex attestation promote gate"),
             ("missing plan validator", remove_plan_validator, "missing multi-PR plan validator"),
             ("missing agent install contract", remove_agents_guide, "missing agent install contract"),
             ("Codex defaultPrompt drift", drop_codex_default_prompt, "defaultPrompt must include $patpat"),
@@ -1144,6 +1151,18 @@ def run_self_test(root: Path) -> list[str]:
         failures.append(
             "self-test: Codex live-behavior probe contract failed: "
             f"{probe_result.stdout}{probe_result.stderr}"
+        )
+    publish_attestation = root / "scripts" / "publish_codex_attestation.py"
+    publish_result = subprocess.run(
+        [sys.executable, str(publish_attestation), "--self-test"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if publish_result.returncode != 0:
+        failures.append(
+            "self-test: Codex attestation promote gate failed: "
+            f"{publish_result.stdout}{publish_result.stderr}"
         )
     return failures
 
