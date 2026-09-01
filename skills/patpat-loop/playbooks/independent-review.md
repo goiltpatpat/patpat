@@ -24,3 +24,13 @@ Audit the candidate diff and proof evidence against the checks material to its c
 - **Fresh binding**: Bind evidence to the exact candidate revision or a reproducible working-tree snapshot, plus the material inputs, environment, and oracle. Require the committed head for commit-, push-, PR-, or delivery-bound claims.
 
 Classify proven evidence laundering or a bypass that invalidates the correctness claim as `blocker`. Grade other integrity findings by concrete impact; unavailable evidence is a verification gap, not proof of manipulation.
+
+## Independent angles
+
+When extra read-only reviewers are available and authorized, give each the same intent, diff, and integrity rubric from a distinct independent-angle. Do not name model slugs. Serial fallback when isolation or extra reviewers are missing.
+
+Two or more independent angles agreeing is higher-signal consensus. A lone finding is worth reading but lower confidence. Deduplicate. Note disagreements.
+
+## Lead judgment
+
+The parent is a lead, not a neutral aggregator. Bucket each synthesized finding: Act on / Consider / Noted / Dismissed. Keep existing severity labels. Do not auto-apply. The deliverable is a synthesized verdict. Review comments, patches, and merges are out of this playbook.
