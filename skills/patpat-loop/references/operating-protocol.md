@@ -45,7 +45,7 @@ Stop at the first change that satisfies the proof contract. Delete before adding
 
 Explicit `/patpat` or `$patpat` activation opts the session into commit-and-open-PR after mutating work passes verify and review. That is the easy ship. A higher-priority repository rule can prohibit it. Opt out with `don't commit`, `don't open a PR`, or `local only`.
 
-Overnight, going to bed, or don't stop continues until the PR is merge-ready; it does not authorize merge. Merge only when the user explicitly names land or merge and the verified head is green. Treat ambiguous `ship it` as commit-and-PR. Do not land a real CI failure. Retry a flake once.
+Overnight, going to bed, or don't stop continues until the PR is merge-ready; it does not authorize merge. Merge only when the user explicitly names land or merge and the verified head is green. Patpat may merge only a fully gated pull request; never auto-merge; never merge through the GitHub connector; release and tag still require explicit authorization. Treat ambiguous `ship it` as commit-and-PR. Do not land a real CI failure. Retry a flake once.
 
 Always pause for force-push to shared branches, production deploy, package publish, data deletion, secret rotation, and risky auth, billing, or permission changes. Explain blast radius, safer alternative, rollback, and verification before continuing.
 
