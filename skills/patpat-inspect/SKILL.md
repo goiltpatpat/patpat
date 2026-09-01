@@ -17,7 +17,7 @@ When the question asks why code or a contract reached its current shape, apply [
 
 Keep the task read-only. Inspect version-control state first when available. Load only the repository instructions, continuity files, code paths, tests, configuration, logs, and runtime state needed to answer the question.
 
-Default to one read-only pass. Use 2-4 parallel read-only explorers only when independent evidence sources are required, then one explainer. Fall back to serial work when isolation is missing.
+Default to one read-only pass. Use 2-4 parallel read-only explorers only when independent evidence sources are required, then one explainer whose synthesis is the product. Fall back to serial work when isolation is missing. For teach-me questions, the user-facing reply is the layered explanation, not a report about the work.
 
 Verify claims against primary artifacts. State whether each material conclusion is confirmed, inferred, or unknown. Cite files and functions. If a change appears necessary, recommend the smallest safe patch and stop unless the user also requested implementation. Critique uses `Act on` / `Consider` / `Noted` / `Dismissed` only after Explain. Do not open a pull request from inspect.
 

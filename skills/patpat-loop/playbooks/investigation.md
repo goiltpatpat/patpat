@@ -11,7 +11,7 @@ Use this playbook for how-does-X-work, placement, ownership, layering, and "are 
 
 ## Complexity
 
-Lean simple. One read-only pass is the default. Treat the question as complex only when independent evidence sources must be gathered before a coherent explanation (several files, several layers, or a placement dispute). Complex work may use 2-4 parallel read-only explorers, then one explainer. If isolation is missing, run serially. Explorers never write.
+Lean simple. One read-only pass is the default. Treat the question as complex only when independent evidence sources must be gathered before a coherent explanation (several files, several layers, or a placement dispute). Complex work uses 2-4 read-only explorers with distinct angles, each returning structured findings, then one explainer. The explainer performs synthesis: reconcile overlap and contradictions; the explainer's explanation is the product (light edit only). If isolation is missing, run serially. Explorers never write.
 
 ## Steps
 
@@ -33,3 +33,7 @@ Follow [the how-report contract](../../patpat-inspect/references/how-report.md).
 3. How It Works
 4. Where Things Live
 5. Gotchas
+
+## Teach
+
+When the user asks you to teach them or help them really understand the path, the user-facing reply is the explanation, not a report about the work. Weave how findings and, when reasons matter, rationale-forensics findings into one plain layered explanation. Keep why hedges. Incremental diagrams: each redraw adds one part. Required how-report and why-report headings remain the inspect artifact. There is no `/teach` skill.

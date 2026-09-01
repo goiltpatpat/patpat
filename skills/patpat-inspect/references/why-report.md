@@ -22,7 +22,7 @@ At least two, each labeled `confirmed`, `inferred`, or `unknown`.
 
 ### Supported rationale
 
-The account that survives the code anchors. Evidence before narrative.
+The account that survives the code anchors. Evidence before narrative. Every intent claim cites a commit, pull request, comment, or `file:line`, or is labeled `inferred` or `hypothesis`. Stay repo-scoped.
 
 ### Gaps
 

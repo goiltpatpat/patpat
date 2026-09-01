@@ -1,6 +1,6 @@
 # How-report contract
 
-Use this shape for every investigation Explain or Critique. Do not omit a section. Do not add a slash skill named `/how`.
+Use this shape for every investigation Explain or Critique. Do not omit a section. Do not add a slash skill named `/how`. A teach reply may layer the same findings in plain language; it does not replace these headings in the inspect artifact.
 
 ## Required sections
 
