@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -72,6 +73,16 @@ CHANGE_PROHIBITED_PATTERNS = {
     "git-history-or-delivery": INSPECT_MUTATION_PATTERNS["git-mutation"],
     "remote-command": INSPECT_MUTATION_PATTERNS["remote-command"],
 }
+RECEIPT_SCHEMA_VERSION = 2
+ATTESTATION_SCHEMA_VERSION = 1
+MODEL_BINDING = "requested CLI selection only; resolved provider snapshot is not exposed"
+GIT_OBJECT_RE = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
+SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
+MODEL_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:+-]{0,79}\Z")
+CODEX_VERSION_RE = re.compile(
+    r"codex-cli [0-9]+(?:\.[0-9]+){1,3}(?:[-+][A-Za-z0-9._-]+)?\Z"
+)
+UTC_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\Z")
 
 
 class ProbeError(RuntimeError):
@@ -84,6 +95,204 @@ def digest_bytes(value: bytes) -> str:
 
 def digest_text(value: str) -> str:
     return digest_bytes(value.encode("utf-8"))
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def encoded_json(value: dict[str, Any]) -> bytes:
+    return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+
+def valid_utc_interval(started_at: Any, finished_at: Any) -> bool:
+    if not isinstance(started_at, str) or not isinstance(finished_at, str):
+        return False
+    if not UTC_RE.fullmatch(started_at) or not UTC_RE.fullmatch(finished_at):
+        return False
+    try:
+        started = datetime.fromisoformat(started_at[:-1] + "+00:00")
+        finished = datetime.fromisoformat(finished_at[:-1] + "+00:00")
+    except ValueError:
+        return False
+    return finished >= started
+
+
+def safe_match(value: Any, pattern: re.Pattern[str]) -> str | None:
+    return value if isinstance(value, str) and pattern.fullmatch(value) else None
+
+
+def safe_count(value: Any) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
+def project_trial(trial: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    kind = trial.get("kind") if trial.get("kind") in {"inspect", "change"} else None
+    paths = trial.get("changed_paths")
+    expected_paths = [] if kind == "inspect" else ["README.md"]
+    scope_conforms = isinstance(paths, list) and paths == expected_paths
+    events = trial.get("events") if isinstance(trial.get("events"), dict) else {}
+    prompt_sha256 = safe_match(trial.get("prompt_sha256"), SHA256_RE)
+    initial_head = safe_match(trial.get("initial_head"), GIT_OBJECT_RE)
+    final_head = safe_match(trial.get("final_head"), GIT_OBJECT_RE)
+    event_sha256 = safe_match(events.get("sha256"), SHA256_RE)
+    event_bytes = safe_count(events.get("bytes"))
+    stderr_sha256 = safe_match(trial.get("stderr_sha256"), SHA256_RE)
+    stderr_bytes = safe_count(trial.get("stderr_bytes"))
+    returncode = safe_count(trial.get("returncode"))
+    reasons = trial.get("reasons")
+    valid = all(
+        (
+            kind,
+            prompt_sha256,
+            initial_head,
+            final_head,
+            initial_head == final_head,
+            event_sha256,
+            event_bytes is not None,
+            stderr_sha256,
+            stderr_bytes is not None,
+            returncode == 0,
+            trial.get("verdict") == "PASS",
+            reasons == [],
+            scope_conforms,
+        )
+    )
+    return {
+        "kind": kind,
+        "prompt_sha256": prompt_sha256,
+        "verdict": trial.get("verdict") if trial.get("verdict") in {"PASS", "FAIL", "INCONCLUSIVE"} else None,
+        "reason_count": len(reasons) if isinstance(reasons, list) else None,
+        "returncode": returncode,
+        "initial_head": initial_head,
+        "final_head": final_head,
+        "scope_conforms": scope_conforms,
+        "event_stream": {"sha256": event_sha256, "bytes": event_bytes},
+        "stderr": {"sha256": stderr_sha256, "bytes": stderr_bytes},
+    }, valid
+
+
+def redacted_attestation(receipt: dict[str, Any], receipt_bytes: bytes) -> dict[str, Any]:
+    private_trials = receipt.get("trials") if isinstance(receipt.get("trials"), list) else []
+    projected = [project_trial(trial) for trial in private_trials if isinstance(trial, dict)]
+    trials = [trial for trial, _ in projected]
+    complete_trials = (
+        len(private_trials) == 2
+        and all(isinstance(trial, dict) for trial in private_trials)
+        and len(trials) == 2
+        and {trial["kind"] for trial in trials} == {"inspect", "change"}
+        and all(valid for _, valid in projected)
+    )
+    cleanup = receipt.get("cleanup")
+    rubric = receipt.get("rubric")
+    host = receipt.get("host") if isinstance(receipt.get("host"), dict) else {}
+    model = receipt.get("model") if isinstance(receipt.get("model"), dict) else {}
+    host_name = host.get("name") if host.get("name") == "Codex CLI" else None
+    host_version = safe_match(host.get("version"), CODEX_VERSION_RE)
+    requested_model = safe_match(model.get("requested"), MODEL_ID_RE)
+    model_binding = model.get("binding") if model.get("binding") == MODEL_BINDING else None
+    revision = safe_match(receipt.get("patpat_revision"), GIT_OBJECT_RE)
+    tree = safe_match(receipt.get("patpat_tree"), GIT_OBJECT_RE)
+    inventory_sha256 = safe_match(receipt.get("installed_inventory_sha256"), SHA256_RE)
+    started_at = safe_match(receipt.get("started_at"), UTC_RE)
+    finished_at = safe_match(receipt.get("finished_at"), UTC_RE)
+    cleanup_conforms = (
+        isinstance(cleanup, dict)
+        and set(cleanup) == {"workspace_removed", "auth_copy_removed"}
+        and cleanup.get("workspace_removed") is True
+        and cleanup.get("auth_copy_removed") is True
+    )
+    reasons = receipt.get("reasons", [])
+    reasons_conform = isinstance(reasons, list) and reasons == []
+    public_cleanup = {
+        "workspace_removed": cleanup.get("workspace_removed") is True,
+        "auth_copy_removed": cleanup.get("auth_copy_removed") is True,
+    } if isinstance(cleanup, dict) else {
+        "workspace_removed": False,
+        "auth_copy_removed": False,
+    }
+    complete = all(
+        (
+            receipt.get("schema_version") == RECEIPT_SCHEMA_VERSION,
+            receipt.get("kind") == "patpat.codex.contract-canary",
+            revision,
+            tree,
+            inventory_sha256,
+            set(host) == {"name", "version"},
+            host_name,
+            host_version,
+            set(model) == {"requested", "binding"},
+            requested_model,
+            model_binding,
+            isinstance(rubric, dict),
+            valid_utc_interval(started_at, finished_at),
+            cleanup_conforms,
+            reasons_conform,
+            complete_trials,
+        )
+    )
+    verdict = receipt.get("verdict") if receipt.get("verdict") in {
+        "PASS", "FAIL", "INCONCLUSIVE"
+    } else "INCONCLUSIVE"
+    if verdict == "PASS" and not complete:
+        verdict = "INCONCLUSIVE"
+    return {
+        "schema_version": ATTESTATION_SCHEMA_VERSION,
+        "kind": "patpat.codex.contract-canary.attestation",
+        "source": {
+            "revision": revision,
+            "tree": tree,
+            "installed_inventory_sha256": inventory_sha256,
+        },
+        "execution": {
+            "started_at": started_at,
+            "finished_at": finished_at,
+            "host": {"name": host_name, "version": host_version},
+            "model": {"requested": requested_model, "binding": model_binding},
+        },
+        "evidence": {
+            "rubric_sha256": digest_text(
+                json.dumps(rubric, sort_keys=True, separators=(",", ":"))
+            ) if isinstance(rubric, dict) else None,
+            "private_receipt": {
+                "sha256": digest_bytes(receipt_bytes),
+                "bytes": len(receipt_bytes),
+            },
+            "trials": trials,
+        },
+        "verdict": verdict,
+        "reason_count": len(reasons) + (0 if complete else 1)
+        if isinstance(reasons, list) else 1,
+        "cleanup": public_cleanup,
+        "claims": {
+            "independent_review": "not_attested",
+            "enforcement": "observe-and-evaluate only; not a pre-tool gate",
+            "limitations": [
+                "requested model selection is not a resolved provider snapshot",
+                "host-attested skill activation is not proven",
+                "unobserved transient effects are not covered",
+                "evidence does not transfer across hosts, models, CLI versions, or revisions",
+                "timestamps are producer wall-clock observations, not trusted timestamps",
+            ],
+        },
+    }
+
+
+def write_evidence(output: Path, receipt: dict[str, Any]) -> dict[str, Any]:
+    receipt_bytes = encoded_json(receipt)
+    attestation = redacted_attestation(receipt, receipt_bytes)
+    if receipt.get("verdict") == "PASS" and attestation["verdict"] != "PASS":
+        receipt["verdict"] = "INCONCLUSIVE"
+        receipt.setdefault("reasons", []).append("public attestation evidence is incomplete")
+        receipt_bytes = encoded_json(receipt)
+        attestation = redacted_attestation(receipt, receipt_bytes)
+    receipt_path = output / "receipt.json"
+    receipt_path.write_bytes(receipt_bytes)
+    os.chmod(receipt_path, 0o600)
+    attestation_path = output / "attestation.json"
+    attestation_path.write_bytes(encoded_json(attestation))
+    os.chmod(attestation_path, 0o600)
+    return attestation
 
 
 def command_signals(command: str, patterns: dict[str, re.Pattern[str]]) -> list[str]:
@@ -466,6 +675,7 @@ def run_trial(
         "events": events,
         "stderr_path": stderr.name,
         "stderr_sha256": digest_bytes(stderr.read_bytes()),
+        "stderr_bytes": stderr.stat().st_size,
         "returncode": result.returncode,
         "verdict": verdict,
         "reasons": reasons,
@@ -477,6 +687,11 @@ def source_revision(source: Path) -> str:
     if status:
         raise ProbeError("source must be a clean committed revision")
     return git(source, "rev-parse", "HEAD")
+
+
+def require_source_binding(source: Path, revision: str, tree: str) -> None:
+    if source_revision(source) != revision or git(source, "rev-parse", "HEAD^{tree}") != tree:
+        raise ProbeError("source revision or tree drifted during the canary")
 
 
 def require_external_output(source: Path, output: Path) -> None:
@@ -500,6 +715,7 @@ def require_external_output(source: Path, output: Path) -> None:
 
 
 def run_probe(args: argparse.Namespace) -> dict[str, Any]:
+    started_at = utc_now()
     source = Path(args.source).resolve()
     output = Path(args.output_dir).resolve()
     if output.exists():
@@ -509,6 +725,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
     if errors:
         raise ProbeError(f"source validation failed: {'; '.join(errors)}")
     revision = source_revision(source)
+    source_tree = git(source, "rev-parse", "HEAD^{tree}")
     codex = shutil.which(args.codex)
     if not codex:
         raise ProbeError("codex CLI is unavailable")
@@ -533,6 +750,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         os.chmod(codex_home / "auth.json", 0o600)
         staged = temporary_root / "patpat-dist"
         staged_inventory = stage(source, staged)
+        require_source_binding(source, revision, source_tree)
         environment = isolated_environment(os.environ.copy(), codex_home, isolated_home)
         run_json([codex, "plugin", "marketplace", "add", str(staged), "--json"], environment)
         installed = run_json([codex, "plugin", "add", PLUGIN_ID, "--json"], environment)
@@ -582,14 +800,16 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         verdicts = {trial["verdict"] for trial in trials}
         overall = "FAIL" if "FAIL" in verdicts else "INCONCLUSIVE" if "INCONCLUSIVE" in verdicts else "PASS"
         receipt = {
-            "schema_version": 1,
+            "schema_version": RECEIPT_SCHEMA_VERSION,
             "kind": "patpat.codex.contract-canary",
+            "started_at": started_at,
             "host": {"name": "Codex CLI", "version": codex_version},
             "model": {
                 "requested": args.model,
-                "binding": "requested CLI selection only; resolved provider snapshot is not exposed",
+                "binding": MODEL_BINDING,
             },
             "patpat_revision": revision,
+            "patpat_tree": source_tree,
             "installed_inventory_sha256": digest_text(
                 json.dumps(staged_inventory, sort_keys=True, separators=(",", ":"))
             ),
@@ -605,9 +825,11 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         }
     except (OSError, ProbeError, SmokeError, StageError, subprocess.SubprocessError) as error:
         receipt = {
-            "schema_version": 1,
+            "schema_version": RECEIPT_SCHEMA_VERSION,
             "kind": "patpat.codex.contract-canary",
+            "started_at": started_at,
             "patpat_revision": revision,
+            "patpat_tree": source_tree,
             "verdict": "INCONCLUSIVE",
             "reasons": [str(error)],
             "cleanup": {"workspace_removed": False, "auth_copy_removed": False},
@@ -619,14 +841,37 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
     if not removed:
         receipt["verdict"] = "FAIL"
         receipt.setdefault("reasons", []).append("temporary workspace cleanup failed")
-    (output / "receipt.json").write_text(
-        json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
-    os.chmod(output / "receipt.json", 0o600)
+    if receipt["verdict"] == "PASS":
+        try:
+            require_source_binding(source, revision, source_tree)
+        except ProbeError as error:
+            receipt["verdict"] = "INCONCLUSIVE"
+            receipt.setdefault("reasons", []).append(str(error))
+    receipt["finished_at"] = utc_now()
+    write_evidence(output, receipt)
     return receipt
 
 
 def run_self_test() -> None:
+    observed_time = utc_now()
+    assert observed_time.endswith("Z")
+    datetime.fromisoformat(observed_time.removesuffix("Z") + "+00:00")
+
+    def attestation_trial(kind: str, marker: str) -> dict[str, Any]:
+        return {
+            "kind": kind,
+            "prompt_sha256": marker * 64,
+            "verdict": "PASS",
+            "reasons": [],
+            "returncode": 0,
+            "initial_head": marker * 40,
+            "final_head": marker * 40,
+            "changed_paths": [] if kind == "inspect" else ["README.md"],
+            "events": {"sha256": marker * 64, "bytes": 123},
+            "stderr_sha256": marker * 64,
+            "stderr_bytes": 0,
+        }
+
     baseline = {"README.md": "a"}
     complete = {
         "thread_started": True,
@@ -768,6 +1013,130 @@ def run_self_test() -> None:
     }
     with tempfile.TemporaryDirectory() as directory:
         source = Path(directory).resolve()
+        evidence_output = source / "public-evidence"
+        evidence_output.mkdir()
+        private_receipt = {
+            "schema_version": RECEIPT_SCHEMA_VERSION,
+            "kind": "patpat.codex.contract-canary",
+            "started_at": "2026-09-01T00:00:00Z",
+            "finished_at": "2026-09-01T00:01:00Z",
+            "patpat_revision": "a" * 40,
+            "patpat_tree": "b" * 40,
+            "installed_inventory_sha256": "c" * 64,
+            "host": {"name": "Codex CLI", "version": "codex-cli 1.2.3"},
+            "model": {"requested": "example", "binding": MODEL_BINDING},
+            "rubric": {"inspect": "read only"},
+            "trials": [attestation_trial("inspect", "d"), attestation_trial("change", "1")],
+            "verdict": "PASS",
+            "cleanup": {"workspace_removed": True, "auth_copy_removed": True},
+            "private_note": "do-not-publish",
+        }
+        private_receipt["trials"][0]["events"]["private_event"] = "do-not-publish"
+        private_receipt["trials"][0]["baseline_inventory"] = {"private.txt": "f" * 64}
+        attestation = write_evidence(evidence_output, private_receipt)
+        receipt_bytes = (evidence_output / "receipt.json").read_bytes()
+        assert (evidence_output / "receipt.json").stat().st_mode & 0o777 == 0o600
+        assert (evidence_output / "attestation.json").stat().st_mode & 0o777 == 0o600
+        assert attestation["source"] == {
+            "revision": "a" * 40,
+            "tree": "b" * 40,
+            "installed_inventory_sha256": "c" * 64,
+        }
+        assert attestation["evidence"]["private_receipt"] == {
+            "sha256": digest_bytes(receipt_bytes),
+            "bytes": len(receipt_bytes),
+        }
+        assert redacted_attestation(private_receipt, receipt_bytes + b"x")["evidence"][
+            "private_receipt"
+        ]["sha256"] != attestation["evidence"]["private_receipt"]["sha256"]
+        assert attestation["evidence"]["rubric_sha256"] == digest_text(
+            json.dumps(private_receipt["rubric"], sort_keys=True, separators=(",", ":"))
+        )
+        assert attestation["claims"]["independent_review"] == "not_attested"
+        assert "not a pre-tool gate" in attestation["claims"]["enforcement"]
+        assert attestation["verdict"] == "PASS"
+        assert attestation["reason_count"] == 0
+        assert "changed_paths" not in encoded_json(attestation).decode("utf-8")
+
+        def assert_inconclusive_without(raw: str, candidate: dict[str, Any]) -> None:
+            public = encoded_json(redacted_attestation(candidate, encoded_json(candidate)))
+            assert json.loads(public)["verdict"] == "INCONCLUSIVE"
+            assert raw.encode("utf-8") not in public
+
+        escaped_scope = json.loads(json.dumps(private_receipt))
+        escaped_scope["trials"][1]["changed_paths"] = ["/home/user/private.txt"]
+        assert_inconclusive_without("/home/user/private.txt", escaped_scope)
+        unsafe_model = json.loads(json.dumps(private_receipt))
+        unsafe_model["model"]["requested"] = "/home/user/SECRET_TOKEN"
+        assert_inconclusive_without("/home/user/SECRET_TOKEN", unsafe_model)
+        unsafe_version = json.loads(json.dumps(private_receipt))
+        unsafe_version["host"]["version"] = "/home/user/private"
+        assert_inconclusive_without("/home/user/private", unsafe_version)
+        message_model = json.loads(json.dumps(private_receipt))
+        message_model["model"]["requested"] = "gpt secret token"
+        assert_inconclusive_without("gpt secret token", message_model)
+        message_version = json.loads(json.dumps(private_receipt))
+        message_version["host"]["version"] = "codex-cli this is a private message"
+        assert_inconclusive_without("codex-cli this is a private message", message_version)
+        unsafe_cleanup = json.loads(json.dumps(private_receipt))
+        unsafe_cleanup["cleanup"]["note"] = "PRIVATE_CLEANUP_NOTE"
+        assert_inconclusive_without("PRIVATE_CLEANUP_NOTE", unsafe_cleanup)
+        integer_cleanup = json.loads(json.dumps(private_receipt))
+        integer_cleanup["cleanup"]["workspace_removed"] = 1
+        assert redacted_attestation(
+            integer_cleanup, encoded_json(integer_cleanup)
+        )["verdict"] == "INCONCLUSIVE"
+        unsafe_time = json.loads(json.dumps(private_receipt))
+        unsafe_time["started_at"] = "PRIVATE_TIME_VALUE"
+        assert_inconclusive_without("PRIVATE_TIME_VALUE", unsafe_time)
+        unsafe_verdict = json.loads(json.dumps(private_receipt))
+        unsafe_verdict["verdict"] = "PRIVATE_VERDICT_VALUE"
+        assert_inconclusive_without("PRIVATE_VERDICT_VALUE", unsafe_verdict)
+        contradictory_reasons = json.loads(json.dumps(private_receipt))
+        contradictory_reasons["reasons"] = ["cleanup failed"]
+        contradictory = redacted_attestation(
+            contradictory_reasons, encoded_json(contradictory_reasons)
+        )
+        assert contradictory["verdict"] == "INCONCLUSIVE"
+        assert contradictory["reason_count"] == 2
+        malformed_reasons = json.loads(json.dumps(private_receipt))
+        malformed_reasons["reasons"] = "private reason"
+        assert_inconclusive_without("private reason", malformed_reasons)
+        malformed_trial = json.loads(json.dumps(private_receipt))
+        malformed_trial["trials"].append("PRIVATE_MALFORMED_TRIAL")
+        assert_inconclusive_without("PRIVATE_MALFORMED_TRIAL", malformed_trial)
+        malformed_digest = json.loads(json.dumps(private_receipt))
+        malformed_digest["trials"][0]["events"]["sha256"] = "x"
+        assert redacted_attestation(
+            malformed_digest, encoded_json(malformed_digest)
+        )["verdict"] == "INCONCLUSIVE"
+        drifted_trial = json.loads(json.dumps(private_receipt))
+        drifted_trial["trials"][0]["final_head"] = "e" * 40
+        assert redacted_attestation(
+            drifted_trial, encoded_json(drifted_trial)
+        )["verdict"] == "INCONCLUSIVE"
+        failed_trial = json.loads(json.dumps(private_receipt))
+        failed_trial["trials"][0]["returncode"] = 1
+        assert redacted_attestation(
+            failed_trial, encoded_json(failed_trial)
+        )["verdict"] == "INCONCLUSIVE"
+        bool_count = json.loads(json.dumps(private_receipt))
+        bool_count["trials"][0]["events"]["bytes"] = True
+        assert redacted_attestation(bool_count, encoded_json(bool_count))["verdict"] == "INCONCLUSIVE"
+        incomplete = json.loads(json.dumps(private_receipt))
+        del incomplete["trials"][0]["events"]["sha256"]
+        assert redacted_attestation(incomplete, encoded_json(incomplete))["verdict"] == "INCONCLUSIVE"
+        incomplete_output = source / "incomplete-evidence"
+        incomplete_output.mkdir()
+        write_evidence(incomplete_output, incomplete)
+        assert incomplete["verdict"] == "INCONCLUSIVE"
+        inverted_time = json.loads(json.dumps(private_receipt))
+        inverted_time["finished_at"] = "2026-08-31T23:59:59Z"
+        assert redacted_attestation(inverted_time, encoded_json(inverted_time))["verdict"] == "INCONCLUSIVE"
+        public_bytes = (evidence_output / "attestation.json").read_bytes()
+        assert b"do-not-publish" not in public_bytes
+        assert b"baseline_inventory" not in public_bytes
+        assert b"private_event" not in public_bytes
         assert normalized_observed_path("README.md", source) == "README.md"
         assert normalized_observed_path(str(source / "README.md"), source) == "README.md"
         assert normalized_observed_path("../escaped.txt", source) is None
@@ -816,8 +1185,17 @@ def run_self_test() -> None:
         assert parse_events(events_path, source)["final_message_uses_patpat_contract"]
         status_root = source / "status-repository"
         initialize_repository(status_root)
+        status_revision = git(status_root, "rev-parse", "HEAD")
+        status_tree = git(status_root, "rev-parse", "HEAD^{tree}")
+        require_source_binding(status_root, status_revision, status_tree)
         (status_root / "README.md").write_text(EXPECTED_README, encoding="utf-8")
         assert git(status_root, "status", "--porcelain=v1") == " M README.md"
+        try:
+            require_source_binding(status_root, status_revision, status_tree)
+        except ProbeError:
+            pass
+        else:
+            raise AssertionError("dirty source retained a fresh revision binding")
         try:
             require_external_output(source, source / "evidence")
         except ProbeError:
@@ -865,6 +1243,7 @@ def main() -> int:
         json.dumps(
             {
                 "receipt": str(Path(args.output_dir).resolve() / "receipt.json"),
+                "attestation": str(Path(args.output_dir).resolve() / "attestation.json"),
                 "verdict": receipt["verdict"],
             }
         )
