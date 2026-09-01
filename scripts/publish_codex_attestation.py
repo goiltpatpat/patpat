@@ -555,7 +555,79 @@ def run_self_test() -> None:
         write_json(fail_file, failed)
         expect_fail("verdict not PASS", lambda: promote(source, fail_file, base / "out-fail"))
 
+        fixture_dest = base / "ci-public"
+        copied_fixture = run_ci_fixture(source, fixture_dest)
+        assert copied_fixture == fixture_dest / "attestation.json"
+        assert copied_fixture.is_file()
+        assert (fixture_dest / "temp" / "receipt.json").is_file()
+        assert not (source / "attestation.json").exists()
+        assert not (source / "receipt.json").exists()
+        assert git(source, "ls-files", "--", "attestation.json", "receipt.json", "*.jsonl") == ""
+        assert git(source, "status", "--porcelain=v1") == ""
+        fixture_att = json.loads(copied_fixture.read_text(encoding="utf-8"))
+        assert fixture_att["execution"]["model"]["requested"] == "fixture"
+        assert "fixture" in fixture_att["execution"]["host"]["version"]
+        expect_fail(
+            "ci-fixture inside worktree",
+            lambda: run_ci_fixture(source, source / "inside"),
+        )
+        print("PASS: ci-fixture promote stays outside the worktree")
+
     print("Patpat Codex attestation promote self-test passed.")
+
+
+def refuse_inside_worktree(source: Path, path: Path, label: str) -> None:
+    source = source.resolve()
+    path = path.resolve()
+    try:
+        path.relative_to(source)
+    except ValueError:
+        return
+    raise PromoteError(f"{label} must stay outside the Git worktree")
+
+
+def write_fixture_raw(source: Path, raw_dir: Path) -> tuple[Path, dict[str, Any]]:
+    refuse_inside_worktree(source, raw_dir, "fixture raw directory")
+    revision = git(source, "rev-parse", "HEAD")
+    tree = git(source, "rev-parse", "HEAD^{tree}")
+    inspect_raw = b'{"trial":"inspect"}\n'
+    change_raw = b'{"trial":"change"}\n'
+    receipt = passing_receipt(revision, tree)
+    receipt["host"]["version"] = "codex-cli 0.0.0+fixture"
+    receipt["model"]["requested"] = "fixture"
+    receipt["trials"][0]["events"] = {
+        "sha256": probe.digest_bytes(inspect_raw),
+        "bytes": len(inspect_raw),
+    }
+    receipt["trials"][1]["events"] = {
+        "sha256": probe.digest_bytes(change_raw),
+        "bytes": len(change_raw),
+    }
+    receipt_bytes = probe.encoded_json(receipt)
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    (raw_dir / "receipt.json").write_bytes(receipt_bytes)
+    (raw_dir / "inspect.jsonl").write_bytes(inspect_raw)
+    (raw_dir / "change.jsonl").write_bytes(change_raw)
+    attestation = probe.redacted_attestation(receipt, receipt_bytes)
+    attestation_path = raw_dir / "attestation.candidate.json"
+    write_json(attestation_path, attestation)
+    return attestation_path, attestation
+
+
+def run_ci_fixture(source: Path, destination: Path) -> Path:
+    source = source.resolve()
+    destination = destination.resolve()
+    refuse_inside_worktree(source, destination, "fixture destination")
+    raw_dir = destination / "temp"
+    refuse_inside_worktree(source, raw_dir, "fixture temp directory")
+    candidate, attestation = write_fixture_raw(source, raw_dir)
+    if attestation.get("execution", {}).get("model", {}).get("requested") != "fixture":
+        raise PromoteError("ci-fixture must label the model as fixture")
+    if "fixture" not in str(attestation.get("execution", {}).get("host", {}).get("version", "")):
+        raise PromoteError("ci-fixture must label the host as fixture")
+    copied = promote(source, candidate, destination, evidence_dir=raw_dir)
+    print(copied)
+    return copied
 
 
 def main() -> int:
@@ -567,10 +639,16 @@ def main() -> int:
     parser.add_argument("--inspect-events")
     parser.add_argument("--change-events")
     parser.add_argument("--evidence-dir")
+    parser.add_argument("--ci-fixture", action="store_true")
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
     if args.self_test:
         run_self_test()
+        return 0
+    if args.ci_fixture:
+        if not args.destination:
+            parser.error("--destination is required with --ci-fixture")
+        run_ci_fixture(Path(args.source), Path(args.destination))
         return 0
     if not args.attestation or not args.destination:
         parser.error("--attestation and --destination are required")
