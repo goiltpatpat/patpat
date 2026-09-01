@@ -14,3 +14,7 @@ htmlcov/
 # Operating system metadata
 .DS_Store
 Thumbs.db
+
+# Private Codex canary artifacts (never Git)
+receipt.json
+*.jsonl

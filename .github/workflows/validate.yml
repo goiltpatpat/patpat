@@ -33,6 +33,8 @@ jobs:
           python3 scripts/dry_run_loop.py --self-test
           python3 scripts/eval_inspect.py --self-test
           python3 scripts/eval_why.py --self-test
+          python3 scripts/probe_codex_behavior.py --self-test
+          python3 scripts/publish_codex_attestation.py --self-test
           python3 scripts/install_skills.py --self-test
           python3 scripts/update_skills.py --self-test
           python3 scripts/stage_plugin.py --self-test
