@@ -1133,6 +1133,18 @@ def run_self_test(root: Path) -> list[str]:
             "self-test: GitHub pull-request observer failed: "
             f"{observer_result.stdout}{observer_result.stderr}"
         )
+    codex_probe = root / "scripts" / "probe_codex_behavior.py"
+    probe_result = subprocess.run(
+        [sys.executable, str(codex_probe), "--self-test"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if probe_result.returncode != 0:
+        failures.append(
+            "self-test: Codex live-behavior probe contract failed: "
+            f"{probe_result.stdout}{probe_result.stderr}"
+        )
     return failures
 
 
