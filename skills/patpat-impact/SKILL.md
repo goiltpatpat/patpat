@@ -9,9 +9,9 @@ When invoked directly, read the [operating protocol](../patpat-loop/references/o
 
 Read [repository truth](../patpat-loop/principles/repository-truth.md), [boundary discipline](../patpat-loop/principles/boundary-discipline.md), and [proof over proxy](../patpat-loop/principles/proof-over-proxy.md). Apply the [blast-radius playbook](../patpat-loop/playbooks/blast-radius.md).
 
-Trace callers, data flow, lifecycle boundaries, persistence, wire formats, generated artifacts, and operational consumers as relevant. Name one or two critical invariants and prove each through an executable check or real surface when practical. Mark an invariant `unproven` when evidence is unavailable.
+The job is the one-safety-fact the change depends on, not a caller list. Grep callers is not the deliverable. Climb the certainty ladder for that fact and say where it stopped: (1) said so (worthless alone) (2) pointed at `file:line` (3) walked the failure and it does not reach (4) ran real code (a script or test that calls the shipped function and fails loud if wrong) (5) reproduced in the running app. Any fact that does not reach ladder step 4 is `unproven`. Do not write it as settled.
 
-Remain read-only. Report affected boundaries, evidence, severity, the smallest safe containment, and what not to change. Do not turn blast-radius analysis into architecture design or implementation.
+Remain read-only. Hand back, small: what it does; the one fact, the step reached, and the proof or unproven; real risks with `file:line`; cleared; cheapest check before merge. Do not turn blast-radius analysis into architecture design or implementation.
 
 ## Mutation boundary
 
