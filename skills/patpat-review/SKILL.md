@@ -9,7 +9,7 @@ When invoked directly, read the [operating protocol](../patpat-loop/references/o
 
 Read [repository truth](../patpat-loop/principles/repository-truth.md), [proof over proxy](../patpat-loop/principles/proof-over-proxy.md), and [preserve safety](../patpat-loop/principles/preserve-safety.md). Apply the [independent review playbook](../patpat-loop/playbooks/independent-review.md).
 
-Remain read-only. Inspect the objective, proof contract, exact diff or artifact, raw verification receipts, and affected contracts. When an independent reviewer is available and authorized, give it the evidence without the implementer's intended conclusion.
+Remain read-only. Inspect the objective, proof contract, exact diff or artifact, raw verification receipts, and affected contracts. When an independent reviewer is available and authorized, give it the evidence without the implementer's intended conclusion. When extra read-only reviewers are available and authorized, give each the same intent, diff, and integrity rubric from a distinct independent-angle. Consensus outweighs a lone finding. Bucket the synthesized verdict Act on / Consider / Noted / Dismissed. Do not auto-apply.
 
 Run the playbook's solution-integrity audit before general quality review. Reject evidence laundering, unexplained assertion weakening, hardcoded fixture answers, and proof that bypasses the claimed authoritative surface. Bind evidence to the exact candidate revision or reproducible working-tree snapshot; require a committed head only for commit- or delivery-bound claims.
 
