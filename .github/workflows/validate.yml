@@ -49,6 +49,48 @@ jobs:
           version="$(python3 -c 'import json; print(json.load(open(".codex-plugin/plugin.json", encoding="utf-8"))["version"])')"
           test "${GITHUB_REF_NAME}" = "v${version}"
 
+
+  publish-attestation:
+    needs: contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.11"
+
+      - name: Promote fixture attestation outside the worktree
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          tracked="$(git ls-files -- attestation.json receipt.json '*.jsonl')"
+          test -z "${tracked}"
+          python3 scripts/publish_codex_attestation.py \
+            --ci-fixture \
+            --source "${GITHUB_WORKSPACE}" \
+            --destination "${RUNNER_TEMP}/public"
+          test -f "${RUNNER_TEMP}/public/attestation.json"
+          test ! -f "${GITHUB_WORKSPACE}/attestation.json"
+          test ! -f "${GITHUB_WORKSPACE}/receipt.json"
+          tracked="$(git ls-files -- attestation.json receipt.json '*.jsonl')"
+          test -z "${tracked}"
+          python3 -c "from pathlib import Path; p=Path('${RUNNER_TEMP}/public/attestation.json'); names={p.name}; assert names=={'attestation.json'}"
+
+      - name: Upload sanitized attestation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: patpat-codex-attestation
+          path: ${{ runner.temp }}/public/attestation.json
+          if-no-files-found: error
+
   # Python floor is 3.11+ (datetime.UTC). One Windows job covers path-sensitive
   # installer, updater, staging, and durable-state tests. No version matrix.
   windows-paths:
