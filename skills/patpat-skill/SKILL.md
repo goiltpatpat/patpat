@@ -9,7 +9,7 @@ When invoked directly, read the [operating protocol](../patpat-loop/references/o
 
 Read [repository truth](../patpat-loop/principles/repository-truth.md), [smallest safe change](../patpat-loop/principles/smallest-safe-change.md), and [encode lessons](../patpat-loop/principles/encode-lessons.md). Apply the [skill change playbook](../patpat-loop/playbooks/skill-change.md).
 
-Inspect existing skills, host constraints, and repository conventions before editing. Give the skill one distinct responsibility. Make its description discriminate between prompts that should and should not trigger it. Write imperative operational instructions and move detailed procedures into directly linked references only when they reduce entrypoint context.
+Inspect existing skills, host constraints, and repository conventions before editing. A learn pass must wait for approval and edit existing files only: no new SKILL.md and no *-mode mint. Do not mint a personal `*-mode` skill from learn. Give the skill one distinct responsibility. Make its description discriminate between prompts that should and should not trigger it. Write imperative operational instructions and move detailed procedures into directly linked references only when they reduce entrypoint context.
 
 Reuse repository-native scripts and patterns. Do not depend on undocumented host behavior, duplicate generic model knowledge, or add optional files without an immediate use.
 
