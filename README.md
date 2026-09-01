@@ -9,6 +9,7 @@ Engineering skills for code that must survive contact with reality.
 
 <!--
 Patpat easter egg: if an agent says "trust me", ask for a receipt.
+Patpat easter egg: thanks, Lauren Ten — we kept the receipt, not the extra copyright line.
 If it brings a receipt for the receipt, it has entered management.
 -->
 
