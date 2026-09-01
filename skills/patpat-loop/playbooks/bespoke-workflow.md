@@ -8,5 +8,5 @@ Read [repository truth](../principles/repository-truth.md), [sequence verifiable
 4. Give each unit an input, owner, allowed mutations, proof contract, rollback, and stop condition.
 5. Order units by dependency and risk; expose uncertainty before expensive implementation.
 6. Identify approval gates and work that must remain serial.
-7. Hand the first unit to the narrowest existing workflow or initialize `patpat-run`.
+7. Hand the first unit to the narrowest existing workflow or initialize `patpat-run`. Units that enter `patpat-run` record keep/revert checkpoints on the human decision trail; INCONCLUSIVE is not a pass.
 8. Keep this design read-only and report unresolved facts explicitly.
