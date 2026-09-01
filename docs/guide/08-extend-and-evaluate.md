@@ -30,6 +30,8 @@ Each skill lives in its own folder and uses a `SKILL.md` with `name` and `descri
 
 Test whether the skill triggers on representative prompts, reads the required sources, follows its constraints, and produces the expected evidence. Keep candidate tasks isolated and organic. Review actual files and actions; do not score an agent from its self-report alone.
 
+Patpat's deterministic eval scripts are contract tests, not live-agent evidence. To run Patpat's Codex contract canary, commit the candidate revision, then run `python3 scripts/probe_codex_behavior.py --model <requested-model> --output-dir /absolute/new/non-git/evidence-directory`. The manual canary installs that exact revision in an isolated Codex home, runs one read-only and one bounded-mutation task, rejects observed mutation-capable commands on the read-only path, checks response-shape conformance, preserves private JSONL evidence and a receipt outside every Git worktree, and removes its temporary workspaces and copied authentication file. Inspect and redact evidence before sharing it. This canary does not prove host-attested skill activation, every route, the resolved provider snapshot, unobserved transient effects, or transfer across Codex versions, requested models, hosts, and Patpat revisions.
+
 ## Learn only durable lessons
 
 Convert a recurring failure into the smallest structural prevention: a boundary check, validator, playbook step, or principle. Do not add a rule for one unusual session. Do not edit a skill invisibly inside unrelated feature work.
