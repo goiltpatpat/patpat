@@ -15,7 +15,7 @@ from validate import validate_root
 
 
 PACKAGE_ENTRIES = (
-    ".agents",
+    ".agents/plugins",
     ".codex-plugin",
     ".cursor-plugin",
     ".gitignore",
@@ -117,6 +117,13 @@ def run_self_test(source: Path) -> None:
             raise StageError("stage self-test produced an invalid distribution")
         if inventory != file_inventory(target):
             raise StageError("stage self-test inventory changed after atomic promotion")
+        staged_agent_entries = {
+            path for path in inventory if path.startswith(".agents/")
+        }
+        if staged_agent_entries != {".agents/plugins/marketplace.json"}:
+            raise StageError(
+                f"stage self-test found unexpected .agents entries: {sorted(staged_agent_entries)}"
+            )
         try:
             stage(source, target)
         except StageError:

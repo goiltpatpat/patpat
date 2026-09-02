@@ -18,3 +18,11 @@ Thumbs.db
 # Private Codex canary artifacts (never Git)
 receipt.json
 *.jsonl
+
+# Local multi-agent run artifacts
+/.agents/ORIGINAL_REQUEST.md
+/.agents/sentinel/
+/.agents/sentinel_victory_auditor/
+/.agents/teamwork_preview_*/
+/PROJECT.md
+/TEST_INFRA.md
