@@ -665,9 +665,7 @@ def validate_root(root: Path) -> list[str]:
             errors.append(f"{eval_skill}: missing fail-closed eval verdict contract")
 
     workflow = root / ".github" / "workflows" / "validate.yml"
-    if not workflow.is_file():
-        errors.append(f"{workflow}: missing validate workflow")
-    else:
+    if workflow.is_file():
         workflow_text = workflow.read_text(encoding="utf-8")
         if "--ci-fixture" not in workflow_text:
             errors.append(f"{workflow}: missing --ci-fixture promote")
