@@ -485,16 +485,16 @@ def validate_root(root: Path) -> list[str]:
     if cursor_logo is not None:
         cursor_manifest_path = manifests["cursor"]
         if not isinstance(cursor_logo, str):
-            errors.append(f"{cursor_manifest_path}: logo must be the relative path assets/logo.svg")
+            errors.append(f"{cursor_manifest_path}: logo must be the relative path assets/logo.png")
         else:
             logo_path = Path(cursor_logo)
             if logo_path.is_absolute() or bool(logo_path.anchor):
                 errors.append(f"{cursor_manifest_path}: logo must not use an absolute path")
             elif ".." in logo_path.parts:
                 errors.append(f"{cursor_manifest_path}: logo must not use .. or an absolute path")
-            elif cursor_logo != "assets/logo.svg":
+            elif cursor_logo != "assets/logo.png":
                 errors.append(
-                    f"{cursor_manifest_path}: logo must be the relative path assets/logo.svg"
+                    f"{cursor_manifest_path}: logo must be the relative path assets/logo.png"
                 )
             else:
                 logo_file = root / cursor_logo
@@ -1045,35 +1045,35 @@ def run_self_test(root: Path) -> list[str]:
     def add_logo_to_antigravity(fixture: Path) -> None:
         manifest = fixture / "plugin.json"
         data = json.loads(manifest.read_text(encoding="utf-8"))
-        data["logo"] = "assets/logo.svg"
+        data["logo"] = "assets/logo.png"
         manifest.write_text(json.dumps(data), encoding="utf-8")
 
     def add_logo_to_codex(fixture: Path) -> None:
         manifest = fixture / ".codex-plugin" / "plugin.json"
         data = json.loads(manifest.read_text(encoding="utf-8"))
-        data["logo"] = "assets/logo.svg"
+        data["logo"] = "assets/logo.png"
         manifest.write_text(json.dumps(data), encoding="utf-8")
 
     def cursor_logo_absolute(fixture: Path) -> None:
         manifest = fixture / ".cursor-plugin" / "plugin.json"
         data = json.loads(manifest.read_text(encoding="utf-8"))
-        data["logo"] = "/tmp/logo.svg"
+        data["logo"] = "/tmp/logo.png"
         manifest.write_text(json.dumps(data), encoding="utf-8")
 
     def cursor_logo_parent(fixture: Path) -> None:
         manifest = fixture / ".cursor-plugin" / "plugin.json"
         data = json.loads(manifest.read_text(encoding="utf-8"))
-        data["logo"] = "../logo.svg"
+        data["logo"] = "../logo.png"
         manifest.write_text(json.dumps(data), encoding="utf-8")
 
     def cursor_logo_wrong_relative(fixture: Path) -> None:
         manifest = fixture / ".cursor-plugin" / "plugin.json"
         data = json.loads(manifest.read_text(encoding="utf-8"))
-        data["logo"] = "docs/logo.svg"
+        data["logo"] = "docs/logo.png"
         manifest.write_text(json.dumps(data), encoding="utf-8")
 
     def cursor_logo_missing_file(fixture: Path) -> None:
-        logo = fixture / "assets" / "logo.svg"
+        logo = fixture / "assets" / "logo.png"
         if logo.exists() or logo.is_symlink():
             logo.unlink()
 
@@ -1132,7 +1132,7 @@ def run_self_test(root: Path) -> list[str]:
             ("Codex logo field", add_logo_to_codex, "unsupported manifest fields"),
             ("Cursor logo absolute path", cursor_logo_absolute, "logo must not use an absolute path"),
             ("Cursor logo parent path", cursor_logo_parent, "logo must not use .."),
-            ("Cursor logo wrong relative", cursor_logo_wrong_relative, "logo must be the relative path assets/logo.svg"),
+            ("Cursor logo wrong relative", cursor_logo_wrong_relative, "logo must be the relative path assets/logo.png"),
             ("Cursor logo missing file", cursor_logo_missing_file, "logo file is missing"),
         ]
     )
