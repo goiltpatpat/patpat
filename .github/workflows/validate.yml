@@ -40,6 +40,7 @@ jobs:
           python3 scripts/stage_plugin.py --self-test
           python3 scripts/smoke_grok_plugin.py --commands-only
           python3 skills/patpat-run/scripts/run_state.py --self-test
+          python3 skills/patpat-run/scripts/decisions.py --self-test
           python3 skills/patpat-run/scripts/validate_plan.py --self-test
           python3 hooks/scripts/patpat_loop_state.py --self-test
 
@@ -90,7 +91,7 @@ jobs:
       - name: Upload sanitized attestation
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: patpat-codex-attestation
+          name: patpat-codex-fixture-attestation
           path: ${{ runner.temp }}/public/attestation.json
           if-no-files-found: error
 
