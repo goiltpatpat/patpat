@@ -82,6 +82,60 @@ Close repository mutations through:
 READ_ONLY_BOUNDARY_BLOCK = """## Mutation boundary
 
 Remain read-only with respect to repository implementation and external delivery. Limit incidental verifier artifacts to the declared proof contract, clean them up, and hand any authorized mutation back to `patpat-loop`."""
+FIXTURE_ARTIFACT_NAME = "patpat-codex-fixture-attestation"
+LEGACY_FIXTURE_ARTIFACT_NAME = "patpat-codex-attestation"
+PINNED_BOUNDARY_SENTENCES = (
+    (
+        Path("skills/patpat-impact/SKILL.md"),
+        (
+            "Grep callers is not the deliverable.",
+            "Any fact that does not reach ladder step 4 is `unproven`.",
+        ),
+        "impact boundary contract",
+    ),
+    (
+        Path("skills/patpat-loop/playbooks/blast-radius.md"),
+        (
+            "Grep callers is not the deliverable.",
+            "Any fact that does not reach ladder step 4 is unproven.",
+        ),
+        "impact boundary contract",
+    ),
+    (
+        Path("skills/patpat-review/SKILL.md"),
+        (
+            "Remain read-only.",
+            "Do not auto-apply.",
+        ),
+        "review boundary contract",
+    ),
+    (
+        Path("skills/patpat-loop/playbooks/independent-review.md"),
+        (
+            "Use a separate read-only reviewer",
+            "Do not auto-apply.",
+        ),
+        "review boundary contract",
+    ),
+    (
+        Path("skills/patpat-learn/SKILL.md"),
+        (
+            "Propose edits to existing files only.",
+            "Present the proposal and wait for approval.",
+            "There is no new SKILL.md and no *-mode mint on this path.",
+        ),
+        "learn boundary contract",
+    ),
+    (
+        Path("skills/patpat-loop/playbooks/learning.md"),
+        (
+            "Propose edits to existing files only.",
+            "Present the proposal and wait for approval.",
+            "There is no new SKILL.md and no *-mode mint on this path.",
+        ),
+        "learn boundary contract",
+    ),
+)
 UNADMITTED_COMPONENT_PATHS = {
     ".cursor",
     ".mcp.json",
@@ -610,6 +664,29 @@ def validate_root(root: Path) -> list[str]:
         if EVAL_VERDICT_CONTRACT not in eval_operational:
             errors.append(f"{eval_skill}: missing fail-closed eval verdict contract")
 
+    workflow = root / ".github" / "workflows" / "validate.yml"
+    if not workflow.is_file():
+        errors.append(f"{workflow}: missing validate workflow")
+    else:
+        workflow_text = workflow.read_text(encoding="utf-8")
+        if "--ci-fixture" not in workflow_text:
+            errors.append(f"{workflow}: missing --ci-fixture promote")
+        if f"name: {FIXTURE_ARTIFACT_NAME}" not in workflow_text:
+            errors.append(f"{workflow}: missing fixture attestation artifact name")
+        if f"name: {LEGACY_FIXTURE_ARTIFACT_NAME}" in workflow_text:
+            errors.append(
+                f"{workflow}: ci-fixture artifact must not use {LEGACY_FIXTURE_ARTIFACT_NAME}"
+            )
+
+    for relative, needles, label in PINNED_BOUNDARY_SENTENCES:
+        pinned = root / relative
+        if not pinned.is_file():
+            errors.append(f"{pinned}: missing {label}")
+            continue
+        operational = operational_markdown(pinned.read_text(encoding="utf-8"))
+        if any(needle not in operational for needle in needles):
+            errors.append(f"{pinned}: missing {label}")
+
     entrypoint = reference_root / "SKILL.md"
     reached = reachable_markdown(entrypoint, root) if entrypoint.is_file() else set()
     required_references = {(skill / "SKILL.md").resolve() for skill in skills}
@@ -682,6 +759,9 @@ def validate_root(root: Path) -> list[str]:
     plan_validator = root / "skills" / "patpat-run" / "scripts" / "validate_plan.py"
     if not plan_validator.is_file():
         errors.append(f"{plan_validator}: missing multi-PR plan validator")
+    decisions_helper = root / "skills" / "patpat-run" / "scripts" / "decisions.py"
+    if not decisions_helper.is_file():
+        errors.append(f"{decisions_helper}: missing decision trail helper")
     team_shape = root / "skills" / "patpat-run" / "scripts" / "team_shape.py"
     if not team_shape.is_file():
         errors.append(f"{team_shape}: missing adaptive team policy")
@@ -739,6 +819,42 @@ def run_self_test(root: Path) -> list[str]:
 
     def remove_plan_validator(fixture: Path) -> None:
         (fixture / "skills" / "patpat-run" / "scripts" / "validate_plan.py").unlink()
+
+    def remove_decisions_helper(fixture: Path) -> None:
+        (fixture / "skills" / "patpat-run" / "scripts" / "decisions.py").unlink()
+
+    def restore_legacy_fixture_artifact(fixture: Path) -> None:
+        workflow = fixture / ".github" / "workflows" / "validate.yml"
+        text = workflow.read_text(encoding="utf-8")
+        workflow.write_text(
+            text.replace(
+                f"name: {FIXTURE_ARTIFACT_NAME}",
+                f"name: {LEGACY_FIXTURE_ARTIFACT_NAME}",
+                1,
+            ),
+            encoding="utf-8",
+        )
+
+    def strip_impact_boundary(fixture: Path) -> None:
+        skill = fixture / "skills" / "patpat-impact" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        skill.write_text(
+            text.replace("Grep callers is not the deliverable.", "Caller lists are enough.", 1),
+            encoding="utf-8",
+        )
+
+    def strip_review_boundary(fixture: Path) -> None:
+        skill = fixture / "skills" / "patpat-review" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        skill.write_text(text.replace("Do not auto-apply.", "Auto-apply accepted findings.", 1), encoding="utf-8")
+
+    def strip_learn_boundary(fixture: Path) -> None:
+        skill = fixture / "skills" / "patpat-learn" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        skill.write_text(
+            text.replace("Present the proposal and wait for approval.", "Apply the proposal immediately.", 1),
+            encoding="utf-8",
+        )
 
     def remove_agents_guide(fixture: Path) -> None:
         (fixture / "AGENTS.md").unlink()
@@ -978,6 +1094,11 @@ def run_self_test(root: Path) -> list[str]:
             ("missing why eval", remove_why_eval, "missing rationale contract eval"),
             ("missing attestation promote", remove_publish_attestation, "missing Codex attestation promote gate"),
             ("missing plan validator", remove_plan_validator, "missing multi-PR plan validator"),
+            ("missing decision trail helper", remove_decisions_helper, "missing decision trail helper"),
+            ("legacy fixture artifact name", restore_legacy_fixture_artifact, "missing fixture attestation artifact name"),
+            ("impact boundary drift", strip_impact_boundary, "missing impact boundary contract"),
+            ("review boundary drift", strip_review_boundary, "missing review boundary contract"),
+            ("learn boundary drift", strip_learn_boundary, "missing learn boundary contract"),
             ("missing agent install contract", remove_agents_guide, "missing agent install contract"),
             ("Codex defaultPrompt drift", drop_codex_default_prompt, "defaultPrompt must include $patpat"),
             ("missing published source", drop_published_source, "homepage and repository must point at the published source"),
@@ -1041,6 +1162,18 @@ def run_self_test(root: Path) -> list[str]:
     )
     if result.returncode != 0:
         failures.append(f"self-test: durable run engine failed: {result.stdout}{result.stderr}")
+    decisions_helper = root / "skills" / "patpat-run" / "scripts" / "decisions.py"
+    decisions_result = subprocess.run(
+        [sys.executable, str(decisions_helper), "--self-test"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if decisions_result.returncode != 0:
+        failures.append(
+            "self-test: decision trail helper failed: "
+            f"{decisions_result.stdout}{decisions_result.stderr}"
+        )
     hook_script = root / "hooks" / "scripts" / "patpat_loop_state.py"
     hook_result = subprocess.run(
         [sys.executable, str(hook_script), "--self-test"],
