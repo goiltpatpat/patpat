@@ -15,7 +15,7 @@ import tempfile
 import unicodedata
 import uuid
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -30,6 +30,12 @@ from state_lock import (
     process_is_alive,
     read_lock_record,
 )
+
+SHIP_SCRIPTS_DIRECTORY = str(Path(__file__).resolve().parents[2] / "patpat-ship" / "scripts")
+if SHIP_SCRIPTS_DIRECTORY not in sys.path:
+    sys.path.insert(0, SHIP_SCRIPTS_DIRECTORY)
+
+import pr_watch
 
 
 SCHEMA_VERSION = 2
@@ -198,6 +204,65 @@ def run_directory(root: Path, run_id: str) -> Path:
 
 def state_path(root: Path, run_id: str) -> Path:
     return run_directory(root, run_id) / "state.json"
+
+
+def provider_receipt_path(root: Path, run_id: str) -> Path:
+    return run_directory(root, run_id) / "provider-receipt.json"
+
+
+def evaluate_merge_provider_receipt(root: Path, run_id: str) -> tuple[bool, str, bool]:
+    """Fail-closed until a pr_watch ready receipt binds repository, PR, head, base, and policy."""
+    path = provider_receipt_path(root, run_id)
+    if not path.is_file():
+        return (
+            False,
+            "merge gate failed: missing bound pr_watch ready receipt; merge authority is unattested",
+            False,
+        )
+    try:
+        bounded_file_binding(
+            path,
+            max_bytes=pr_watch.MAX_INPUT_BYTES,
+            error_type=RunStateError,
+            label="provider receipt",
+        )
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, RunStateError) as error:
+        return False, f"merge gate failed: provider receipt is unreadable: {error}", True
+    if not isinstance(document, dict):
+        return False, "merge gate failed: provider receipt must be a JSON object", True
+    if not isinstance(document.get("policy"), dict):
+        return False, "merge gate failed: provider receipt does not bind policy", True
+    verdict = pr_watch.evaluate(document)
+    binding = verdict.get("binding") if isinstance(verdict.get("binding"), dict) else {}
+    current_head = require_git_root(root)
+    bound_head = str(binding.get("head_sha") or "").lower()
+    if not all(
+        binding.get(key) not in (None, "")
+        for key in ("repository", "pull_request", "head_sha", "base_ref")
+    ):
+        return (
+            False,
+            "merge gate failed: provider receipt does not bind repository, PR, head, and base",
+            True,
+        )
+    if bound_head != current_head.lower():
+        return (
+            False,
+            "merge gate failed: provider receipt is not bound to the current HEAD: "
+            f"bound={binding.get('head_sha')}, current={current_head}",
+            True,
+        )
+    if verdict.get("verdict") != "ready":
+        reasons = verdict.get("reasons") if isinstance(verdict.get("reasons"), list) else []
+        first = reasons[0] if reasons and isinstance(reasons[0], dict) else {}
+        detail = first.get("code") or first.get("detail") or verdict.get("verdict")
+        return (
+            False,
+            f"merge gate failed: provider receipt is not ready ({verdict.get('verdict')}): {detail}",
+            True,
+        )
+    return True, "bound pr_watch ready receipt observed", True
 
 
 def fsync_directory(path: Path) -> None:
@@ -845,7 +910,10 @@ def check_gate(root: Path, run_id: str, gate: str) -> tuple[bool, str]:
         ship_ok, ship_reason = check_gate(root, run_id, "ship")
         if not ship_ok:
             return False, f"merge gate failed: {ship_reason}"
-        return True, "merge gate passed: explicit merge authority and green evidence confirmed"
+        ready, provider_reason, _present = evaluate_merge_provider_receipt(root, run_id)
+        if not ready:
+            return False, provider_reason
+        return True, "merge gate passed: explicit merge authority and bound pr_watch ready receipt"
 
     return False, f"unknown gate: {gate}"
 
@@ -1248,6 +1316,83 @@ def run_self_test() -> None:
         merge_pass, _ = check_gate(root, "main-run", "merge")
         if merge_pass:
             raise AssertionError("merge gate passed without explicit-merge authority")
+        main_state_path = state_path(root, "main-run")
+        untampered_authorities = main_state_path.read_bytes()
+        granted = load_state(root, "main-run")
+        granted["authorities"] = ["open-pr", "explicit-merge"]
+        atomic_write_json(main_state_path, granted)
+        merge_gate_pass, merge_reason = check_gate(root, "main-run", "merge")
+        provider_receipt_present = provider_receipt_path(root, "main-run").is_file()
+        if merge_gate_pass or provider_receipt_present:
+            raise AssertionError("merge gate passed without a bound pr_watch ready receipt")
+        if "green evidence confirmed" in merge_reason:
+            raise AssertionError("merge gate claimed green evidence without provider receipt")
+        if "unattested" not in merge_reason:
+            raise AssertionError("merge gate did not report authority-unattested without provider receipt")
+
+        def rfc3339_z(value: datetime) -> str:
+            return value.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+        def write_provider_receipt(**observation_overrides: Any) -> Path:
+            head = require_git_root(root)
+            observed_at = rfc3339_z(datetime.now(UTC) - timedelta(seconds=5))
+            deadline = rfc3339_z(datetime.now(UTC) + timedelta(hours=1))
+            document = {
+                "schema_version": pr_watch.SCHEMA_VERSION,
+                "binding": {
+                    "repository": "example/project",
+                    "pull_request": 17,
+                    "head_sha": head,
+                    "base_ref": "main",
+                },
+                "policy": {
+                    "required_checks": ["contracts"],
+                    "allow_no_required_checks": False,
+                    "required_review": True,
+                    "max_attempts": 3,
+                    "max_observation_age_seconds": 900,
+                    "deadline": deadline,
+                },
+                "observation": {
+                    "observed_at": observed_at,
+                    "attempt": 1,
+                    "head_sha": head,
+                    "provider_repository": "example/project",
+                    "provider_pull_request": 17,
+                    "provider_head_sha": head,
+                    "state": "open",
+                    "unresolved_threads": 0,
+                    "base_ref": "main",
+                    "draft": False,
+                    "review_decision": "approved",
+                    "mergeability": "mergeable",
+                    "checks": [
+                        {"name": "contracts", "state": "completed", "conclusion": "success"},
+                    ],
+                },
+            }
+            document["observation"].update(observation_overrides)
+            receipt = provider_receipt_path(root, "main-run")
+            receipt.write_text(json.dumps(document), encoding="utf-8")
+            return receipt
+
+        write_provider_receipt(draft=True)
+        merge_gate_pass, merge_reason = check_gate(root, "main-run", "merge")
+        if merge_gate_pass:
+            raise AssertionError("merge gate passed a draft provider receipt")
+        write_provider_receipt(review_decision="changes_requested")
+        merge_gate_pass, merge_reason = check_gate(root, "main-run", "merge")
+        if merge_gate_pass:
+            raise AssertionError("merge gate passed a changes_requested provider receipt")
+        write_provider_receipt()
+        merge_gate_pass, merge_reason = check_gate(root, "main-run", "merge")
+        provider_receipt_present = provider_receipt_path(root, "main-run").is_file()
+        if not merge_gate_pass or not provider_receipt_present:
+            raise AssertionError(f"merge gate failed with a bound pr_watch ready receipt: {merge_reason}")
+        if "green evidence confirmed" in merge_reason:
+            raise AssertionError("merge success text claimed green evidence without naming the receipt")
+        provider_receipt_path(root, "main-run").unlink()
+        atomic_write(main_state_path, untampered_authorities)
         reviewed_status = status(root, "main-run")
         if (
             not reviewed_status["review_present"]
