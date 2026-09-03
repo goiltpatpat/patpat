@@ -69,7 +69,7 @@ def git(root: Path, *args: str) -> str:
 
 def is_private_path(path: Path) -> bool:
     name = path.name
-    return name == "receipt.json" or name.endswith(".jsonl")
+    return name == "receipt.json" or name.endswith(".jsonl") or name.endswith(".stderr.txt")
 
 
 def listed_private_paths(root: Path) -> list[str]:
@@ -83,7 +83,7 @@ def listed_private_paths(root: Path) -> list[str]:
         for line in listing.splitlines():
             if not line or line in seen:
                 continue
-            if Path(line).name == "receipt.json" or line.endswith(".jsonl"):
+            if Path(line).name == "receipt.json" or line.endswith(".jsonl") or line.endswith(".stderr.txt"):
                 seen.add(line)
                 hits.append(line)
     return hits
@@ -295,7 +295,7 @@ def refuse_private_request(attestation_path: Path, destination: Path) -> None:
         targets.append(destination / "attestation.json")
     for path in targets:
         if is_private_path(path):
-            raise PromoteError("refusing to copy or commit receipt.json or JSONL")
+            raise PromoteError("refusing to copy or commit receipt.json, JSONL, or stderr")
 
 
 def destination_file(destination: Path) -> Path:
@@ -363,6 +363,12 @@ def verify_raw_digests(
             trial.get("event_stream"),
             f"{kind} event stream",
         )
+        stderr_path = paths[kind].with_name(f"{kind}.stderr.txt")
+        check_digest(
+            read_raw(stderr_path, f"{kind} stderr"),
+            trial.get("stderr"),
+            f"{kind} stderr",
+        )
 
 
 def promote(
@@ -379,10 +385,12 @@ def promote(
     attestation_path = attestation_path.resolve()
     destination = destination.resolve()
     refuse_private_request(attestation_path, destination)
+    refuse_inside_worktree(source, destination, "promote destination")
+    refuse_inside_worktree(source, destination_file(destination), "promote destination")
     private = listed_private_paths(source)
     if private:
         raise PromoteError(
-            "private receipt.json or JSONL already sit inside the Git worktree: "
+            "private receipt.json, JSONL, or stderr already sit inside the Git worktree: "
             + ", ".join(private)
         )
     revision, tree = current_head(source)
@@ -479,6 +487,8 @@ def run_self_test() -> None:
         revision, tree = init_repo(source)
         inspect_raw = b'{"trial":"inspect"}\n'
         change_raw = b'{"trial":"change"}\n'
+        inspect_stderr = b"inspect-stderr\n"
+        change_stderr = b"change-stderr\n"
         receipt = passing_receipt(revision, tree)
         receipt["trials"][0]["events"] = {
             "sha256": probe.digest_bytes(inspect_raw),
@@ -488,12 +498,18 @@ def run_self_test() -> None:
             "sha256": probe.digest_bytes(change_raw),
             "bytes": len(change_raw),
         }
+        receipt["trials"][0]["stderr_sha256"] = probe.digest_bytes(inspect_stderr)
+        receipt["trials"][0]["stderr_bytes"] = len(inspect_stderr)
+        receipt["trials"][1]["stderr_sha256"] = probe.digest_bytes(change_stderr)
+        receipt["trials"][1]["stderr_bytes"] = len(change_stderr)
         receipt_bytes = probe.encoded_json(receipt)
         raw = base / "raw"
         raw.mkdir()
         (raw / "receipt.json").write_bytes(receipt_bytes)
         (raw / "inspect.jsonl").write_bytes(inspect_raw)
         (raw / "change.jsonl").write_bytes(change_raw)
+        (raw / "inspect.stderr.txt").write_bytes(inspect_stderr)
+        (raw / "change.stderr.txt").write_bytes(change_stderr)
         attestation = probe.redacted_attestation(receipt, receipt_bytes)
         assert attestation["verdict"] == "PASS"
         assert attestation_complete(attestation)
@@ -530,6 +546,8 @@ def run_self_test() -> None:
         (tampered_receipt / "receipt.json").write_bytes(bytes(tamper_receipt))
         (tampered_receipt / "inspect.jsonl").write_bytes(inspect_raw)
         (tampered_receipt / "change.jsonl").write_bytes(change_raw)
+        (tampered_receipt / "inspect.stderr.txt").write_bytes(inspect_stderr)
+        (tampered_receipt / "change.stderr.txt").write_bytes(change_stderr)
         expect_fail(
             "one-byte receipt tamper",
             lambda: promote(source, candidate, base / "out-receipt-tamper", evidence_dir=tampered_receipt),
@@ -543,6 +561,8 @@ def run_self_test() -> None:
         tamper_events[0] ^= 1
         (tampered_events / "inspect.jsonl").write_bytes(bytes(tamper_events))
         (tampered_events / "change.jsonl").write_bytes(change_raw)
+        (tampered_events / "inspect.stderr.txt").write_bytes(inspect_stderr)
+        (tampered_events / "change.stderr.txt").write_bytes(change_stderr)
         expect_fail(
             "one-byte event stream tamper",
             lambda: promote(source, candidate, base / "out-events-tamper", evidence_dir=tampered_events),
@@ -574,6 +594,40 @@ def run_self_test() -> None:
                 change_events=raw / "missing-change.jsonl",
             ),
         )
+
+        missing_stderr = base / "missing-stderr"
+        missing_stderr.mkdir()
+        (missing_stderr / "receipt.json").write_bytes(receipt_bytes)
+        (missing_stderr / "inspect.jsonl").write_bytes(inspect_raw)
+        (missing_stderr / "change.jsonl").write_bytes(change_raw)
+        (missing_stderr / "change.stderr.txt").write_bytes(change_stderr)
+        expect_fail(
+            "missing stderr",
+            lambda: promote(source, candidate, base / "out-missing-stderr", evidence_dir=missing_stderr),
+        )
+        assert not (base / "out-missing-stderr" / "attestation.json").exists()
+
+        tampered_stderr = base / "tamper-stderr"
+        tampered_stderr.mkdir()
+        (tampered_stderr / "receipt.json").write_bytes(receipt_bytes)
+        (tampered_stderr / "inspect.jsonl").write_bytes(inspect_raw)
+        (tampered_stderr / "change.jsonl").write_bytes(change_raw)
+        extra_stderr = bytearray(inspect_stderr)
+        extra_stderr[0] ^= 1
+        (tampered_stderr / "inspect.stderr.txt").write_bytes(bytes(extra_stderr))
+        (tampered_stderr / "change.stderr.txt").write_bytes(change_stderr)
+        expect_fail(
+            "one-byte stderr tamper",
+            lambda: promote(source, candidate, base / "out-stderr-tamper", evidence_dir=tampered_stderr),
+        )
+        assert not (base / "out-stderr-tamper" / "attestation.json").exists()
+
+        expect_fail(
+            "destination inside worktree",
+            lambda: promote(source, candidate, source / "inside", evidence_dir=raw),
+        )
+        assert not (source / "inside" / "attestation.json").exists()
+        assert not (source / "attestation.json").exists()
 
         dirty = base / "dirty"
         dirty_rev, dirty_tree = init_repo(dirty)
@@ -613,8 +667,12 @@ def run_self_test() -> None:
         (ignored / "README.md").write_text("seed\n", encoding="utf-8")
         repo_gitignore = Path(__file__).resolve().parents[1] / ".gitignore"
         ignore_text = repo_gitignore.read_text(encoding="utf-8") if repo_gitignore.is_file() else ""
-        if "receipt.json" not in ignore_text or "*.jsonl" not in ignore_text:
-            ignore_text += "\nreceipt.json\n*.jsonl\n"
+        if (
+            "receipt.json" not in ignore_text
+            or "*.jsonl" not in ignore_text
+            or "*.stderr.txt" not in ignore_text
+        ):
+            ignore_text += "\nreceipt.json\n*.jsonl\n*.stderr.txt\n"
         (ignored / ".gitignore").write_text(ignore_text, encoding="utf-8")
         git(ignored, "init", "-q", "-b", "main")
         git(ignored, "config", "user.name", "Patpat Probe")
@@ -631,9 +689,10 @@ def run_self_test() -> None:
         write_json(ignored_file, ignored_att)
         (ignored / "receipt.json").write_text("{}\n", encoding="utf-8")
         (ignored / "events.jsonl").write_text("{}\n", encoding="utf-8")
+        (ignored / "inspect.stderr.txt").write_text("leak\n", encoding="utf-8")
         assert git(ignored, "status", "--porcelain=v1", "--untracked-files=all") == ""
         expect_fail(
-            "ignored untracked receipt.json and JSONL",
+            "ignored untracked receipt.json, JSONL, and stderr",
             lambda: promote(ignored, ignored_file, base / "out-ignored"),
         )
         assert not (base / "out-ignored" / "attestation.json").exists()
@@ -673,7 +732,7 @@ def run_self_test() -> None:
         assert (fixture_dest / "temp" / "receipt.json").is_file()
         assert not (source / "attestation.json").exists()
         assert not (source / "receipt.json").exists()
-        assert git(source, "ls-files", "--", "attestation.json", "receipt.json", "*.jsonl") == ""
+        assert git(source, "ls-files", "--", "attestation.json", "receipt.json", "*.jsonl", "*.stderr.txt") == ""
         assert git(source, "status", "--porcelain=v1") == ""
         fixture_att = json.loads(copied_fixture.read_text(encoding="utf-8"))
         assert fixture_att["execution"]["model"]["requested"] == "fixture"
@@ -703,6 +762,8 @@ def write_fixture_raw(source: Path, raw_dir: Path) -> tuple[Path, dict[str, Any]
     tree = git(source, "rev-parse", "HEAD^{tree}")
     inspect_raw = b'{"trial":"inspect"}\n'
     change_raw = b'{"trial":"change"}\n'
+    inspect_stderr = b"inspect-stderr\n"
+    change_stderr = b"change-stderr\n"
     receipt = passing_receipt(revision, tree)
     receipt["host"]["version"] = "codex-cli 0.0.0+fixture"
     receipt["model"]["requested"] = "fixture"
@@ -714,11 +775,17 @@ def write_fixture_raw(source: Path, raw_dir: Path) -> tuple[Path, dict[str, Any]
         "sha256": probe.digest_bytes(change_raw),
         "bytes": len(change_raw),
     }
+    receipt["trials"][0]["stderr_sha256"] = probe.digest_bytes(inspect_stderr)
+    receipt["trials"][0]["stderr_bytes"] = len(inspect_stderr)
+    receipt["trials"][1]["stderr_sha256"] = probe.digest_bytes(change_stderr)
+    receipt["trials"][1]["stderr_bytes"] = len(change_stderr)
     receipt_bytes = probe.encoded_json(receipt)
     raw_dir.mkdir(parents=True, exist_ok=True)
     (raw_dir / "receipt.json").write_bytes(receipt_bytes)
     (raw_dir / "inspect.jsonl").write_bytes(inspect_raw)
     (raw_dir / "change.jsonl").write_bytes(change_raw)
+    (raw_dir / "inspect.stderr.txt").write_bytes(inspect_stderr)
+    (raw_dir / "change.stderr.txt").write_bytes(change_stderr)
     attestation = probe.redacted_attestation(receipt, receipt_bytes)
     attestation_path = raw_dir / "attestation.candidate.json"
     write_json(attestation_path, attestation)
