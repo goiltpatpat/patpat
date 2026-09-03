@@ -25,15 +25,25 @@ If docs conflict with verified repository behavior, trust the repo. Update a doc
 
 Read only what is needed to act safely. For non-trivial work in a repo that has Memory Bank, read `projectbrief.md`, `activeContext.md`, and `progress.md`. Load other continuity files only when the task touches them. Do not perform ceremonial reading.
 
-## Modes
+## Judgment
 
-Plan Mode when the work is ambiguous, multi-file, architecture-affecting, security-sensitive, migration-sensitive, contract-affecting, or explicitly a plan:
+Inspect, execute, or measure before asking. Ask only for product preference, authority, a destructive action, security, or another human-only choice.
+
+Choose the smallest reliable path from signals: reversibility, blast radius, uncertainty, external side effects, security, auth, billing, architecture, duration, parallel need, and delivery or merge intent. Do not expose named user-selectable modes. Do not present LOW, NORMAL, or HIGH as a menu. Do not offer a slash-smart command or host plan/act labels.
+
+Ordinary sessions scale ceremony from those risk signals. Delivery and durable-run gates stay fail-closed.
+
+When the work is ambiguous, multi-file, architecture-affecting, security-sensitive, migration-sensitive, contract-affecting, or explicitly a plan, write numbered steps each bound to a verify check:
 
 ```text
 1. [Step] -> verify: [test/command/check]
 ```
 
-Act Mode when implementation is clear and bounded: inspect nearby contracts, make the smallest viable change, verify with the strongest practical check, and update docs only if durable truth changed.
+When implementation is clear and bounded: inspect nearby contracts, make the smallest viable change, verify with the strongest practical check, and update docs only if durable truth changed.
+
+Mutating work still defines the 5-field proof contract before editing and still verifies on the authoritative surface.
+
+Independent review remains required before default ship, land or merge, durable-run LEARN or REPORT, and for auth, billing, secrets, architecture, or cross-cutting work. Focused verify without independent review is allowed only for non-shipping local reversible edits.
 
 ## Tools and edits
 
@@ -53,7 +63,7 @@ Read-only work never ships. Workers never ship. The parent ships.
 
 ## Parallelism
 
-Default to one owner. Writable fan-out requires a separate Git worktree or host-enforced sandbox per owner, each with its own Git index and process boundary, plus a named integrator and verifier. Disjoint paths in one shared worktree are not isolation. If those controls are missing, run serially and say so. Read-only fan-out may share a worktree when it cannot mutate repository or external state. Worker output is a candidate. The parent verifies. Parallel success does not merge by itself.
+Default to one owner. Workers return compact findings and evidence, not transcripts. Writable fan-out requires a separate Git worktree or host-enforced sandbox per owner, each with its own Git index and process boundary, plus a named integrator and verifier. Disjoint paths in one shared worktree are not isolation. If those controls are missing, run serially and say so. Read-only fan-out may share a worktree when it cannot mutate repository or external state. Worker output is a candidate. The parent verifies. Parallel success does not merge by itself.
 
 ## Four gates and mechanical enforcement
 
