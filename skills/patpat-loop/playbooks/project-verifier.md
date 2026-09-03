@@ -12,3 +12,7 @@ Read [proof over proxy](../principles/proof-over-proxy.md), [preserve safety](..
 8. Run one mapped workflow end to end and preserve inspectable evidence of the observed result. A new verifier is a draft until this succeeds.
 9. Run cleanup, prove that verifier-owned resources stopped without affecting unrelated processes, and confirm the evidence still exists.
 10. Report product defects, verifier defects, environment blockers, and unmapped feature drift separately.
+
+Isolate instances so two can run side by side (ports, data dirs, profiles), or refuse to double-drive a shared instance.
+Never kill by process name; kill only what this run started.
+

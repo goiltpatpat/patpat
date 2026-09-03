@@ -154,6 +154,14 @@ PINNED_BOUNDARY_SENTENCES = (
         ),
         "session-takeover live-verify contract",
     ),
+    (
+        Path("skills/patpat-loop/playbooks/project-verifier.md"),
+        (
+            "Isolate instances so two can run side by side (ports, data dirs, profiles)",
+            "Never kill by process name",
+        ),
+        "project-verifier isolation contract",
+    ),
 )
 UNADMITTED_COMPONENT_PATHS = {
     ".cursor",
@@ -903,6 +911,18 @@ def run_self_test(root: Path) -> list[str]:
             encoding="utf-8",
         )
 
+    def strip_project_verifier_isolation(fixture: Path) -> None:
+        playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "project-verifier.md"
+        text = playbook.read_text(encoding="utf-8")
+        playbook.write_text(
+            text.replace(
+                "Never kill by process name",
+                "Kill leftover processes by name",
+                1,
+            ),
+            encoding="utf-8",
+        )
+
     def remove_agents_guide(fixture: Path) -> None:
         (fixture / "AGENTS.md").unlink()
 
@@ -1149,6 +1169,7 @@ def run_self_test(root: Path) -> list[str]:
             ("learn boundary drift", strip_learn_boundary, "missing learn boundary contract"),
             ("regression-first fail-before drift", strip_regression_fail_before, "missing regression-first fail-before contract"),
             ("session-takeover live-verify drift", strip_session_takeover_live_verify, "missing session-takeover live-verify contract"),
+            ("project-verifier isolation drift", strip_project_verifier_isolation, "missing project-verifier isolation contract"),
             ("missing agent install contract", remove_agents_guide, "missing agent install contract"),
             ("Codex defaultPrompt drift", drop_codex_default_prompt, "defaultPrompt must include $patpat"),
             ("missing published source", drop_published_source, "homepage and repository must point at the published source"),
