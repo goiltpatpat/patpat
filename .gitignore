@@ -18,6 +18,7 @@ Thumbs.db
 # Private Codex canary artifacts (never Git)
 receipt.json
 *.jsonl
+*.stderr.txt
 
 # Local multi-agent run artifacts
 /.agents/ORIGINAL_REQUEST.md
