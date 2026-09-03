@@ -55,6 +55,19 @@ Read-only work never ships. Workers never ship. The parent ships.
 
 Default to one owner. Writable fan-out requires a separate Git worktree or host-enforced sandbox per owner, each with its own Git index and process boundary, plus a named integrator and verifier. Disjoint paths in one shared worktree are not isolation. If those controls are missing, run serially and say so. Read-only fan-out may share a worktree when it cannot mutate repository or external state. Worker output is a candidate. The parent verifies. Parallel success does not merge by itself.
 
+## Four gates and mechanical enforcement
+
+Patpat work progresses through four strict gates:
+1. **Pre-edit**: Define a 5-field proof contract (`Claim`, `Surface`, `Action`, `Expect`, `Cleanup`) before editing code.
+2. **Verify**: Observe execution on the authoritative surface, producing an exit-code-0 receipt for the exact current snapshot.
+3. **Ship**: Commit and open or update one ready PR after fresh verification and independent review pass.
+4. **Merge**: Land only upon explicit user `land` or `merge` language with green provider checks.
+
+Enforcement boundaries:
+- In durable graph runs, [`skills/patpat-run/scripts/run_state.py check-gate`](../../patpat-run/scripts/run_state.py) enforces these transitions mechanically.
+- In ordinary session turns, these gates operate as an instruction contract unless a host hook or pre-tool mechanism actively blocks writes. A CLI that agents can ignore is not mechanical host enforcement.
+- After 3 failures on the same unchanged blocker, stop and classify the failure into: `implementation defect`, `verifier defect`, or `environment blocker`.
+
 ## Evidence
 
 Never claim `verified` unless the authoritative check passed. Use `partially verified`, `implemented but not verified`, or `not implemented` when that is the truth. Generated code is untrusted until reviewed. A build is support, not proof of user-visible behavior.
