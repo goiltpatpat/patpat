@@ -72,6 +72,17 @@ def route(prompt: str) -> str:
     return "loop"
 
 
+def delivery_intent(
+    *,
+    explicit_delivery: bool,
+    continuation: bool,
+    explicit_merge: bool,
+    existing_pr: bool = False,
+    explicit_ready_pr: bool = False,
+) -> bool:
+    return bool(explicit_delivery or continuation or explicit_merge or existing_pr or explicit_ready_pr)
+
+
 def ship_plan(
     *,
     path: str,
@@ -91,15 +102,28 @@ def ship_plan(
 ) -> str:
     if path == "read-only" or action == "inspect":
         return "no-ship"
-    if not verified or not reviewed:
-        return "stop-missing-proof"
     if opt_out:
         return "local-only"
     if action in {"deploy", "publish", "force-push"}:
         return "pause"
     if not repo_allows_delivery:
         return "stop-repository-policy"
-    if not (patpat_activated or explicit_delivery or explicit_merge):
+    intent = delivery_intent(
+        explicit_delivery=explicit_delivery,
+        continuation=continuation,
+        explicit_merge=explicit_merge,
+        existing_pr=existing_pr,
+        explicit_ready_pr=explicit_ready_pr,
+    )
+    if not intent:
+        if not verified:
+            return "stop-missing-proof"
+        if patpat_activated:
+            return "local-only"
+        return "local-only-no-authority"
+    if not verified or not reviewed:
+        return "stop-missing-proof"
+    if not (patpat_activated or explicit_delivery or explicit_merge or continuation):
         return "local-only-no-authority"
     if explicit_merge:
         if ci == "green":
@@ -223,11 +247,14 @@ def run_self_test() -> None:
             raise AssertionError(f"route({prompt!r})={got!r} expected {expected!r}")
 
     base_ship = base_ship_args()
-    assert ship_plan(**base_ship) == "commit-and-pr"
+    # Activation alone does not ship; delivery intent is required for commit-and-PR.
+    assert ship_plan(**base_ship) == "local-only"
+    assert ship_plan(**{**base_ship, "reviewed": False}) == "local-only"
+    assert ship_plan(**{**base_ship, "verified": False}) == "stop-missing-proof"
+    assert ship_plan(**{**base_ship, "explicit_delivery": True}) == "commit-and-pr"
+    assert ship_plan(**{**base_ship, "explicit_delivery": True, "reviewed": False}) == "stop-missing-proof"
     assert ship_plan(**{**base_ship, "opt_out": True}) == "local-only"
     assert ship_plan(**{**base_ship, "path": "read-only"}) == "no-ship"
-    assert ship_plan(**{**base_ship, "verified": False}) == "stop-missing-proof"
-    assert ship_plan(**{**base_ship, "reviewed": False}) == "stop-missing-proof"
     assert ship_plan(**{**base_ship, "patpat_activated": False}) == "local-only-no-authority"
     assert ship_plan(
         **{**base_ship, "patpat_activated": False, "explicit_delivery": True}
@@ -287,6 +314,33 @@ def run_self_test() -> None:
     assert issue_loop(**ready_write, interactive_delivery_authority=True) == "coordinator-write-authorized"
     assert issue_loop(**active_issue, requested_write="comment", allowed_writes=("comment",), fresh_authority=True) == "coordinator-write-authorized"
 
+    # Instruction-contract checks, not live-agent behavioral proof.
+    judgment_corpus = [
+        ("unnecessary-ask", "ask for a path without inspecting", "reject"),
+        ("inspect-before-ask", "inspect, execute, or measure before asking", "accept"),
+        ("over-plan", "write a multi-phase plan for a one-line typo", "reject"),
+        ("over-fan-out", "spawn arena for a single-file typo", "reject"),
+        ("over-rigor", "require independent review for local-only reversible typo", "reject"),
+        ("under-rigor-auth", "skip independent review on auth or billing change", "reject"),
+        ("proxy-proof", "claim verified from a build alone", "reject"),
+        ("authoritative-surface", "observe claimed behavior on the authoritative surface", "accept"),
+        ("local-only", ship_plan(**base_ship), "local-only"),
+        ("delivery", ship_plan(**{**base_ship, "explicit_delivery": True}), "commit-and-pr"),
+    ]
+    for name, observed, expected in judgment_corpus:
+        if name in {"local-only", "delivery"}:
+            if observed != expected:
+                raise AssertionError(f"judgment {name}: {observed!r} != {expected!r}")
+        elif expected == "accept" and "reject" in str(observed).casefold() and name.startswith("x"):
+            raise AssertionError(name)
+        # Structural presence checks for instruction-contract labels.
+        if name not in {"local-only", "delivery"} and not isinstance(observed, str):
+            raise AssertionError(f"judgment corpus row {name} missing label")
+    assert judgment_corpus[0][2] == "reject"
+    assert judgment_corpus[1][2] == "accept"
+    assert any(row[0] == "under-rigor-auth" for row in judgment_corpus)
+    assert any(row[0] == "proxy-proof" for row in judgment_corpus)
+
     print("Patpat loop dry-run self-test passed.")
 
 
@@ -302,6 +356,7 @@ def main() -> int:
             ("why-ship_plan", route("Why does dry_run_loop.ship_plan require explicit land/merge?"), ship_plan(**{**base_ship, "path": "read-only"})),
             ("how-routing", route("how does routing work?"), ship_plan(**{**base_ship, "path": "read-only"})),
             ("fix", route("/patpat fix the timeout"), ship_plan(**base_ship)),
+            ("fix open PR", "debug", ship_plan(**{**base_ship, "explicit_delivery": True})),
             ("fix local only", "debug", ship_plan(**{**base_ship, "opt_out": True})),
             ("overnight", "debug", ship_plan(**{**base_ship, "continuation": True, "ci": "green"})),
             ("land green", "debug", ship_plan(**{**base_ship, "explicit_merge": True, "ci": "green"})),

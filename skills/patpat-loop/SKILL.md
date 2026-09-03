@@ -67,7 +67,7 @@ FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY
 VERIFY -> REPORT when the edit is local, reversible, and not shipping
 VERIFY -> REVIEW before default ship, land or merge, durable-run LEARN or REPORT, and for auth, billing, secrets, architecture, or cross-cutting work
 REVIEW -> LEARN? -> REPORT
-MUTATING? -> DEFAULT SHIP (commit + PR)
+MUTATING + delivery intent? -> DEFAULT SHIP (commit + PR)
 LAND? -> MERGE a green verified PR
 ```
 
@@ -80,7 +80,7 @@ Enter `LEARN?` only for a recurring failure worth encoding.
 ## Preserve control
 
 - Ordinary in-scope edits proceed under `/patpat` without asking permission to type.
-- Explicit `/patpat` or `$patpat` activation opts in to [commit and a ready PR](playbooks/default-delivery.md) after verify and review. Higher-priority repository rules and `don't commit` / `local only` still win.
+- Explicit `/patpat` or `$patpat` activation authorizes the loop, proof, and verify; it does not by itself force independent review or a PR. [Default delivery](playbooks/default-delivery.md) runs only when delivery intent exists. Higher-priority repository rules and `don't commit` / `local only` still win.
 - Merge a green verified PR only when the user explicitly names land or merge. Treat ambiguous `ship it` as commit-and-PR, not merge.
 - Pause for production deploy, package publish, force-push, data deletion, secret rotation, and risky auth, billing, or permission changes.
 - Workers never ship. The parent ships.

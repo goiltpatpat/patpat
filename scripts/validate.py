@@ -169,8 +169,18 @@ PINNED_BOUNDARY_SENTENCES = (
             "Ask only for product preference, authority, a destructive action, security, or another human-only choice.",
             "Do not expose named user-selectable modes.",
             "Independent review remains required before default ship",
+            "Default commit-and-PR requires delivery intent.",
+            "It does not by itself force independent review or a PR.",
         ),
         "risk-scaled judgment contract",
+    ),
+    (
+        Path("skills/patpat-loop/playbooks/default-delivery.md"),
+        (
+            "Explicit `/patpat` activation alone does not invoke this playbook.",
+            "Default commit-and-PR requires delivery intent.",
+        ),
+        "delivery-intent default-delivery contract",
     ),
     (
         Path("skills/patpat-loop/playbooks/behavioral-eval.md"),
@@ -952,6 +962,18 @@ def run_self_test(root: Path) -> list[str]:
             encoding="utf-8",
         )
 
+    def strip_delivery_intent_default_delivery(fixture: Path) -> None:
+        playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "default-delivery.md"
+        text = playbook.read_text(encoding="utf-8")
+        playbook.write_text(
+            text.replace(
+                "Explicit `/patpat` activation alone does not invoke this playbook.",
+                "Explicit `/patpat` activation alone invokes this playbook.",
+                1,
+            ),
+            encoding="utf-8",
+        )
+
     def strip_judgment_failure_contract(fixture: Path) -> None:
         playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "behavioral-eval.md"
         text = playbook.read_text(encoding="utf-8")
@@ -1212,6 +1234,7 @@ def run_self_test(root: Path) -> list[str]:
             ("session-takeover live-verify drift", strip_session_takeover_live_verify, "missing session-takeover live-verify contract"),
             ("project-verifier isolation drift", strip_project_verifier_isolation, "missing project-verifier isolation contract"),
             ("risk-scaled judgment drift", strip_risk_scaled_judgment, "missing risk-scaled judgment contract"),
+            ("delivery-intent default-delivery drift", strip_delivery_intent_default_delivery, "missing delivery-intent default-delivery contract"),
             ("judgment-failure instruction-contract drift", strip_judgment_failure_contract, "missing judgment-failure instruction-contract"),
             ("missing agent install contract", remove_agents_guide, "missing agent install contract"),
             ("Codex defaultPrompt drift", drop_codex_default_prompt, "defaultPrompt must include $patpat"),

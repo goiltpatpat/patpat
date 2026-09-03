@@ -36,8 +36,8 @@ DISABLE = re.compile(
 )
 STICKY_CONTEXT = (
     "Patpat Loop is active for this session. Apply /patpat (`patpat-loop`) for this turn. "
-    "Follow the operating protocol. Explicit activation authorizes commit-and-PR after proof unless "
-    "a higher-priority repository rule or opt-out blocks it. Merge only on explicit land or merge language. "
+    "Follow the operating protocol. Explicit activation authorizes the loop, proof, and verify; default commit-and-PR still requires delivery intent. "
+    "A higher-priority repository rule or opt-out still blocks delivery. Merge only on explicit land or merge language. "
     "Do not deploy, force-push, or publish a package by implication."
 )
 PLUGIN_DATA_ENV_KEYS = ("PLUGIN_DATA", "GROK_PLUGIN_DATA", "CLAUDE_PLUGIN_DATA")
@@ -446,8 +446,8 @@ def handle_hook(payload: dict[str, Any], plugin_data: str | None = None, now_ms:
         return context_output(
             event,
             "Patpat sticky receipt: trusted session hook persisted /patpat. "
-            "The skill supplies activation-turn behavior. After proof, default to commit-and-PR unless "
-            "a higher-priority repository rule or opt-out blocks it. Merge requires explicit land or merge language.",
+            "The skill supplies activation-turn behavior. After proof, keep local reversible work light without delivery intent; default commit-and-PR only when delivery intent exists. "
+            "A higher-priority repository rule or opt-out still blocks delivery. Merge requires explicit land or merge language.",
         )
     current = read_active_state(plugin_data, session_id, cwd, now_ms, ttl_ms)
     if not current:
