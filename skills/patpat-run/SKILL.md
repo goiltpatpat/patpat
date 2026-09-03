@@ -27,6 +27,8 @@ On resume, validate the store, compare live repository state, inspect intentiona
 
 When inheriting an arbitrary branch, transcript, or handoff without a valid Patpat store, apply the [session takeover playbook](../patpat-loop/playbooks/session-takeover.md) before initializing a new run.
 
+When taking over, lock the time window, do not reconstruct from transcripts alone, and verify surfaced PRs, branches, and tickets with live git and gh.
+
 Program stores created before assignment fencing are schema v1. Do not trust or silently upgrade their actor labels or evidence. Run `migrate-v1 --invalidate-legacy-evidence` explicitly; migration preserves plan and heads, clears legacy evidence and inbox, closes gates, and requires fresh dispatch plus assignments.
 
 When the request is a queue of independent PRs or a linear verified stack, apply the [autopilot playbook](../patpat-loop/playbooks/autopilot.md). Owners build and prove. The root verifies. Landing still requires a named delivery action.
