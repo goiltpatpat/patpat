@@ -162,6 +162,23 @@ PINNED_BOUNDARY_SENTENCES = (
         ),
         "project-verifier isolation contract",
     ),
+    (
+        Path("skills/patpat-loop/references/operating-protocol.md"),
+        (
+            "Inspect, execute, or measure before asking.",
+            "Ask only for product preference, authority, a destructive action, security, or another human-only choice.",
+            "Do not expose named user-selectable modes.",
+            "Independent review remains required before default ship",
+        ),
+        "risk-scaled judgment contract",
+    ),
+    (
+        Path("skills/patpat-loop/playbooks/behavioral-eval.md"),
+        (
+            "Judgment failure classes are instruction-contract checks, not live-agent behavioral proof.",
+        ),
+        "judgment-failure instruction-contract",
+    ),
 )
 UNADMITTED_COMPONENT_PATHS = {
     ".cursor",
@@ -923,6 +940,30 @@ def run_self_test(root: Path) -> list[str]:
             encoding="utf-8",
         )
 
+    def strip_risk_scaled_judgment(fixture: Path) -> None:
+        protocol = fixture / "skills" / "patpat-loop" / "references" / "operating-protocol.md"
+        text = protocol.read_text(encoding="utf-8")
+        protocol.write_text(
+            text.replace(
+                "Inspect, execute, or measure before asking.",
+                "Ask freely before inspecting.",
+                1,
+            ),
+            encoding="utf-8",
+        )
+
+    def strip_judgment_failure_contract(fixture: Path) -> None:
+        playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "behavioral-eval.md"
+        text = playbook.read_text(encoding="utf-8")
+        playbook.write_text(
+            text.replace(
+                "Judgment failure classes are instruction-contract checks, not live-agent behavioral proof.",
+                "Judgment failure classes are live-agent behavioral proof.",
+                1,
+            ),
+            encoding="utf-8",
+        )
+
     def remove_agents_guide(fixture: Path) -> None:
         (fixture / "AGENTS.md").unlink()
 
@@ -1170,6 +1211,8 @@ def run_self_test(root: Path) -> list[str]:
             ("regression-first fail-before drift", strip_regression_fail_before, "missing regression-first fail-before contract"),
             ("session-takeover live-verify drift", strip_session_takeover_live_verify, "missing session-takeover live-verify contract"),
             ("project-verifier isolation drift", strip_project_verifier_isolation, "missing project-verifier isolation contract"),
+            ("risk-scaled judgment drift", strip_risk_scaled_judgment, "missing risk-scaled judgment contract"),
+            ("judgment-failure instruction-contract drift", strip_judgment_failure_contract, "missing judgment-failure instruction-contract"),
             ("missing agent install contract", remove_agents_guide, "missing agent install contract"),
             ("Codex defaultPrompt drift", drop_codex_default_prompt, "defaultPrompt must include $patpat"),
             ("missing published source", drop_published_source, "homepage and repository must point at the published source"),

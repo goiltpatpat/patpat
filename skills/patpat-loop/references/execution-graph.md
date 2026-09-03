@@ -10,12 +10,19 @@ FRAME
       -> PROOF CONTRACT
           -> ACT
               -> VERIFY
+                  -> REPORT (non-shipping local reversible edits only)
                   -> REVIEW
                       -> LEARN?
                           -> REPORT
                               -> DEFAULT SHIP (commit + PR)
                                   -> LAND? -> MERGE green verified PR
 ```
+
+Inspect, execute, or measure before asking. Ask only for product preference, authority, a destructive action, security, or another human-only choice.
+
+Choose the smallest reliable path from signals: reversibility, blast radius, uncertainty, external side effects, security, auth, billing, architecture, duration, parallel need, and delivery or merge intent. Do not expose named user-selectable modes.
+
+Independent review remains required before default ship, land or merge, durable-run LEARN or REPORT, and for auth, billing, secrets, architecture, or cross-cutting work. Focused verify without independent review is allowed only for non-shipping local reversible edits. Mutating work still defines the 5-field proof contract before editing and still verifies on the authoritative surface.
 
 Failure edges:
 

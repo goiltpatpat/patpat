@@ -227,6 +227,7 @@ def run_self_test() -> None:
     assert ship_plan(**{**base_ship, "opt_out": True}) == "local-only"
     assert ship_plan(**{**base_ship, "path": "read-only"}) == "no-ship"
     assert ship_plan(**{**base_ship, "verified": False}) == "stop-missing-proof"
+    assert ship_plan(**{**base_ship, "reviewed": False}) == "stop-missing-proof"
     assert ship_plan(**{**base_ship, "patpat_activated": False}) == "local-only-no-authority"
     assert ship_plan(
         **{**base_ship, "patpat_activated": False, "explicit_delivery": True}

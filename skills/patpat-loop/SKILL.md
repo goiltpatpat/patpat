@@ -52,7 +52,7 @@ The user speaks plainly and invokes `/patpat` (or host equivalent). The agent se
 | Named commit, PR update, publish, or authorized deploy | `ship` | [`patpat-ship`](../patpat-ship/SKILL.md) | [Authorized delivery](playbooks/authorized-delivery.md) |
 | Durable multi-phase execution, multi-PR queue, or overnight run | `run` | [`patpat-run`](../patpat-run/SKILL.md) | [Multi-phase run](playbooks/multi-phase-run.md) |
 
-Specialized workflows (`arena`, `swarm`, `automation`, `eval`, `perf`, `learn`) remain back-office execution playbooks referenced in the [route catalog](references/route-catalog.md) and dispatched internally by the agent under these 8 routes. Users do not choose from a menu.
+Specialized workflows (`arena`, `swarm`, `automation`, `eval`, `perf`, `learn`) remain back-office execution playbooks referenced in the [route catalog](references/route-catalog.md) and dispatched internally by the agent under these 8 routes. Users do not choose from a menu. Users still only state the goal. Inspect, execute, or measure before asking. Ask only for product preference, authority, a destructive action, security, or another human-only choice. Choose the smallest reliable path from signals: reversibility, blast radius, uncertainty, external side effects, security, auth, billing, architecture, duration, parallel need, and delivery or merge intent. Do not expose named user-selectable modes.
 
 If no narrow route fits, use `patpat-architect` or `patpat-run`. For specialized overlap resolution or secondary workflows, consult the [route catalog](references/route-catalog.md).
 
@@ -63,12 +63,15 @@ Overnight, "don't stop", or "going to bed" continues the matched playbook throug
 Read [the execution graph](references/execution-graph.md), the matched workflow, its playbook, and only the principles those files link.
 
 ```text
-FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY -> REVIEW -> LEARN? -> REPORT
+FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY
+VERIFY -> REPORT when the edit is local, reversible, and not shipping
+VERIFY -> REVIEW before default ship, land or merge, durable-run LEARN or REPORT, and for auth, billing, secrets, architecture, or cross-cutting work
+REVIEW -> LEARN? -> REPORT
 MUTATING? -> DEFAULT SHIP (commit + PR)
 LAND? -> MERGE a green verified PR
 ```
 
-A proof contract names the 5 canonical fields: Claim, Surface, Action, Expect (aliased from expected observation), and Cleanup. Define it before editing.
+A proof contract names the 5 canonical fields: Claim, Surface, Action, Expect (aliased from expected observation), and Cleanup. Define it before editing. Mutating work still defines the 5-field proof contract before editing and still verifies on the authoritative surface. Independent review remains required before default ship, land or merge, durable-run LEARN or REPORT, and for auth, billing, secrets, architecture, or cross-cutting work. Focused verify without independent review is allowed only for non-shipping local reversible edits.
 
 When evidence fails, classify it as an implementation defect, verifier defect, or environment blocker. Return to the earliest invalid state. After three failures from the same unchanged blocker, stop and name the evidence required to continue.
 
@@ -84,7 +87,7 @@ Enter `LEARN?` only for a recurring failure worth encoding.
 
 ## Earn parallelism
 
-Default to one owner. Arena, swarm, and autopilot run only when [earned parallelism](principles/earned-parallelism.md) passes, and they fall back to serial work when isolation is missing. Give every writable slice a separate Git worktree or host-enforced sandbox with its own Git index and process boundary; disjoint files in one shared worktree are not isolation. Use [`patpat-engineer`](../patpat-engineer/SKILL.md) for isolated slices. The parent verifies the integrated result. Do not trust worker summaries. The parent then runs default delivery when delivery authority exists.
+Default to one owner. Workers return compact findings and evidence, not transcripts. Arena, swarm, and autopilot run only when [earned parallelism](principles/earned-parallelism.md) passes, and they fall back to serial work when isolation is missing. Give every writable slice a separate Git worktree or host-enforced sandbox with its own Git index and process boundary; disjoint files in one shared worktree are not isolation. Use [`patpat-engineer`](../patpat-engineer/SKILL.md) for isolated slices. The parent verifies the integrated result. Do not trust worker summaries. The parent then runs default delivery when delivery authority exists.
 
 ## Report evidence
 
