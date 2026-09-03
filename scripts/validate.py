@@ -754,6 +754,9 @@ def validate_root(root: Path) -> list[str]:
     publish_attestation = root / "scripts" / "publish_codex_attestation.py"
     if not publish_attestation.is_file():
         errors.append(f"{publish_attestation}: missing Codex attestation promote gate")
+    verify_ready = root / "scripts" / "verify_ready.py"
+    if not verify_ready.is_file():
+        errors.append(f"{verify_ready}: missing verify-ready check")
     plan_validator = root / "skills" / "patpat-run" / "scripts" / "validate_plan.py"
     if not plan_validator.is_file():
         errors.append(f"{plan_validator}: missing multi-PR plan validator")
@@ -814,6 +817,9 @@ def run_self_test(root: Path) -> list[str]:
 
     def remove_publish_attestation(fixture: Path) -> None:
         (fixture / "scripts" / "publish_codex_attestation.py").unlink()
+
+    def remove_verify_ready(fixture: Path) -> None:
+        (fixture / "scripts" / "verify_ready.py").unlink()
 
     def remove_plan_validator(fixture: Path) -> None:
         (fixture / "skills" / "patpat-run" / "scripts" / "validate_plan.py").unlink()
@@ -1091,6 +1097,7 @@ def run_self_test(root: Path) -> list[str]:
             ("missing inspect eval", remove_inspect_eval, "missing inspect contract eval"),
             ("missing why eval", remove_why_eval, "missing rationale contract eval"),
             ("missing attestation promote", remove_publish_attestation, "missing Codex attestation promote gate"),
+            ("missing verify-ready check", remove_verify_ready, "missing verify-ready check"),
             ("missing plan validator", remove_plan_validator, "missing multi-PR plan validator"),
             ("missing decision trail helper", remove_decisions_helper, "missing decision trail helper"),
             ("legacy fixture artifact name", restore_legacy_fixture_artifact, "missing fixture attestation artifact name"),
@@ -1294,6 +1301,18 @@ def run_self_test(root: Path) -> list[str]:
         failures.append(
             "self-test: Codex attestation promote gate failed: "
             f"{publish_result.stdout}{publish_result.stderr}"
+        )
+    verify_ready = root / "scripts" / "verify_ready.py"
+    ready_result = subprocess.run(
+        [sys.executable, str(verify_ready), "--self-test"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if ready_result.returncode != 0:
+        failures.append(
+            "self-test: verify-ready check failed: "
+            f"{ready_result.stdout}{ready_result.stderr}"
         )
     return failures
 
