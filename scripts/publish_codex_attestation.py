@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -32,6 +31,28 @@ REQUIRED_ATTESTATION_KEYS = {
     "cleanup",
     "claims",
 }
+TRIAL_KEYS = {
+    "kind",
+    "prompt_sha256",
+    "verdict",
+    "reason_count",
+    "returncode",
+    "initial_head",
+    "final_head",
+    "scope_conforms",
+    "event_stream",
+    "stderr",
+}
+DIGEST_KEYS = {"sha256", "bytes"}
+CLAIMS_KEYS = {"independent_review", "enforcement", "limitations"}
+ALLOWED_LIMITATIONS = (
+    "requested model selection is not a resolved provider snapshot",
+    "host-attested skill activation is not proven",
+    "unobserved transient effects are not covered",
+    "evidence does not transfer across hosts, models, CLI versions, or revisions",
+    "timestamps are producer wall-clock observations, not trusted timestamps",
+)
+ALLOWED_LIMITATION_SET = frozenset(ALLOWED_LIMITATIONS)
 
 
 def git(root: Path, *args: str) -> str:
@@ -161,13 +182,19 @@ def attestation_complete(attestation: dict[str, Any]) -> bool:
             return False
         if trial.get("scope_conforms") is not True:
             return False
+        if set(trial) != TRIAL_KEYS:
+            return False
         stream = trial.get("event_stream")
         stderr = trial.get("stderr")
-        if not isinstance(stream, dict) or probe.safe_match(stream.get("sha256"), probe.SHA256_RE) is None:
+        if not isinstance(stream, dict) or set(stream) != DIGEST_KEYS:
+            return False
+        if probe.safe_match(stream.get("sha256"), probe.SHA256_RE) is None:
             return False
         if probe.safe_count(stream.get("bytes")) is None:
             return False
-        if not isinstance(stderr, dict) or probe.safe_match(stderr.get("sha256"), probe.SHA256_RE) is None:
+        if not isinstance(stderr, dict) or set(stderr) != DIGEST_KEYS:
+            return False
+        if probe.safe_match(stderr.get("sha256"), probe.SHA256_RE) is None:
             return False
         if probe.safe_count(stderr.get("bytes")) is None:
             return False
@@ -181,15 +208,85 @@ def attestation_complete(attestation: dict[str, Any]) -> bool:
     if attestation.get("reason_count") != 0:
         return False
     claims = attestation.get("claims")
-    if not isinstance(claims, dict):
+    if not isinstance(claims, dict) or set(claims) != CLAIMS_KEYS:
         return False
     if claims.get("independent_review") != "not_attested":
         return False
     if "not a pre-tool gate" not in str(claims.get("enforcement", "")):
         return False
-    if not isinstance(claims.get("limitations"), list) or not claims["limitations"]:
+    limitations = claims.get("limitations")
+    if not isinstance(limitations, list) or not limitations:
+        return False
+    if any(item not in ALLOWED_LIMITATION_SET for item in limitations):
         return False
     return True
+
+
+
+def public_digest(block: dict[str, Any]) -> dict[str, Any]:
+    return {"sha256": block["sha256"], "bytes": block["bytes"]}
+
+
+def public_attestation(attestation: dict[str, Any]) -> dict[str, Any]:
+    """Rebuild a public attestation from canonical fields. Do not copy input JSON."""
+    source = attestation["source"]
+    execution = attestation["execution"]
+    host = execution["host"]
+    model = execution["model"]
+    evidence = attestation["evidence"]
+    receipt = evidence["private_receipt"]
+    cleanup = attestation["cleanup"]
+    claims = attestation["claims"]
+    trials = []
+    for trial in evidence["trials"]:
+        trials.append(
+            {
+                "kind": trial["kind"],
+                "prompt_sha256": trial["prompt_sha256"],
+                "verdict": trial["verdict"],
+                "reason_count": trial["reason_count"],
+                "returncode": trial["returncode"],
+                "initial_head": trial["initial_head"],
+                "final_head": trial["final_head"],
+                "scope_conforms": trial["scope_conforms"],
+                "event_stream": public_digest(trial["event_stream"]),
+                "stderr": public_digest(trial["stderr"]),
+            }
+        )
+    return {
+        "schema_version": attestation["schema_version"],
+        "kind": attestation["kind"],
+        "source": {
+            "revision": source["revision"],
+            "tree": source["tree"],
+            "installed_inventory_sha256": source["installed_inventory_sha256"],
+        },
+        "execution": {
+            "started_at": execution["started_at"],
+            "finished_at": execution["finished_at"],
+            "host": {"name": host["name"], "version": host["version"]},
+            "model": {"requested": model["requested"], "binding": model["binding"]},
+        },
+        "evidence": {
+            "rubric_sha256": evidence["rubric_sha256"],
+            "private_receipt": {
+                "sha256": receipt["sha256"],
+                "bytes": receipt["bytes"],
+            },
+            "trials": trials,
+        },
+        "verdict": attestation["verdict"],
+        "reason_count": attestation["reason_count"],
+        "cleanup": {
+            "workspace_removed": cleanup["workspace_removed"],
+            "auth_copy_removed": cleanup["auth_copy_removed"],
+        },
+        "claims": {
+            "independent_review": claims["independent_review"],
+            "enforcement": claims["enforcement"],
+            "limitations": [item for item in claims["limitations"] if item in ALLOWED_LIMITATION_SET],
+        },
+    }
 
 
 def refuse_private_request(attestation_path: Path, destination: Path) -> None:
@@ -313,7 +410,7 @@ def promote(
     target = destination_file(destination)
     refuse_private_request(attestation_path, target)
     target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(attestation_path, target)
+    target.write_bytes(probe.encoded_json(public_attestation(attestation)))
     return target
 
 
@@ -407,10 +504,24 @@ def run_self_test() -> None:
         copied = promote(source, candidate, public, evidence_dir=raw)
         assert copied == public / "attestation.json"
         assert copied.is_file()
-        assert json.loads(copied.read_text(encoding="utf-8"))["verdict"] == "PASS"
+        published = json.loads(copied.read_text(encoding="utf-8"))
+        assert published["verdict"] == "PASS"
         assert git(source, "status", "--porcelain=v1") == ""
         assert git(source, "diff", "--cached", "--name-only") == ""
-        print("PASS: promote copies attestation.json without git add")
+        print("PASS: promote writes rebuilt attestation.json without git add")
+
+        leaky = json.loads(json.dumps(attestation))
+        leaky["evidence"]["trials"][0]["secret"] = "should-not-publish"
+        leaky["evidence"]["trials"][0]["event_stream"]["private_path"] = "/tmp/secret"
+        leaky["claims"]["api_token"] = "sk-test"
+        leaky["claims"]["limitations"] = list(leaky["claims"]["limitations"]) + ["/home/secret"]
+        leaky_file = base / "leaky.json"
+        write_json(leaky_file, leaky)
+        expect_fail(
+            "extra nested key",
+            lambda: promote(source, leaky_file, base / "out-extra", evidence_dir=raw),
+        )
+        assert not (base / "out-extra" / "attestation.json").exists()
 
         tampered_receipt = base / "tamper-receipt"
         tampered_receipt.mkdir()
