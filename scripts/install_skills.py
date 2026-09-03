@@ -203,9 +203,19 @@ def main() -> int:
     )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--self-test", action="store_true")
+    parser.add_argument(
+        "--verify-ready",
+        action="store_true",
+        help="Verify host, /patpat discovery, hook status, and core route presence.",
+    )
+    parser.add_argument("--json", action="store_true", help="Print verification as JSON.")
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parents[1]
+    if args.verify_ready:
+        from verify_ready import verify_ready
+        return verify_ready(root, target=args.target, as_json=args.json)
+
     source = root / "skills"
     validation_errors = validate_root(root)
     if validation_errors:
@@ -222,7 +232,7 @@ def main() -> int:
         return run_self_test(source, skills)
 
     if args.target is None:
-        parser.error("--target is required unless --self-test is used")
+        parser.error("--target is required unless --self-test or --verify-ready is used")
 
     target = args.target.expanduser().resolve()
     return install_paths(source, target, skills, args.mode, args.dry_run)

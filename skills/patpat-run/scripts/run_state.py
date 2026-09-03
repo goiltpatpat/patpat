@@ -599,16 +599,38 @@ def transition(root: Path, run_id: str, destination: str) -> dict[str, Any]:
         return state
 
 
+PROOF_CONTRACT_CANONICAL_KEYS = ("claim", "surface", "action", "expect", "cleanup")
+
+
+def normalize_proof_contract(fields: dict[str, str]) -> dict[str, str]:
+    if not isinstance(fields, dict):
+        raise RunStateError("proof contract must be a key-value mapping")
+    normalized: dict[str, str] = {}
+    for key, val in fields.items():
+        if not isinstance(key, str):
+            continue
+        canon_key = key.lower().strip().replace("-", "_").replace(" ", "_")
+        if canon_key in {"expected_observation", "expected"}:
+            canon_key = "expect"
+        if isinstance(val, str) and val.strip():
+            normalized[canon_key] = val.strip()
+    missing = [k for k in PROOF_CONTRACT_CANONICAL_KEYS if k not in normalized]
+    if missing:
+        raise RunStateError("proof contract requires claim, surface, action, expect, and cleanup")
+    normalized["expected"] = normalized["expect"]
+    normalized["expected_observation"] = normalized["expect"]
+    return normalized
+
+
 def record_proof_contract(root: Path, run_id: str, fields: dict[str, str]) -> dict[str, Any]:
     with run_lock(root, run_id):
         state = load_state(root, run_id)
         if state["node"] not in {"INSPECT", "PROOF_CONTRACT"}:
             raise RunStateError("proof contract must be recorded during INSPECT or PROOF_CONTRACT")
-        if not all(fields.values()):
-            raise RunStateError("proof contract requires claim, surface, action, expected observation, and cleanup")
-        state["proof_contract"] = {**fields, "recorded_at": now()}
+        normalized = normalize_proof_contract(fields)
+        state["proof_contract"] = {**normalized, "recorded_at": now()}
         state["last_failure"] = None
-        append_state_event(state, "proof-contract", fields["claim"], snapshot=current_snapshot(root))
+        append_state_event(state, "proof-contract", normalized["claim"], snapshot=current_snapshot(root))
         save_state(root, run_id, state)
         return state
 
@@ -733,7 +755,21 @@ def record_decision(root: Path, run_id: str, summary: str) -> dict[str, Any]:
         return state
 
 
-def record_failure(root: Path, run_id: str, summary: str, blocker_key: str) -> dict[str, Any]:
+FAILURE_CLASSES = frozenset({"implementation", "verifier", "environment"})
+GATES = frozenset({"pre-edit", "verify", "ship", "merge"})
+
+
+def record_failure(
+    root: Path,
+    run_id: str,
+    summary: str,
+    blocker_key: str,
+    failure_class: str = "implementation",
+) -> dict[str, Any]:
+    if failure_class not in FAILURE_CLASSES:
+        raise RunStateError(
+            f"failure class must be one of {sorted(FAILURE_CLASSES)}, got {failure_class!r}"
+        )
     with run_lock(root, run_id):
         state = load_state(root, run_id)
         if state["node"] in {"REPORT", "BLOCKED"}:
@@ -743,22 +779,75 @@ def record_failure(root: Path, run_id: str, summary: str, blocker_key: str) -> d
         unchanged = (
             isinstance(previous, dict)
             and previous.get("key") == blocker_key
+            and previous.get("failure_class") == failure_class
             and previous.get("snapshot") == snapshot
             and previous.get("node") == state["node"]
         )
         count = int(previous["count"]) + 1 if unchanged else 1
         state["last_failure"] = {
             "key": blocker_key,
+            "failure_class": failure_class,
             "snapshot": snapshot,
             "node": state["node"],
             "count": count,
         }
         if count >= 3:
             state["node"] = "BLOCKED"
-            state["blocked_reason"] = blocker_key
-        append_state_event(state, "failure", summary, snapshot=snapshot, blocker_key=blocker_key, count=count)
+            state["blocked_reason"] = f"[{failure_class}] {blocker_key}"
+        append_state_event(
+            state,
+            "failure",
+            summary,
+            snapshot=snapshot,
+            blocker_key=blocker_key,
+            failure_class=failure_class,
+            count=count,
+        )
         save_state(root, run_id, state)
         return state
+
+
+def check_gate(root: Path, run_id: str, gate: str) -> tuple[bool, str]:
+    if gate not in GATES:
+        raise RunStateError(f"gate must be one of {sorted(GATES)}, got {gate!r}")
+    state = load_state(root, run_id)
+    snapshot = current_snapshot(root)
+
+    if gate == "pre-edit":
+        pc = state.get("proof_contract")
+        if not pc or not isinstance(pc, dict):
+            return False, "pre-edit gate failed: no structured proof contract recorded"
+        if not all(pc.get(k) for k in PROOF_CONTRACT_CANONICAL_KEYS):
+            return False, "pre-edit gate failed: proof contract missing required canonical fields"
+        return True, "pre-edit gate passed: structured proof contract is recorded and valid"
+
+    if gate == "verify":
+        verification = state.get("verification")
+        if not receipt_is_fresh(verification, state, snapshot, "verified"):
+            return False, "verify gate failed: missing fresh verified receipt for current snapshot"
+        return True, "verify gate passed: fresh verified receipt observed on authoritative surface"
+
+    if gate == "ship":
+        verification = state.get("verification")
+        review = state.get("review")
+        if not receipt_is_fresh(verification, state, snapshot, "verified"):
+            return False, "ship gate failed: verification receipt is missing or stale"
+        if not receipt_is_fresh(review, state, snapshot, "pass", independent=True):
+            return False, "ship gate failed: independent review pass is missing or stale"
+        if state.get("owner") == "worker":
+            return False, "ship gate failed: workers never ship; parent integration owner must ship"
+        return True, "ship gate passed: fresh verified evidence and independent review observed"
+
+    if gate == "merge":
+        authorities = set(state.get("authorities", []))
+        if "explicit-merge" not in authorities:
+            return False, "merge gate failed: missing explicit-merge authority"
+        ship_ok, ship_reason = check_gate(root, run_id, "ship")
+        if not ship_ok:
+            return False, f"merge gate failed: {ship_reason}"
+        return True, "merge gate passed: explicit merge authority and green evidence confirmed"
+
+    return False, f"unknown gate: {gate}"
 
 
 def validation_errors(root: Path, run_id: str) -> list[str]:
@@ -1077,6 +1166,23 @@ def run_self_test() -> None:
             raise AssertionError("ACT was accepted without a proof contract")
         transition(root, "main-run", "INSPECT")
         transition(root, "main-run", "PROOF_CONTRACT")
+        pre_edit_pass, _ = check_gate(root, "main-run", "pre-edit")
+        if pre_edit_pass:
+            raise AssertionError("pre-edit gate passed without a proof contract")
+        try:
+            record_proof_contract(
+                root,
+                "main-run",
+                {
+                    "claim": "Incomplete",
+                    "surface": "test",
+                    "action": "test",
+                },
+            )
+        except RunStateError:
+            pass
+        else:
+            raise AssertionError("incomplete proof contract was accepted")
         record_proof_contract(
             root,
             "main-run",
@@ -1084,10 +1190,16 @@ def run_self_test() -> None:
                 "claim": "The changed behavior is observable",
                 "surface": "test fixture",
                 "action": "exercise fixture",
-                "expected": "expected value appears",
+                "expect": "expected value appears",
                 "cleanup": "remove temporary evidence",
             },
         )
+        pre_edit_pass, _ = check_gate(root, "main-run", "pre-edit")
+        if not pre_edit_pass:
+            raise AssertionError("pre-edit gate failed with valid proof contract")
+        verify_pass, _ = check_gate(root, "main-run", "verify")
+        if verify_pass:
+            raise AssertionError("verify gate passed before verification receipt")
         transition(root, "main-run", "ACT")
         transition(root, "main-run", "VERIFY")
         record_experiment(
@@ -1103,6 +1215,12 @@ def run_self_test() -> None:
             "verify the retained state",
         )
         record_receipt(root, "main-run", "verification", "Behavior observed", verification_receipt, "integration-owner", "verified")
+        verify_pass, _ = check_gate(root, "main-run", "verify")
+        if not verify_pass:
+            raise AssertionError("verify gate failed with fresh verification receipt")
+        ship_pass, _ = check_gate(root, "main-run", "ship")
+        if ship_pass:
+            raise AssertionError("ship gate passed before independent review")
         verified_status = status(root, "main-run")
         if (
             not verified_status["verification_present"]
@@ -1124,6 +1242,12 @@ def run_self_test() -> None:
         else:
             raise AssertionError("whitespace reviewer alias bypassed independence")
         record_receipt(root, "main-run", "review", "Independent review passed", review_receipt, "reviewer", "pass")
+        ship_pass, _ = check_gate(root, "main-run", "ship")
+        if not ship_pass:
+            raise AssertionError("ship gate failed with fresh verification and review")
+        merge_pass, _ = check_gate(root, "main-run", "merge")
+        if merge_pass:
+            raise AssertionError("merge gate passed without explicit-merge authority")
         reviewed_status = status(root, "main-run")
         if (
             not reviewed_status["review_present"]
@@ -1274,15 +1398,24 @@ def run_self_test() -> None:
 
         initialize(root, "blocked-run", "Bound retries", "owner", [], [], [], [])
         transition(root, "blocked-run", "INSPECT")
-        record_failure(root, "blocked-run", "Same blocker", "missing-runtime")
+        try:
+            record_failure(root, "blocked-run", "Invalid class", "key", failure_class="unknown")
+        except RunStateError:
+            pass
+        else:
+            raise AssertionError("invalid failure class was accepted")
+        record_failure(root, "blocked-run", "Same blocker", "missing-runtime", failure_class="environment")
         (root / "new.txt").write_text("new evidence\n", encoding="utf-8")
-        record_failure(root, "blocked-run", "Changed snapshot", "missing-runtime")
+        record_failure(root, "blocked-run", "Changed snapshot", "missing-runtime", failure_class="environment")
         if load_state(root, "blocked-run")["last_failure"]["count"] != 1:
             raise AssertionError("blocker count did not reset after snapshot change")
         for _ in range(2):
-            record_failure(root, "blocked-run", "Same blocker", "missing-runtime")
-        if load_state(root, "blocked-run")["node"] != "BLOCKED":
+            record_failure(root, "blocked-run", "Same blocker", "missing-runtime", failure_class="environment")
+        blocked_state = load_state(root, "blocked-run")
+        if blocked_state["node"] != "BLOCKED":
             raise AssertionError("third unchanged blocker did not stop the run")
+        if "[environment]" not in str(blocked_state.get("blocked_reason")):
+            raise AssertionError("blocked reason omitted failure class")
 
         try:
             initialize(root, "conflict-run", "Reject conflicts", "owner", ["deploy"], ["deploy"], [], [])
@@ -1439,11 +1572,23 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument("--pre-existing-change", action="append", default=[])
     init_parser.add_argument("--full", action="store_true", help="Print the complete state ledger")
 
-    for command in ("transition", "record", "checkpoint", "status", "validate", "unlock"):
+    for command in (
+        "transition",
+        "record",
+        "checkpoint",
+        "status",
+        "validate",
+        "unlock",
+        "check-gate",
+    ):
         command_parser = subparsers.add_parser(command)
         command_parser.add_argument("--root", type=Path, default=Path.cwd())
         command_parser.add_argument("--run-id", required=True)
-        if command == "transition":
+        if command == "check-gate":
+            command_parser.add_argument(
+                "--gate", required=True, choices=("pre-edit", "verify", "ship", "merge")
+            )
+        elif command == "transition":
             command_parser.add_argument("--to", required=True, choices=sorted(NODES))
         elif command == "record":
             command_parser.add_argument(
@@ -1456,9 +1601,13 @@ def build_parser() -> argparse.ArgumentParser:
             command_parser.add_argument("--actor")
             command_parser.add_argument("--verdict")
             command_parser.add_argument("--blocker-key")
+            command_parser.add_argument(
+                "--failure-class", choices=("implementation", "verifier", "environment")
+            )
             command_parser.add_argument("--claim")
             command_parser.add_argument("--surface")
             command_parser.add_argument("--action")
+            command_parser.add_argument("--expect")
             command_parser.add_argument("--expected")
             command_parser.add_argument("--cleanup")
             command_parser.add_argument("--hypothesis")
@@ -1493,9 +1642,31 @@ def main() -> int:
                 print_state_result(root, state, "init", False)
         elif args.command == "transition":
             print_state_result(root, transition(root, args.run_id, args.to), "transition", args.full)
+        elif args.command == "check-gate":
+            passed, reason = check_gate(root, args.run_id, args.gate)
+            payload = {
+                "run_id": args.run_id,
+                "gate": args.gate,
+                "pass": passed,
+                "reason": reason,
+                "node": load_state(root, args.run_id).get("node"),
+            }
+            print(json.dumps(payload, indent=2))
+            return 0 if passed else 1
         elif args.command == "record":
             if args.kind == "proof-contract":
-                state = record_proof_contract(root, args.run_id, {"claim": args.claim, "surface": args.surface, "action": args.action, "expected": args.expected, "cleanup": args.cleanup})
+                expect_val = args.expect or args.expected
+                state = record_proof_contract(
+                    root,
+                    args.run_id,
+                    {
+                        "claim": args.claim,
+                        "surface": args.surface,
+                        "action": args.action,
+                        "expect": expect_val,
+                        "cleanup": args.cleanup,
+                    },
+                )
             elif args.kind in {"verification", "review"}:
                 if not all((args.summary, args.receipt, args.actor, args.verdict)):
                     raise RunStateError(f"{args.kind} requires summary, receipt, actor, and verdict")
@@ -1530,7 +1701,13 @@ def main() -> int:
             elif args.kind == "failure":
                 if not args.summary or not args.blocker_key:
                     raise RunStateError("failure requires summary and blocker key")
-                state = record_failure(root, args.run_id, args.summary, args.blocker_key)
+                state = record_failure(
+                    root,
+                    args.run_id,
+                    args.summary,
+                    args.blocker_key,
+                    failure_class=args.failure_class or "implementation",
+                )
             else:
                 if not args.summary:
                     raise RunStateError("decision requires summary")

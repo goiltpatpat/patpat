@@ -5,7 +5,7 @@ description: Run the explicit Patpat evidence-driven engineering loop. Use only 
 
 # Patpat Loop
 
-`/patpat` and `/patpat-loop` are the same entry point. Codex uses `$patpat` or `$patpat-loop`.
+[`/patpat`](../patpat/SKILL.md) and `/patpat-loop` are the same entry point. Codex uses `$patpat` or `$patpat-loop`.
 
 Patpat is one system. The [operating protocol](references/operating-protocol.md) is the spine: judgment, safety, git, and evidence. Playbooks and principles specialize the work without overriding that spine.
 
@@ -39,28 +39,22 @@ Read the linked file when the trigger fires. Cite a principle only when it chang
 
 ## Route the work
 
-Resolve common work without loading the full catalog:
+The user speaks plainly and invokes `/patpat` (or host equivalent). The agent selects one of 8 primary routes:
 
-| Intent | Workflow | Playbook |
-| --- | --- | --- |
-| Read-only question, audit, repository understanding, or diagnosis-only defect | [`patpat-inspect`](../patpat-inspect/SKILL.md) | [Investigation](playbooks/investigation.md) |
-| Multi-phase work, several contracts, or no safe narrow route | [`patpat-plan`](../patpat-plan/SKILL.md) | [Bespoke workflow](playbooks/bespoke-workflow.md) |
-| Contract, architecture, migration, security-sensitive, or cross-cutting design | [`patpat-architect`](../patpat-architect/SKILL.md) | [Architecture change](playbooks/architecture-change.md) |
-| Defective or unexplained behavior with implementation requested | [`patpat-debug`](../patpat-debug/SKILL.md) | [Defect](playbooks/defect.md) |
-| Bounded feature | [`patpat-change`](../patpat-change/SKILL.md) | [Bounded change](playbooks/bounded-change.md) |
-| Proof of an existing claim or artifact | [`patpat-verify`](../patpat-verify/SKILL.md) | Use the workflow directly |
-| Independent challenge of an implementation, diff, or proof claim | [`patpat-review`](../patpat-review/SKILL.md) | [Independent review](playbooks/independent-review.md) |
-| Durable multi-phase execution, overnight run, or "don't stop" | [`patpat-run`](../patpat-run/SKILL.md) | [Multi-phase run](playbooks/multi-phase-run.md) |
-| Install, update, remove, or validate Patpat on an agent host | [`patpat-setup`](../patpat-setup/SKILL.md) | Use the workflow directly |
-| Named merge, publish, or deploy | [`patpat-ship`](../patpat-ship/SKILL.md) | [Authorized delivery](playbooks/authorized-delivery.md) |
+| Intent | Route | Primary Skill | Playbook Reference |
+| --- | --- | --- | --- |
+| Read-only question, audit, repository understanding, or diagnosis-only defect | `inspect` | [`patpat-inspect`](../patpat-inspect/SKILL.md) | [Investigation](playbooks/investigation.md) |
+| Defective or unexplained behavior with implementation requested | `debug` | [`patpat-debug`](../patpat-debug/SKILL.md) | [Defect](playbooks/defect.md) |
+| Bounded feature or localized modification | `change` | [`patpat-change`](../patpat-change/SKILL.md) | [Bounded change](playbooks/bounded-change.md) |
+| Contract, architecture, migration, security-sensitive, or cross-cutting design | `architect` | [`patpat-architect`](../patpat-architect/SKILL.md) | [Architecture change](playbooks/architecture-change.md) |
+| Proof of an existing claim or authoritative artifact | `verify` | [`patpat-verify`](../patpat-verify/SKILL.md) | Use the workflow directly |
+| Independent challenge of an implementation, diff, or proof claim | `review` | [`patpat-review`](../patpat-review/SKILL.md) | [Independent review](playbooks/independent-review.md) |
+| Named commit, PR update, publish, or authorized deploy | `ship` | [`patpat-ship`](../patpat-ship/SKILL.md) | [Authorized delivery](playbooks/authorized-delivery.md) |
+| Durable multi-phase execution, multi-PR queue, or overnight run | `run` | [`patpat-run`](../patpat-run/SKILL.md) | [Multi-phase run](playbooks/multi-phase-run.md) |
 
-If the intent is absent or ambiguous above, read the [route catalog](references/route-catalog.md). Do not load it for a clear common route.
+Specialized workflows (`arena`, `swarm`, `automation`, `eval`, `perf`, `learn`) remain back-office execution playbooks referenced in the [route catalog](references/route-catalog.md) and dispatched internally by the agent under these 8 routes. Users do not choose from a menu.
 
-[`/patpat`](../patpat/SKILL.md) is the slash alias for this skill.
-
-If no narrow route fits, use `patpat-plan`. Do not persist a new reusable workflow unless repeated use proves it is needed.
-
-Resolve overlaps by the earliest unsettled decision. Architect first when the target contract is unsettled. Plan when the remaining problem is sequencing. Impact assesses downstream risk without designing the replacement. A prototype settles an empirical fork instead of asking the human to choose.
+If no narrow route fits, use `patpat-architect` or `patpat-run`. For specialized overlap resolution or secondary workflows, consult the [route catalog](references/route-catalog.md).
 
 Overnight, "don't stop", or "going to bed" continues the matched playbook through verify, review, and default commit-and-PR, then stops merge-ready. Merge only when the user explicitly names land or merge. Never deploy by implication.
 
@@ -74,7 +68,7 @@ MUTATING? -> DEFAULT SHIP (commit + PR)
 LAND? -> MERGE a green verified PR
 ```
 
-A proof contract names the claim, authoritative surface, action, expected observation, and cleanup. Define it before editing.
+A proof contract names the 5 canonical fields: Claim, Surface, Action, Expect (aliased from expected observation), and Cleanup. Define it before editing.
 
 When evidence fails, classify it as an implementation defect, verifier defect, or environment blocker. Return to the earliest invalid state. After three failures from the same unchanged blocker, stop and name the evidence required to continue.
 

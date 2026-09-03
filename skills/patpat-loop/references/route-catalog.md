@@ -29,5 +29,7 @@ Read this catalog only when the common routes in `patpat-loop` do not settle the
 | Create or maintain a project-specific verification skill | [`patpat-verifier`](../../patpat-verifier/SKILL.md) | [Project verifier](../playbooks/project-verifier.md) |
 | Encode a recurring failure or correction into a durable constraint | [`patpat-learn`](../../patpat-learn/SKILL.md) | [Learning](../playbooks/learning.md) |
 | Design or scaffold an external automation for a concrete integration | [`patpat-automation`](../../patpat-automation/SKILL.md) | [Automation design](../playbooks/automation-design.md) |
+| Multi-phase sequencing or several contracts | [`patpat-plan`](../../patpat-plan/SKILL.md) | [Bespoke workflow](../playbooks/bespoke-workflow.md) |
+| Install, update, remove, or validate Patpat on an agent host | [`patpat-setup`](../../patpat-setup/SKILL.md) | Use the workflow directly |
 
 Resolve overlaps by the earliest unsettled decision. Architect first when the target contract is unsettled. Plan when the remaining problem is sequencing. Impact assesses downstream risk without designing the replacement. A prototype settles an empirical fork instead of asking the human to choose.
