@@ -9,6 +9,8 @@ When invoked directly, read the [operating protocol](../patpat-loop/references/o
 
 Read [repository truth](../patpat-loop/principles/repository-truth.md), [proof over proxy](../patpat-loop/principles/proof-over-proxy.md), [fix root causes](../patpat-loop/principles/fix-root-causes.md), [smallest safe change](../patpat-loop/principles/smallest-safe-change.md), and [preserve safety](../patpat-loop/principles/preserve-safety.md). Apply the [defect playbook](../patpat-loop/playbooks/defect.md). When the user requests test-first work or a cheap deterministic regression target exists, apply [regression first](../patpat-loop/playbooks/regression-first.md).
 
+Observe the failure before any production edit, or record an explicit why-not; report fail-before and pass-after on the same check.
+
 Reproduce before editing when safe and practical. Otherwise trace the contract or code path, or use an isolated non-harmful surrogate, and state that direct runtime proof is unavailable. Trace the earliest incorrect state instead of patching the last visible symptom.
 
 If the user limited the request to diagnosis, stop after proving or bounding the root cause. Recommend the smallest patch without editing.
