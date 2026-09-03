@@ -53,7 +53,13 @@ Stop at the first change that satisfies the proof contract. Delete before adding
 
 ## Git and ship
 
-Explicit `/patpat` or `$patpat` activation opts the session into commit-and-open-PR after mutating work passes verify and review. That is the easy ship. A higher-priority repository rule can prohibit it. Opt out with `don't commit`, `don't open a PR`, or `local only`.
+Explicit `/patpat` or `$patpat` activation authorizes the Patpat loop, the 5-field proof contract before mutating edits, and authoritative-surface verify. It does not by itself force independent review or a PR.
+
+Default commit-and-PR requires delivery intent. Delivery intent is explicit commit, PR, or ship language (`open a PR`, `commit`, `ship it`, named ship route), overnight or continuation (`overnight`, `going to bed`, `don't stop`), or explicit land or merge. Prefer these existing signals. Do not expose named user-selectable modes.
+
+Without delivery intent, local reversible mutating work uses proof, focused verify, and REPORT; skip independent review; do not open a PR. Opt out with `don't commit`, `don't open a PR`, or `local only`.
+
+With delivery intent, verify, independent review, and default delivery remain required. Auth, billing, secrets, architecture, or cross-cutting work always requires independent review even when delivery intent is absent.
 
 Overnight, going to bed, or don't stop continues until the PR is merge-ready; it does not authorize merge. Merge only when the user explicitly names land or merge and the verified head is green. Patpat may merge only a fully gated pull request; never auto-merge; never merge through the GitHub connector; release and tag still require explicit authorization. Treat ambiguous `ship it` as commit-and-PR. Do not land a real CI failure. Retry a flake once.
 
