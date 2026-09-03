@@ -144,6 +144,16 @@ PINNED_BOUNDARY_SENTENCES = (
         ),
         "regression-first fail-before contract",
     ),
+    (
+        Path("skills/patpat-loop/playbooks/session-takeover.md"),
+        (
+            "Lock the time window before mining (default last 7 days).",
+            "Do not reconstruct from transcripts alone.",
+            "Verify surfaced PRs, branches, and tickets with live git and gh.",
+            "Hand back a capsule of at most 5 bullets, tagged threads, at most 5 problems, and one next move.",
+        ),
+        "session-takeover live-verify contract",
+    ),
 )
 UNADMITTED_COMPONENT_PATHS = {
     ".cursor",
@@ -881,6 +891,18 @@ def run_self_test(root: Path) -> list[str]:
             encoding="utf-8",
         )
 
+    def strip_session_takeover_live_verify(fixture: Path) -> None:
+        playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "session-takeover.md"
+        text = playbook.read_text(encoding="utf-8")
+        playbook.write_text(
+            text.replace(
+                "Do not reconstruct from transcripts alone.",
+                "Transcripts are sufficient truth.",
+                1,
+            ),
+            encoding="utf-8",
+        )
+
     def remove_agents_guide(fixture: Path) -> None:
         (fixture / "AGENTS.md").unlink()
 
@@ -1126,6 +1148,7 @@ def run_self_test(root: Path) -> list[str]:
             ("review boundary drift", strip_review_boundary, "missing review boundary contract"),
             ("learn boundary drift", strip_learn_boundary, "missing learn boundary contract"),
             ("regression-first fail-before drift", strip_regression_fail_before, "missing regression-first fail-before contract"),
+            ("session-takeover live-verify drift", strip_session_takeover_live_verify, "missing session-takeover live-verify contract"),
             ("missing agent install contract", remove_agents_guide, "missing agent install contract"),
             ("Codex defaultPrompt drift", drop_codex_default_prompt, "defaultPrompt must include $patpat"),
             ("missing published source", drop_published_source, "homepage and repository must point at the published source"),
