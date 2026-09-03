@@ -13,6 +13,8 @@ Inspect the actual application surface and reuse an existing harness when it can
 
 Make every command executable as written. Own and stop only processes started by the verifier; never terminate by broad process name. Keep secrets out of prompts, logs, artifacts, and external calls. Preserve evidence long enough for independent inspection.
 
+Isolate instances so two can run side by side (ports, data dirs, profiles), or refuse to double-drive a shared instance.
+
 Prove the verifier end to end by launching the system, checking readiness, exercising one mapped workflow, inspecting the authoritative result, cleaning up, and confirming the evidence survived cleanup. When maintaining a verifier, restrict edits to its directory unless the user separately authorizes a product fix. Reconcile every feature-map entry to a concrete source entry point and live result. Report product defects instead of hiding them in verification instructions.
 
 ## Proof closure
