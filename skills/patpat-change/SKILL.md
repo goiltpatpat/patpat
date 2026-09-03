@@ -11,6 +11,8 @@ Read [smallest safe change](../patpat-loop/principles/smallest-safe-change.md), 
 
 For a behavior-preserving rename, move, extraction, inline, or deduplication, apply the [behavior-preserving refactor playbook](../patpat-loop/playbooks/behavior-preserving-refactor.md). When the user requests test-first work or a cheap deterministic regression target exists, apply [regression first](../patpat-loop/playbooks/regression-first.md).
 
+When regression-first applies, observe fail-before (or an explicit why-not) and report fail-before and pass-after on the same check; do not silently skip.
+
 For an explicit visual migration or pixel-equivalence claim, apply the [visual equivalence playbook](../patpat-loop/playbooks/visual-equivalence.md) without weakening its baseline or comparison harness.
 
 Inspect version-control state and nearby contracts before editing. Define the proof contract. Make one coherent repository-native patch. Avoid unrelated cleanup, speculative abstractions, new dependencies, and public interface changes unless the objective requires them.
