@@ -1,5 +1,7 @@
 # Patpat
 
+<img align="right" height="210" alt="Patpat mascot" src="assets/mascot.png">
+
 [![Validate](https://github.com/goiltpatpat/patpat/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/goiltpatpat/patpat/actions/workflows/validate.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2f6f5f.svg)](LICENSE)
 
@@ -23,6 +25,8 @@ The core is Patpat's operating protocol: judgment, safety, git, and honest evide
 Use [`/patpat`](skills/patpat/SKILL.md) for non-trivial work. It is the same entry as [`/patpat-loop`](skills/patpat-loop/SKILL.md). Call a focused skill directly when the task is already narrow.
 
 New to the system? Start with [The Patpat Guide](docs/guide/README.md). It walks from installation proof to the operating loop, verification, delivery, durable runs, earned parallelism, and safe extension.
+
+<br clear="all">
 
 ## Install
 
