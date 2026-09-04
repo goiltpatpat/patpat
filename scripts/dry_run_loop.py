@@ -83,6 +83,39 @@ def delivery_intent(
     return bool(explicit_delivery or continuation or explicit_merge or explicit_ready_pr)
 
 
+def start_plan(
+    *,
+    first_activation: bool = False,
+    clear_bounded_reversible_local: bool = False,
+    ambiguous: bool = False,
+    high_risk: bool = False,
+    delivery_intent: bool = False,
+    multi_step: bool = False,
+    durable: bool = False,
+    mutating: bool = False,
+) -> dict[str, object]:
+    """Classify start ceremony from task shape. Instruction-contract helper, not live-agent proof.
+
+    First activation is context only; it alone must not force fuller-start.
+    """
+    del first_activation  # context, not a risk signal
+    if durable:
+        kind = "durable-run"
+    elif high_risk or ambiguous or delivery_intent or multi_step:
+        kind = "fuller-start"
+    elif clear_bounded_reversible_local:
+        kind = "lightweight-start"
+    else:
+        kind = "fuller-start"
+    return {
+        "kind": kind,
+        "mandatory_todo": kind != "lightweight-start",
+        "mandatory_checklist": kind == "fuller-start",
+        "proof_contract_required": bool(mutating),
+        "full_protocol_read": kind != "lightweight-start",
+    }
+
+
 def ship_plan(
     *,
     path: str,
@@ -258,6 +291,22 @@ def run_self_test() -> None:
     assert ship_plan(**{**base_ship, "high_risk": True, "reviewed": False}) == "stop-missing-proof"
     assert ship_plan(**{**base_ship, "high_risk": True, "reviewed": True}) == "local-only"
     assert ship_plan(**{**base_ship, "high_risk": True, "reviewed": True, "explicit_delivery": True}) == "commit-and-pr"
+
+    # start_plan: first activation is not a risk signal; planning is earned.
+    light = start_plan(first_activation=True, clear_bounded_reversible_local=True, mutating=True)
+    assert light["kind"] == "lightweight-start"
+    assert light["mandatory_todo"] is False
+    assert light["mandatory_checklist"] is False
+    assert light["proof_contract_required"] is True
+    assert light["full_protocol_read"] is False
+    assert start_plan(first_activation=True, high_risk=True)["kind"] == "fuller-start"
+    assert start_plan(first_activation=True, ambiguous=True)["kind"] == "fuller-start"
+    assert start_plan(clear_bounded_reversible_local=True)["kind"] == "lightweight-start"
+    assert start_plan(clear_bounded_reversible_local=True)["mandatory_todo"] is False
+    assert start_plan(multi_step=True, ambiguous=True)["kind"] == "fuller-start"
+    assert start_plan(multi_step=True, ambiguous=True)["mandatory_checklist"] is True
+    assert start_plan(durable=True)["kind"] == "durable-run"
+    assert start_plan(clear_bounded_reversible_local=True, mutating=False)["proof_contract_required"] is False
     assert ship_plan(**{**base_ship, "opt_out": True}) == "local-only"
     assert ship_plan(**{**base_ship, "path": "read-only"}) == "no-ship"
     assert ship_plan(**{**base_ship, "patpat_activated": False}) == "local-only-no-authority"
