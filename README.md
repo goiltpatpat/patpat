@@ -86,7 +86,10 @@ That is enough. Explicit activation authorizes the Patpat loop, proof, and verif
 [`/patpat`](skills/patpat/SKILL.md) is the default entry point. It reads the request, tracks the matched playbook, and routes through inspection, proof, implementation, verification, and review. Trusted host hooks persist the mode across resume. Without a hook receipt the mode still applies for the rest of the current session.
 
 ```text
-FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY -> REVIEW -> LEARN? -> REPORT
+FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY
+VERIFY -> REPORT when local reversible without delivery intent
+VERIFY -> REVIEW before delivery / high-risk / durable-run LEARN|REPORT
+REVIEW -> LEARN? -> REPORT
 ```
 
 A proof contract names the claim, authoritative surface, action, expected observation, and cleanup. A build supports a claim. It does not prove user-visible behavior. Green is a signal, not an alibi.
