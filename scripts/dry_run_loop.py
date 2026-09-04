@@ -77,10 +77,10 @@ def delivery_intent(
     explicit_delivery: bool,
     continuation: bool,
     explicit_merge: bool,
-    existing_pr: bool = False,
     explicit_ready_pr: bool = False,
 ) -> bool:
-    return bool(explicit_delivery or continuation or explicit_merge or existing_pr or explicit_ready_pr)
+    # Interpretation B: a bare existing_pr is not delivery intent.
+    return bool(explicit_delivery or continuation or explicit_merge or explicit_ready_pr)
 
 
 def ship_plan(
@@ -112,7 +112,6 @@ def ship_plan(
         explicit_delivery=explicit_delivery,
         continuation=continuation,
         explicit_merge=explicit_merge,
-        existing_pr=existing_pr,
         explicit_ready_pr=explicit_ready_pr,
     )
     if not intent:
@@ -260,8 +259,11 @@ def run_self_test() -> None:
         **{**base_ship, "patpat_activated": False, "explicit_delivery": True}
     ) == "commit-and-pr"
     assert ship_plan(**{**base_ship, "repo_allows_delivery": False}) == "stop-repository-policy"
-    assert ship_plan(**{**base_ship, "existing_pr": True}) == "update-existing-pr"
-    assert ship_plan(**{**base_ship, "existing_pr": True, "existing_pr_is_draft": True}) == "mark-ready-and-recheck"
+    # Bare existing_pr is not delivery intent (Interpretation B).
+    assert ship_plan(**{**base_ship, "existing_pr": True}) == "local-only"
+    assert ship_plan(**{**base_ship, "existing_pr": True, "existing_pr_is_draft": True}) == "local-only"
+    assert ship_plan(**{**base_ship, "explicit_delivery": True, "existing_pr": True}) == "update-existing-pr"
+    assert ship_plan(**{**base_ship, "explicit_delivery": True, "existing_pr": True, "existing_pr_is_draft": True}) == "mark-ready-and-recheck"
     draft_ship = {
         **base_ship,
         "patpat_activated": False,

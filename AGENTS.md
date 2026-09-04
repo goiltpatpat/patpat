@@ -26,7 +26,7 @@ Published source: `https://github.com/goiltpatpat/patpat`. Plugin id: `patpat@pa
 
 Start a fresh task or session. Package list output does not prove prompt-time discovery.
 
-Explicit `/patpat`, `/patpat-loop`, `$patpat`, or `$patpat-loop` activation opts the session into verified auto ship: commit the in-scope diff, non-force push, and open or update one ready pull request after verification and review. Higher-priority repository rules and `local only` still win. Merge requires explicit `land` or `merge` language.
+Explicit `/patpat`, `/patpat-loop`, `$patpat`, or `$patpat-loop` activation authorizes the Patpat loop, proof, and verify. Default commit-and-PR requires delivery intent; see the operating protocol and default-delivery playbook. Higher-priority repository rules and `local only` still win. Merge requires explicit `land` or `merge` language.
 
 | Host | Invoke |
 | --- | --- |

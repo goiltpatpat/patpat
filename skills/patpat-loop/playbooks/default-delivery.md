@@ -1,6 +1,6 @@
 # Default Delivery Playbook
 
-Invoke this at the end of mutating work after verify and review pass only when delivery intent exists. Delivery intent is explicit commit, PR, or ship language (`open a PR`, `commit`, `ship it`, named ship route), overnight or continuation (`overnight`, `going to bed`, `don't stop`), explicit land or merge, or an existing in-scope pull request under those authorities. Explicit `/patpat` activation alone does not invoke this playbook. Patpat's authority and pause gates still apply.
+Invoke this at the end of mutating work after verify and review pass only when delivery intent exists. Delivery intent is explicit commit, PR, or ship language (`open a PR`, `commit`, `ship it`, named ship route), overnight or continuation (`overnight`, `going to bed`, `don't stop`), or explicit land or merge. A bare existing pull request is not delivery intent. Update it only when other delivery intent is present. Explicit `/patpat` activation alone does not invoke this playbook. Patpat's authority and pause gates still apply.
 
 Read [preserve safety](../principles/preserve-safety.md), [proof over proxy](../principles/proof-over-proxy.md), and the [operating protocol](../references/operating-protocol.md).
 

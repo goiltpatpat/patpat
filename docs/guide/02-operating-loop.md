@@ -46,7 +46,7 @@ The contract makes proxy substitution visible when the workflow follows it. `pat
 
 ## Control delivery explicitly
 
-Explicit Patpat activation permits an in-scope commit, non-force push, and one ready pull request after proof and review. It does not permit merge, deploy, package publication, secret rotation, or risky auth, billing, and permission changes by implication.
+Explicit Patpat activation authorizes the loop, proof, and verify. Default commit-and-PR requires delivery intent. It does not permit merge, deploy, package publication, secret rotation, or risky auth, billing, and permission changes by implication.
 
 Say `local only` to keep the work unshipped. Say `pause safely` to preserve resumable state without opening a pull request. Say `land` or `merge` only when you intend to authorize a green reviewed pull request to merge.
 
