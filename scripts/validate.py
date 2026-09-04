@@ -823,6 +823,9 @@ def validate_root(root: Path) -> list[str]:
     why_eval = root / "scripts" / "eval_why.py"
     if not why_eval.is_file():
         errors.append(f"{why_eval}: missing rationale contract eval")
+    representation_eval = root / "scripts" / "eval_representation.py"
+    if not representation_eval.is_file():
+        errors.append(f"{representation_eval}: missing representation contract eval")
     publish_attestation = root / "scripts" / "publish_codex_attestation.py"
     if not publish_attestation.is_file():
         errors.append(f"{publish_attestation}: missing Codex attestation promote gate")
@@ -886,6 +889,9 @@ def run_self_test(root: Path) -> list[str]:
 
     def remove_why_eval(fixture: Path) -> None:
         (fixture / "scripts" / "eval_why.py").unlink()
+
+    def remove_representation_eval(fixture: Path) -> None:
+        (fixture / "scripts" / "eval_representation.py").unlink()
 
     def remove_publish_attestation(fixture: Path) -> None:
         (fixture / "scripts" / "publish_codex_attestation.py").unlink()
@@ -1265,6 +1271,7 @@ def run_self_test(root: Path) -> list[str]:
             ("missing loop dry-run", remove_dry_run, "missing loop dry-run"),
             ("missing inspect eval", remove_inspect_eval, "missing inspect contract eval"),
             ("missing why eval", remove_why_eval, "missing rationale contract eval"),
+            ("missing representation eval", remove_representation_eval, "missing representation contract eval"),
             ("missing attestation promote", remove_publish_attestation, "missing Codex attestation promote gate"),
             ("missing verify-ready check", remove_verify_ready, "missing verify-ready check"),
             ("missing plan validator", remove_plan_validator, "missing multi-PR plan validator"),
@@ -1376,6 +1383,18 @@ def run_self_test(root: Path) -> list[str]:
     )
     if dry_result.returncode != 0:
         failures.append(f"self-test: loop dry-run failed: {dry_result.stdout}{dry_result.stderr}")
+    representation_eval = root / "scripts" / "eval_representation.py"
+    representation_result = subprocess.run(
+        [sys.executable, str(representation_eval), "--self-test"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if representation_result.returncode != 0:
+        failures.append(
+            "self-test: representation contract eval failed: "
+            f"{representation_result.stdout}{representation_result.stderr}"
+        )
     parallel_eval = root / "scripts" / "eval_parallel.py"
     parallel_result = subprocess.run(
         [sys.executable, str(parallel_eval), "--self-test"],

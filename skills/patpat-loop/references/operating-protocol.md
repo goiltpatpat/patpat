@@ -29,6 +29,8 @@ Read only what is needed to act safely. For non-trivial work in a repo that has 
 
 Inspect, execute, or measure before asking. Ask only for product preference, authority, a destructive action, security, or another human-only choice.
 
+For explain, design, and review, choose the smallest useful representation per [earned representation](earned-representation.md); never visualize by default; do not add ceremony to trivial mutation.
+
 Choose the smallest reliable path from signals: reversibility, blast radius, uncertainty, external side effects, security, auth, billing, architecture, duration, parallel need, and delivery or merge intent. Do not expose named user-selectable modes. Do not present LOW, NORMAL, or HIGH as a menu. Do not offer a slash-smart command or host plan/act labels.
 
 Ordinary sessions scale ceremony from those risk signals. Delivery and durable-run gates stay fail-closed.

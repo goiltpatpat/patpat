@@ -116,6 +116,71 @@ def start_plan(
     }
 
 
+
+def representation_plan(
+    *,
+    kind: str,
+    structure_hard_in_prose: bool = False,
+    simpler_forms_insufficient: bool = False,
+) -> dict[str, object]:
+    """Choose the smallest useful engineering representation.
+
+    Instruction-contract helper for earned representation, not live-agent proof.
+    Visualization is earned: prefer prose unless structure is hard in prose.
+    For ``complex_visual``, use a focused artifact only when simpler forms are
+    insufficient; otherwise prefer ``sequence-or-flow`` (or call-tree) first.
+    Representation choice itself never adds planning or reporting ceremony and
+    is orthogonal to ``start_plan`` (trivial mutation stays lightweight-start).
+    """
+    hard = bool(structure_hard_in_prose)
+    if kind == "factual":
+        form = "prose"
+        reason = "factual answers stay concise prose"
+    elif kind == "trivial_mutation":
+        form = "prose"
+        reason = "trivial mutation must not earn visualization or ceremony"
+    elif kind == "runtime_flow":
+        form = "call-tree" if hard else "prose"
+        reason = "runtime flow uses a call tree when hard in prose" if hard else "runtime flow stays prose when clear"
+    elif kind == "ownership":
+        form = "shallow-tree" if hard else "prose"
+        reason = "ownership uses a shallow tree when hard in prose" if hard else "ownership stays prose when clear"
+    elif kind == "architecture_delta":
+        form = "structural-comparison" if hard else "prose"
+        reason = "architecture delta uses structural comparison when hard in prose" if hard else "architecture delta stays prose when clear"
+    elif kind == "shape_review":
+        form = "diff-shaped" if hard else "prose"
+        reason = "shape review uses a diff-shaped form when hard in prose" if hard else "shape review stays prose when clear"
+    elif kind == "logic":
+        form = "pseudocode" if hard else "prose"
+        reason = "logic uses compact pseudocode when hard in prose" if hard else "logic stays prose when clear"
+    elif kind == "ui_structure":
+        form = "component-tree" if hard else "prose"
+        reason = "UI structure uses a component tree when hard in prose" if hard else "UI structure stays prose when clear"
+    elif kind == "interaction_flow":
+        form = "sequence-or-flow" if hard else "prose"
+        reason = "interaction flow uses sequence/flow when hard in prose" if hard else "interaction flow stays prose when clear"
+    elif kind == "complex_visual":
+        if simpler_forms_insufficient:
+            form = "focused-artifact"
+            reason = "focused artifact only when simpler forms are insufficient"
+        else:
+            form = "sequence-or-flow"
+            reason = "prefer sequence-or-flow before a focused artifact"
+    else:
+        raise ValueError(f"unknown representation kind: {kind!r}")
+
+    visualize = form != "prose"
+    return {
+        "form": form,
+        "visualize": visualize,
+        "adds_planning_ceremony": False,
+        "adds_reporting_ceremony": False,
+        "reason": reason,
+    }
+
+
+
 def ship_plan(
     *,
     path: str,
@@ -397,6 +462,44 @@ def run_self_test() -> None:
     assert judgment_corpus[1][2] == "accept"
     assert any(row[0] == "under-rigor-auth" for row in judgment_corpus)
     assert any(row[0] == "proxy-proof" for row in judgment_corpus)
+
+
+    # representation_plan: earned forms; orthogonal to start_plan ceremony.
+    factual = representation_plan(kind="factual", structure_hard_in_prose=True)
+    assert factual["form"] == "prose" and factual["visualize"] is False
+    runtime = representation_plan(kind="runtime_flow", structure_hard_in_prose=True)
+    assert runtime["form"] == "call-tree" and runtime["visualize"] is True
+    ownership = representation_plan(kind="ownership", structure_hard_in_prose=True)
+    assert ownership["form"] == "shallow-tree" and ownership["visualize"] is True
+    arch = representation_plan(kind="architecture_delta", structure_hard_in_prose=True)
+    assert arch["form"] == "structural-comparison" and arch["visualize"] is True
+    shape = representation_plan(kind="shape_review", structure_hard_in_prose=True)
+    assert shape["form"] == "diff-shaped" and shape["visualize"] is True
+    complex_simple = representation_plan(kind="complex_visual", simpler_forms_insufficient=False)
+    assert complex_simple["form"] != "focused-artifact"
+    assert complex_simple["form"] == "sequence-or-flow"
+    complex_artifact = representation_plan(kind="complex_visual", simpler_forms_insufficient=True)
+    assert complex_artifact["form"] == "focused-artifact" and complex_artifact["visualize"] is True
+    trivial = representation_plan(kind="trivial_mutation")
+    assert trivial["form"] == "prose"
+    assert trivial["visualize"] is False
+    assert trivial["adds_planning_ceremony"] is False
+    assert trivial["adds_reporting_ceremony"] is False
+    soft = representation_plan(kind="runtime_flow", structure_hard_in_prose=False)
+    assert soft["form"] == "prose" and soft["visualize"] is False
+    for sample in (
+        factual, runtime, ownership, arch, shape, complex_simple, complex_artifact, trivial, soft,
+        representation_plan(kind="logic", structure_hard_in_prose=True),
+        representation_plan(kind="ui_structure", structure_hard_in_prose=True),
+        representation_plan(kind="interaction_flow", structure_hard_in_prose=True),
+    ):
+        assert sample["adds_planning_ceremony"] is False
+        assert sample["adds_reporting_ceremony"] is False
+    # Orthogonality: representation_plan does not imply fuller-start for clear local mutate.
+    clear_local = start_plan(clear_bounded_reversible_local=True, mutating=True)
+    assert clear_local["kind"] == "lightweight-start"
+    assert representation_plan(kind="trivial_mutation")["form"] == "prose"
+    assert representation_plan(kind="trivial_mutation")["adds_planning_ceremony"] is False
 
     print("Patpat loop dry-run self-test passed.")
 

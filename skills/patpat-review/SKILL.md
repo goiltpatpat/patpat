@@ -15,7 +15,7 @@ Run the playbook's solution-integrity audit before general quality review. Rejec
 
 ## Findings and reporting
 
-Report findings first, ordered by `blocker`, `high`, `medium`, then `low`. Tie every finding to a file, symbol, behavior, or receipt and explain the concrete impact. Exclude speculative style preferences. For each accepted issue, recommend the smallest safe correction and required re-verification.
+When the main issue is a change in shape, prefer a diff-shaped or tree explanation from [earned representation](../patpat-loop/references/earned-representation.md) over long prose. Report findings first, ordered by `blocker`, `high`, `medium`, then `low`. Tie every finding to a file, symbol, behavior, or receipt and explain the concrete impact. Exclude speculative style preferences. For each accepted issue, recommend the smallest safe correction and required re-verification.
 
 State `no findings` only after checking correctness, solution integrity, regressions, contracts, safety, performance implications, side effects, generated noise, and evidence mismatch. Review does not replace verification and never authorizes merge or delivery.
 
