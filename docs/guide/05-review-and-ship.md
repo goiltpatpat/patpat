@@ -21,7 +21,7 @@ Evidence belongs to the artifact it tested. If review changes the implementation
 
 ## Ship one coherent change
 
-After explicit Patpat activation, successful proof, and independent review:
+When delivery intent exists, after successful proof and independent review:
 
 1. inspect git status and the complete in-scope diff;
 2. exclude unrelated files, secrets, local configuration, and generated noise;

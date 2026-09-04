@@ -179,6 +179,7 @@ PINNED_BOUNDARY_SENTENCES = (
         (
             "Explicit `/patpat` activation alone does not invoke this playbook.",
             "Default commit-and-PR requires delivery intent.",
+            "A bare existing pull request is not delivery intent.",
         ),
         "delivery-intent default-delivery contract",
     ),

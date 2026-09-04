@@ -121,7 +121,7 @@ The backup path must not exist and must share a filesystem with the target. The 
 
 ## Invocation
 
-Explicit invocation opts the active session into verified auto ship: commit the in-scope diff, non-force push, and open or update one ready pull request after verification and review. Higher-priority repository rules and `local only` still win. Overnight work stops merge-ready; merge requires explicit `land` or `merge` language.
+Explicit invocation authorizes the Patpat loop, proof, and verify. Default commit-and-PR requires delivery intent; see the operating protocol and default-delivery playbook. Higher-priority repository rules and `local only` still win. Overnight work stops merge-ready; merge requires explicit `land` or `merge` language.
 
 | Host | Invoke after a fresh session |
 | --- | --- |

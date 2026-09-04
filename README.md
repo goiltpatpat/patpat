@@ -79,7 +79,7 @@ Two steps:
 /patpat reproduce this timeout, fix the root cause, and land the PR
 ```
 
-That is enough. Explicit activation opts the session into verified auto ship: commit the in-scope diff, non-force push, and open or update one ready pull request after verification and review. The router stays on across later turns when a supported trusted host hook supplies a receipt. Say `disable /patpat` or `local only` to opt out. Higher-priority repository rules still win.
+That is enough. Explicit activation authorizes the Patpat loop, proof, and verify. Default commit-and-PR still requires delivery intent; see the [operating protocol](skills/patpat-loop/references/operating-protocol.md) and [default delivery](skills/patpat-loop/playbooks/default-delivery.md). The router stays on across later turns when a supported trusted host hook supplies a receipt. Say `disable /patpat` or `local only` to opt out. Higher-priority repository rules still win.
 
 ## Usage
 
@@ -125,7 +125,7 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 | [Swarm](skills/patpat-loop/playbooks/swarm.md) | Parallel slices or races, one aggregated report. |
 | [Autopilot](skills/patpat-loop/playbooks/autopilot.md) | A verified queue or stack. Merge only when named. |
 | [Issue loop](skills/patpat-loop/playbooks/issue-loop.md) | Named-provider triage and reproduce. Avoids competing fixes, stays paused until enabled, and defaults provider-triggered issue-loop PRs to draft. |
-| [Default delivery](skills/patpat-loop/playbooks/default-delivery.md) | After explicit activation and proof, commit and open or update one ready PR unless blocked or opted out. |
+| [Default delivery](skills/patpat-loop/playbooks/default-delivery.md) | When delivery intent exists, commit and open or update one ready PR after verify and review. Activation alone does not ship. |
 | [Authorized delivery](skills/patpat-loop/playbooks/authorized-delivery.md) | Merge a green verified PR only on explicit land or merge; pause for deploy. |
 | [Independent review](skills/patpat-loop/playbooks/independent-review.md) | Challenge an implementation and its proof without editing. |
 | [Skill change](skills/patpat-loop/playbooks/skill-change.md) | Write or revise a SKILL.md. |
@@ -160,7 +160,7 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 | [`patpat-arena`](skills/patpat-arena/SKILL.md) | Compete isolated attempts and synthesize one verified result. |
 | [`patpat-swarm`](skills/patpat-swarm/SKILL.md) | Cover slices or races and return one report. |
 | [`patpat-setup`](skills/patpat-setup/SKILL.md) | Install, validate, or remove Patpat on a host. |
-| [`patpat-ship`](skills/patpat-ship/SKILL.md) | Auto commit-and-PR after explicit activation and proof; merge only when explicitly named. |
+| [`patpat-ship`](skills/patpat-ship/SKILL.md) | Commit-and-PR when delivery intent exists; merge only when explicitly named. |
 | [`patpat-skill`](skills/patpat-skill/SKILL.md) | Author a reusable skill. |
 | [`patpat-eval`](skills/patpat-eval/SKILL.md) | Evaluate skill triggering with isolated prompts. |
 | [`patpat-verifier`](skills/patpat-verifier/SKILL.md) | Create or maintain a project-specific verifier. |
@@ -207,7 +207,7 @@ Patpat does not turn capability into authority. These boundaries are deliberate:
 - Merge of a red CI, package publish, and production deploy
 - Model-selection presets and persona skills
 
-After verify and review, explicitly activated `/patpat` commits and opens or updates a ready PR. Overnight work stops merge-ready. Only explicit land or merge language can merge when checks are green. Patpat still pauses for production deploy, force-push, secret rotation, and risky auth or billing changes.
+After verify and review, delivery intent (not activation alone) commits and opens or updates a ready PR. Overnight work stops merge-ready. Only explicit land or merge language can merge when checks are green. Patpat still pauses for production deploy, force-push, secret rotation, and risky auth or billing changes.
 
 ## Validate
 

@@ -48,7 +48,7 @@ Use natural goals with observable outcomes. These prompts are starting points, n
 - **Using old evidence after a change.** Bind proof to the current artifact and rerun affected checks.
 - **Accepting every review comment.** Act on concrete correctness, safety, regression, and maintainability findings; dismiss unsupported preferences with reasons.
 - **Turning long work into endless retries.** Use a checkable finish condition and stop after the third identical blocker.
-- **Confusing PR delivery with merge authority.** Patpat may open a ready PR after explicit activation; merge still requires explicit `land` or `merge` language.
+- **Confusing PR delivery with merge authority.** Patpat may open a ready PR when delivery intent exists; merge still requires explicit `land` or `merge` language. Activation alone does not ship.
 - **Adding project knowledge to the core.** Prefer a project verifier, local rule, or narrow playbook over another global abstraction.
 
 Return to the [guide index](./README.md) or inspect the [capability map](./capability-map.md).
