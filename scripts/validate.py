@@ -171,6 +171,7 @@ PINNED_BOUNDARY_SENTENCES = (
             "Independent review remains required before default ship",
             "Default commit-and-PR requires delivery intent.",
             "It does not by itself force independent review or a PR.",
+            "Write numbered steps only when sequencing or ambiguity earns them",
         ),
         "risk-scaled judgment contract",
     ),
@@ -200,8 +201,9 @@ PINNED_BOUNDARY_SENTENCES = (
     (
         Path("skills/patpat-loop/SKILL.md"),
         (
-            "Scale start ceremony from risk:",
-            "Do not re-read the entire protocol every turn.",
+            "First activation alone must not force a full protocol read.",
+            "Do not open a mandatory todo list.",
+            "Do not require a numbered checklist.",
         ),
         "risk-scaled start ceremony contract",
     ),
@@ -1007,8 +1009,8 @@ def run_self_test(root: Path) -> list[str]:
         text = skill.read_text(encoding="utf-8")
         skill.write_text(
             text.replace(
-                "Do not re-read the entire protocol every turn.",
-                "Re-read the entire protocol every turn.",
+                "First activation alone must not force a full protocol read.",
+                "First activation alone forces a full protocol read.",
                 1,
             ),
             encoding="utf-8",

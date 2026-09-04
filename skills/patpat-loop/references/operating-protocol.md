@@ -33,13 +33,13 @@ Choose the smallest reliable path from signals: reversibility, blast radius, unc
 
 Ordinary sessions scale ceremony from those risk signals. Delivery and durable-run gates stay fail-closed.
 
-When the work is ambiguous, multi-file, architecture-affecting, security-sensitive, migration-sensitive, contract-affecting, or explicitly a plan, write numbered steps each bound to a verify check:
+Write numbered steps only when sequencing or ambiguity earns them; do not invent a checklist for clear bounded local work. When the work is ambiguous, multi-file, architecture-affecting, security-sensitive, migration-sensitive, contract-affecting, or explicitly a plan, write numbered steps each bound to a verify check:
 
 ```text
 1. [Step] -> verify: [test/command/check]
 ```
 
-When implementation is clear and bounded: inspect nearby contracts, make the smallest viable change, verify with the strongest practical check, and update docs only if durable truth changed.
+When implementation is clear and bounded: inspect nearby contracts, make the smallest viable change, verify with the strongest practical check, and update docs only if durable truth changed. Do not open a mandatory todo list for that path.
 
 Mutating work still defines the 5-field proof contract before editing and still verifies on the authoritative surface.
 

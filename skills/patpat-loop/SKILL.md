@@ -13,11 +13,13 @@ This mode stays on across later turns after explicit invocation. Trusted host ho
 
 ## Start
 
-Open a todo list. Scale start ceremony from risk:
+Classify the task first from signals: reversibility, uncertainty, blast radius, auth, security, billing, secrets, architecture, cross-cutting, duration, delivery intent, and parallelism need. First activation is context, not a risk signal. First activation alone must not force a full protocol read.
 
-1. On first activation, or when the work is ambiguous, high-risk (auth, billing, secrets, architecture, destructive, or cross-cutting), or has delivery intent: read the [operating protocol](references/operating-protocol.md) in full and skim the principle index below.
-2. For clear bounded reversible local work: read only the matched playbook and the principles it links. Do not re-read the entire protocol every turn.
-3. Match a playbook, open it, and track a compact checklist keyed to its numbered steps before any task-specific work. A skipped step stays listed with `skip: <reason>`.
+Scale start from that classification:
+
+1. Clear, bounded, reversible, and local (including on first activation): lightweight start. Begin with the cheapest useful observation. Read only the matched playbook and the principles it links. Do not open a mandatory todo list. Do not require a numbered checklist. Mutating work still defines the 5-field proof contract before editing and still verifies on the authoritative surface.
+2. Ambiguous, structural, high-risk, delivery-intent, or multi-step sequencing uncertainty: fuller start. Read the [operating protocol](references/operating-protocol.md) in full when needed, skim the principle index, and keep a compact checklist with a verify check per step when sequencing earns it. A skipped step stays listed with `skip: <reason>`.
+3. Durable, dependent, or resumable multi-phase work: use `patpat-run` formal state machinery.
 
 Inspect, execute, or measure before asking. Do not expose named user-selectable modes.
 
