@@ -190,6 +190,13 @@ PINNED_BOUNDARY_SENTENCES = (
         ),
         "judgment-failure instruction-contract",
     ),
+    (
+        Path("docs/guide/capability-map.md"),
+        (
+            "Default commit and ready PR require delivery intent.",
+        ),
+        "capability-map delivery-intent contract",
+    ),
 )
 UNADMITTED_COMPONENT_PATHS = {
     ".cursor",
@@ -975,6 +982,18 @@ def run_self_test(root: Path) -> list[str]:
             encoding="utf-8",
         )
 
+    def strip_capability_map_delivery_intent(fixture: Path) -> None:
+        path = fixture / "docs" / "guide" / "capability-map.md"
+        text = path.read_text(encoding="utf-8")
+        path.write_text(
+            text.replace(
+                "Default commit and ready PR require delivery intent.",
+                "Explicit activation may authorize commit and one ready PR.",
+                1,
+            ),
+            encoding="utf-8",
+        )
+
     def strip_judgment_failure_contract(fixture: Path) -> None:
         playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "behavioral-eval.md"
         text = playbook.read_text(encoding="utf-8")
@@ -1236,6 +1255,7 @@ def run_self_test(root: Path) -> list[str]:
             ("project-verifier isolation drift", strip_project_verifier_isolation, "missing project-verifier isolation contract"),
             ("risk-scaled judgment drift", strip_risk_scaled_judgment, "missing risk-scaled judgment contract"),
             ("delivery-intent default-delivery drift", strip_delivery_intent_default_delivery, "missing delivery-intent default-delivery contract"),
+            ("capability-map delivery-intent drift", strip_capability_map_delivery_intent, "missing capability-map delivery-intent contract"),
             ("judgment-failure instruction-contract drift", strip_judgment_failure_contract, "missing judgment-failure instruction-contract"),
             ("missing agent install contract", remove_agents_guide, "missing agent install contract"),
             ("Codex defaultPrompt drift", drop_codex_default_prompt, "defaultPrompt must include $patpat"),

@@ -5,7 +5,10 @@
 Patpat turns an outcome into a closed engineering loop:
 
 ```text
-FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY -> REVIEW -> LEARN? -> REPORT
+FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY
+VERIFY -> REPORT when local reversible without delivery intent
+VERIFY -> REVIEW before delivery / high-risk / durable-run LEARN|REPORT
+REVIEW -> LEARN? -> REPORT
 ```
 
 ## State the outcome
