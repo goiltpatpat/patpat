@@ -13,7 +13,7 @@ Require a concrete provider, immutable trigger identity, trusted coordinator, ex
 
 Keep external writes under one coordinator. Give workers no credentials, write tools, or posting instructions. Default generated automation to disabled and test it against a sandbox or dry-run surface.
 
-Enabling, scheduling, posting, filing, publishing, or deployment requires explicit authority immediately before the action. A provider-triggered issue loop may open only a draft pull request by default. Ready-PR delivery requires separate fresh interactive authority.
+Enabling, scheduling, posting, filing, publishing, or deployment requires explicit authority immediately before the action. A provider-triggered issue loop may open only a draft pull request by default. Ready-PR delivery requires separate fresh interactive delivery intent (not activation alone).
 
 ## Proof closure
 

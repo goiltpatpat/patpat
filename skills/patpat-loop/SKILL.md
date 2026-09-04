@@ -13,11 +13,13 @@ This mode stays on across later turns after explicit invocation. Trusted host ho
 
 ## Start
 
-Open a todo list. The first items are:
+Open a todo list. Scale start ceremony from risk:
 
-1. Read the [operating protocol](references/operating-protocol.md) in full.
-2. Read the principle index below.
+1. On first activation, or when the work is ambiguous, high-risk (auth, billing, secrets, architecture, destructive, or cross-cutting), or has delivery intent: read the [operating protocol](references/operating-protocol.md) in full and skim the principle index below.
+2. For clear bounded reversible local work: read only the matched playbook and the principles it links. Do not re-read the entire protocol every turn.
 3. Match a playbook, open it, and track a compact checklist keyed to its numbered steps before any task-specific work. A skipped step stays listed with `skip: <reason>`.
+
+Inspect, execute, or measure before asking. Do not expose named user-selectable modes.
 
 Do not apply Patpat outside software engineering or repository operations.
 

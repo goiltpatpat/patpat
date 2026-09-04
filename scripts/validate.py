@@ -197,6 +197,14 @@ PINNED_BOUNDARY_SENTENCES = (
         ),
         "capability-map delivery-intent contract",
     ),
+    (
+        Path("skills/patpat-loop/SKILL.md"),
+        (
+            "Scale start ceremony from risk:",
+            "Do not re-read the entire protocol every turn.",
+        ),
+        "risk-scaled start ceremony contract",
+    ),
 )
 UNADMITTED_COMPONENT_PATHS = {
     ".cursor",
@@ -994,6 +1002,19 @@ def run_self_test(root: Path) -> list[str]:
             encoding="utf-8",
         )
 
+    def strip_risk_scaled_start(fixture: Path) -> None:
+        skill = fixture / "skills" / "patpat-loop" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        skill.write_text(
+            text.replace(
+                "Do not re-read the entire protocol every turn.",
+                "Re-read the entire protocol every turn.",
+                1,
+            ),
+            encoding="utf-8",
+        )
+
+
     def strip_judgment_failure_contract(fixture: Path) -> None:
         playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "behavioral-eval.md"
         text = playbook.read_text(encoding="utf-8")
@@ -1256,6 +1277,7 @@ def run_self_test(root: Path) -> list[str]:
             ("risk-scaled judgment drift", strip_risk_scaled_judgment, "missing risk-scaled judgment contract"),
             ("delivery-intent default-delivery drift", strip_delivery_intent_default_delivery, "missing delivery-intent default-delivery contract"),
             ("capability-map delivery-intent drift", strip_capability_map_delivery_intent, "missing capability-map delivery-intent contract"),
+            ("risk-scaled start ceremony drift", strip_risk_scaled_start, "missing risk-scaled start ceremony contract"),
             ("judgment-failure instruction-contract drift", strip_judgment_failure_contract, "missing judgment-failure instruction-contract"),
             ("missing agent install contract", remove_agents_guide, "missing agent install contract"),
             ("Codex defaultPrompt drift", drop_codex_default_prompt, "defaultPrompt must include $patpat"),
