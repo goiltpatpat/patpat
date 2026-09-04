@@ -76,7 +76,7 @@ Default to one owner. Workers return compact findings and evidence, not transcri
 Patpat work progresses through four strict gates:
 1. **Pre-edit**: Define a 5-field proof contract (`Claim`, `Surface`, `Action`, `Expect`, `Cleanup`) before editing code.
 2. **Verify**: Observe execution on the authoritative surface, producing an exit-code-0 receipt for the exact current snapshot.
-3. **Ship**: Commit and open or update one ready PR after fresh verification and independent review pass.
+3. **Ship**: Entered when delivery intent exists: commit and open or update one ready PR after fresh verification and independent review pass.
 4. **Merge**: Land only upon explicit user `land` or `merge` language with green provider checks.
 
 Enforcement boundaries:

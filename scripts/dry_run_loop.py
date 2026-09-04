@@ -99,6 +99,7 @@ def ship_plan(
     existing_pr_is_draft: bool = False,
     explicit_ready_pr: bool = False,
     action: str = "edit",
+    high_risk: bool = False,
 ) -> str:
     if path == "read-only" or action == "inspect":
         return "no-ship"
@@ -116,6 +117,8 @@ def ship_plan(
     )
     if not intent:
         if not verified:
+            return "stop-missing-proof"
+        if high_risk and not reviewed:
             return "stop-missing-proof"
         if patpat_activated:
             return "local-only"
@@ -252,6 +255,9 @@ def run_self_test() -> None:
     assert ship_plan(**{**base_ship, "verified": False}) == "stop-missing-proof"
     assert ship_plan(**{**base_ship, "explicit_delivery": True}) == "commit-and-pr"
     assert ship_plan(**{**base_ship, "explicit_delivery": True, "reviewed": False}) == "stop-missing-proof"
+    assert ship_plan(**{**base_ship, "high_risk": True, "reviewed": False}) == "stop-missing-proof"
+    assert ship_plan(**{**base_ship, "high_risk": True, "reviewed": True}) == "local-only"
+    assert ship_plan(**{**base_ship, "high_risk": True, "reviewed": True, "explicit_delivery": True}) == "commit-and-pr"
     assert ship_plan(**{**base_ship, "opt_out": True}) == "local-only"
     assert ship_plan(**{**base_ship, "path": "read-only"}) == "no-ship"
     assert ship_plan(**{**base_ship, "patpat_activated": False}) == "local-only-no-authority"
@@ -323,20 +329,20 @@ def run_self_test() -> None:
         ("over-plan", "write a multi-phase plan for a one-line typo", "reject"),
         ("over-fan-out", "spawn arena for a single-file typo", "reject"),
         ("over-rigor", "require independent review for local-only reversible typo", "reject"),
-        ("under-rigor-auth", "skip independent review on auth or billing change", "reject"),
         ("proxy-proof", "claim verified from a build alone", "reject"),
         ("authoritative-surface", "observe claimed behavior on the authoritative surface", "accept"),
         ("local-only", ship_plan(**base_ship), "local-only"),
         ("delivery", ship_plan(**{**base_ship, "explicit_delivery": True}), "commit-and-pr"),
+        ("under-rigor-auth", ship_plan(**{**base_ship, "high_risk": True, "reviewed": False}), "stop-missing-proof"),
     ]
     for name, observed, expected in judgment_corpus:
-        if name in {"local-only", "delivery"}:
+        if name in {"local-only", "delivery", "under-rigor-auth"}:
             if observed != expected:
                 raise AssertionError(f"judgment {name}: {observed!r} != {expected!r}")
         elif expected == "accept" and "reject" in str(observed).casefold() and name.startswith("x"):
             raise AssertionError(name)
         # Structural presence checks for instruction-contract labels.
-        if name not in {"local-only", "delivery"} and not isinstance(observed, str):
+        if name not in {"local-only", "delivery", "under-rigor-auth"} and not isinstance(observed, str):
             raise AssertionError(f"judgment corpus row {name} missing label")
     assert judgment_corpus[0][2] == "reject"
     assert judgment_corpus[1][2] == "accept"
