@@ -36,4 +36,4 @@ Follow [the how-report contract](../../patpat-inspect/references/how-report.md).
 
 ## Teach
 
-When the user asks you to teach them or help them really understand the path, the user-facing reply is the explanation, not a report about the work. Weave how findings and, when reasons matter, rationale-forensics findings into one plain layered explanation. Keep why hedges. Incremental diagrams: each redraw adds one part. Required how-report and why-report headings remain the inspect artifact. There is no `/teach` skill.
+When the user asks you to teach them or help them really understand the path, the user-facing reply is the explanation, not a report about the work. Weave how findings and, when reasons matter, rationale-forensics findings into one plain layered explanation. Keep why hedges. Prefer the smallest useful form from [earned representation](../references/earned-representation.md) when flow or ownership is hard in prose; teach may still add one part at a time. Required how-report and why-report headings remain the inspect artifact. There is no `/teach` skill.

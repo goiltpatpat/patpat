@@ -11,7 +11,7 @@ Read [repository truth](../patpat-loop/principles/repository-truth.md), [smalles
 
 Ground the design in current repository evidence. Name the contract, its callers, the changed behavior, migration impact, compatibility risk, rollback path, and proof contract.
 
-Prefer a design that reduces degrees of freedom and reuses repository structure. Seek independent review before implementing auth, billing, permissions, destructive migrations, production infrastructure, or public contract changes. Stop for explicit approval when required.
+Prefer a design that reduces degrees of freedom and reuses repository structure. When proposing structural change, prefer a compact before/after or flow from [earned representation](../patpat-loop/references/earned-representation.md). Seek independent review before implementing auth, billing, permissions, destructive migrations, production infrastructure, or public contract changes. Stop for explicit approval when required.
 
 Keep architecture work read-only by default. Do not edit implementation files. When the user also requested implementation, finish the design gate and hand the authorized unit to `patpat-change` under `patpat-loop` instead of implementing inside this workflow.
 

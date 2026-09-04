@@ -16,11 +16,11 @@ Named types, functions, or files the reader must hold. Each item cites a file.
 
 ### How It Works
 
-The control flow. Cite functions. Mark each material claim `confirmed`, `inferred`, or `unknown`.
+The control flow. Cite functions. Mark each material claim `confirmed`, `inferred`, or `unknown`. When flow is hard in prose, use the smallest earned form from [earned representation](../../patpat-loop/references/earned-representation.md) (often a call tree). Simple factual answers stay prose.
 
 ### Where Things Live
 
-Placement, ownership, and layering. For each load-bearing symbol, name the owner skill or module and the layer (router, playbook, protocol, test).
+Placement, ownership, and layering. For each load-bearing symbol, name the owner skill or module and the layer (router, playbook, protocol, test). When ownership is hard in prose, prefer a shallow tree per [earned representation](../../patpat-loop/references/earned-representation.md). Simple factual answers stay prose.
 
 ### Gotchas
 

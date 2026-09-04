@@ -4,7 +4,7 @@ Read [repository truth](../principles/repository-truth.md), [shape before logic]
 
 1. Name the current contract, target contract, users, callers, and safety boundaries.
 2. Inspect current architecture, data flow, ownership, failure modes, and migration constraints.
-3. Redesign as if the requirement had been present from the start, then compare that shape with the smallest viable bolt-on. Choose the redesign when it removes dual paths, compatibility shims, or invalid states; keep a time-boxed dual path only for an external compatibility constraint.
+3. Redesign as if the requirement had been present from the start, then compare that shape with the smallest viable bolt-on. When helpful, compare current vs target as a compact structural representation per [earned representation](../references/earned-representation.md). Choose the redesign when it removes dual paths, compatibility shims, or invalid states; keep a time-boxed dual path only for an external compatibility constraint.
 4. Inventory callers of any replaced internal API. Plan to migrate them and delete the legacy surface in the same wave.
 5. Choose one design and state rejected alternatives with evidence, including compatibility, reversibility, verification cost, and reader load.
 6. Sequence the work into independently verifiable units with rollback points.

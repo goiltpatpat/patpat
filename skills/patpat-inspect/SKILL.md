@@ -7,7 +7,7 @@ description: Investigate a repository and explain how behavior works or why it r
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 
-Read [repository truth](../patpat-loop/principles/repository-truth.md) and apply the [investigation playbook](../patpat-loop/playbooks/investigation.md). Report with the [how-report contract](references/how-report.md).
+Read [repository truth](../patpat-loop/principles/repository-truth.md) and apply the [investigation playbook](../patpat-loop/playbooks/investigation.md). Report with the [how-report contract](references/how-report.md). When explanation clarity needs structure that prose hides, choose the smallest form from [earned representation](../patpat-loop/references/earned-representation.md).
 
 This skill explains how repository behavior works, where it lives, who owns it, which layer it occupies, and any critique that follows that explanation. Questions about why the code reached its current shape go to [rationale forensics](../patpat-loop/playbooks/rationale-forensics.md).
 
