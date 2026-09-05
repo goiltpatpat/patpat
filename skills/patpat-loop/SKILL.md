@@ -43,7 +43,7 @@ Read the linked file when the trigger fires. Cite a principle only when it chang
 
 ## Route the work
 
-The user speaks plainly and invokes `/patpat` (or host equivalent). The agent selects one of 8 primary routes:
+The user speaks plainly and invokes `/patpat` (or host equivalent). Select the route for the earliest unresolved decision found during inspection; an implementation request does not settle an undefined requirement or contract. Use the 8 existing primary routes:
 
 | Intent | Route | Primary Skill | Playbook Reference |
 | --- | --- | --- | --- |
@@ -75,7 +75,7 @@ MUTATING + delivery intent? -> DEFAULT SHIP (commit + PR)
 LAND? -> MERGE a green verified PR
 ```
 
-A proof contract names the 5 canonical fields: Claim, Surface, Action, Expect (aliased from expected observation), and Cleanup. Define it before editing. Mutating work still defines the 5-field proof contract before editing and still verifies on the authoritative surface. Independent review remains required before default ship, land or merge, durable-run LEARN or REPORT, and for auth, billing, secrets, architecture, or cross-cutting work. Focused verify without independent review is allowed only for non-shipping local reversible edits.
+A proof contract names the 5 canonical fields: Claim, Surface, Action, Expect (aliased from expected observation), and Cleanup. Cover material requirements using [proof over proxy](principles/proof-over-proxy.md). Mutating work still defines the 5-field proof contract before editing and still verifies on the authoritative surface. Independent review remains required before default ship, land or merge, durable-run LEARN or REPORT, and for auth, billing, secrets, architecture, or cross-cutting work. Focused verify without independent review is allowed only for non-shipping local reversible edits.
 
 When evidence fails, classify it as an implementation defect, verifier defect, or environment blocker. Return to the earliest invalid state. After three failures from the same unchanged blocker, stop and name the evidence required to continue.
 

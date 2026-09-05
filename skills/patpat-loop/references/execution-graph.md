@@ -27,14 +27,12 @@ Independent review remains required before default ship, land or merge, durable-
 Failure edges:
 
 ```text
-VERIFY FAILED
-  -> implementation defect -> ACT
-  -> verifier defect       -> PROOF CONTRACT
-  -> environment blocker   -> INSPECT or REPORT
-
-REVIEW FAILED
-  -> unsafe or out of scope -> ACT or request authority
-  -> evidence gap           -> VERIFY
+VERIFICATION, REVIEW, PROVIDER, OR USAGE CONTRADICTION
+  -> requirement or design assumption invalid -> INSPECT (resolve/design first)
+  -> claim, surface, action, or expectation invalid -> PROOF CONTRACT
+  -> implementation wrong under a valid contract -> ACT
+  -> valid claim lacks evidence -> VERIFY
+  -> environment blocker -> INSPECT or report the blocker
 
 LEARN?
   -> recurring failure -> encode the smallest enforceable constraint -> VERIFY
@@ -46,3 +44,5 @@ Stop at an approval gate when the next transition would delete data, alter produ
 Use a bounded loop. A retry must add evidence or change the hypothesis, implementation, verifier, or environment. After three failures caused by the same unchanged blocker, report the blocker and the evidence required to continue.
 
 `patpat-run` persists only the mutating path through this graph. Read-only answers and diagnosis-only blockers report directly without creating durable run state.
+
+In durable runs, VERIFY and REVIEW may return directly to INSPECT or PROOF_CONTRACT. Returning to an earlier contract decision clears the old contract and verification/review receipts and advances the evidence epoch; record the revised 5-field contract before ACT. An initial contract recorded during INSPECT survives the forward transition to PROOF_CONTRACT. Record the contradiction and next decision in the existing decision trail. REPORT remains terminal: new post-delivery evidence starts a new scoped run if durable state is needed, without reopening old approval or proof.

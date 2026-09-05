@@ -11,14 +11,14 @@ Read [proof over proxy](../patpat-loop/principles/proof-over-proxy.md) and [pres
 
 ## Build the proof
 
-1. Name the exact claim.
+1. Reconcile the requested outcomes with the proof contract using proof over proxy; name missing requirements before running checks.
 2. Identify the authoritative artifact or user surface.
 3. Capture a baseline or reproduce the prior state when relevant.
 4. Run the smallest targeted automated check.
 5. For behavioral claims, exercise the changed logic through the authoritative interface under representative conditions when safe and practical. For static claims, use the strongest deterministic check on the authoritative artifact.
 6. Observe visible output and material side effects directly.
 7. Inspect the final diff and version-control state for unrelated changes.
-8. Record the command or action, observed result, cleanup, and limitation.
+8. Record the command or action, observed result, cleanup, and limitation for each material claim; do not mark the whole request verified with uncovered outcomes.
 
 ## Claim-adaptive verification and proxy rejection
 
