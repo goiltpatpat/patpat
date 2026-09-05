@@ -19,11 +19,11 @@ Inspect version-control state and nearby contracts before editing. Define Claim,
 
 Do not claim completion from generation, compilation, or tests alone when the changed behavior has an observable surface.
 
-For clear, bounded, reversible local work without delivery intent or high-risk boundaries, the closure below requires verify only; skip independent review. Otherwise apply the operating protocol's review requirements before completion.
-
 ## Proof closure
 
-Close repository mutations through:
+Define the five-field proof contract before any mutation. Close mutating work with:
 
-- [`patpat-verify`](../patpat-verify/SKILL.md)
-- [`patpat-review`](../patpat-review/SKILL.md)
+- Always: [`patpat-verify`](../patpat-verify/SKILL.md), using authoritative evidence.
+- When required: [`patpat-review`](../patpat-review/SKILL.md) for delivery intent, auth/security/billing/secrets, architecture or cross-cutting scope, durable-run completion, land/merge, or another operating-protocol review gate.
+
+For clear, bounded, reversible local work with none of those review requirements, proceed from verification to REPORT without independent review.
