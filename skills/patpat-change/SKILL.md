@@ -5,7 +5,7 @@ description: Implement one bounded repository change with a small diff and expli
 
 # Patpat Change
 
-When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) and [execution graph](../patpat-loop/references/execution-graph.md) in full. Do not load the router.
+For clear, bounded, reversible local work without delivery intent, use this skill and its relevant references. Otherwise read the [operating protocol](../patpat-loop/references/operating-protocol.md) and [execution graph](../patpat-loop/references/execution-graph.md) in full before acting. Escalate on uncertainty, security, auth, billing, secrets, architecture, cross-cutting work, or delivery intent. Do not load the router or reread unchanged instructions already loaded in this session.
 
 Read [smallest safe change](../patpat-loop/principles/smallest-safe-change.md), [preserve safety](../patpat-loop/principles/preserve-safety.md), and [proof over proxy](../patpat-loop/principles/proof-over-proxy.md). Apply the [bounded change playbook](../patpat-loop/playbooks/bounded-change.md).
 
@@ -15,9 +15,11 @@ When regression-first applies, observe fail-before (or an explicit why-not) and 
 
 For an explicit visual migration or pixel-equivalence claim, apply the [visual equivalence playbook](../patpat-loop/playbooks/visual-equivalence.md) without weakening its baseline or comparison harness.
 
-Inspect version-control state and nearby contracts before editing. Define the proof contract. Make one coherent repository-native patch. Avoid unrelated cleanup, speculative abstractions, new dependencies, and public interface changes unless the objective requires them.
+Inspect version-control state and nearby contracts before editing. Define Claim, Surface, Action, Expect, and Cleanup. Make one coherent repository-native patch. Avoid unrelated cleanup, speculative abstractions, new dependencies, and public interface changes unless the objective requires them.
 
 Do not claim completion from generation, compilation, or tests alone when the changed behavior has an observable surface.
+
+For clear, bounded, reversible local work without delivery intent or high-risk boundaries, the closure below requires verify only; skip independent review. Otherwise apply the operating protocol's review requirements before completion.
 
 ## Proof closure
 
