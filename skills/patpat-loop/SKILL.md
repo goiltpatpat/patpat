@@ -21,7 +21,7 @@ Scale start from that classification:
 2. Ambiguous, structural, high-risk, delivery-intent, or multi-step sequencing uncertainty: fuller start. Read the [operating protocol](references/operating-protocol.md) in full when needed, skim the principle index, and keep a compact checklist with a verify check per step when sequencing earns it. A skipped step stays listed with `skip: <reason>`.
 3. Durable, dependent, or resumable multi-phase work: use `patpat-run` formal state machinery.
 
-Inspect, execute, or measure before asking. Do not expose named user-selectable modes.
+Inspect, execute, or measure before asking. Ask only for product preference, authority, a destructive action, security, or another human-only choice. Do not expose named user-selectable modes.
 
 Do not apply Patpat outside software engineering or repository operations.
 
@@ -56,15 +56,11 @@ The user speaks plainly and invokes `/patpat` (or host equivalent). Select the r
 | Named commit, PR update, publish, or authorized deploy | `ship` | [`patpat-ship`](../patpat-ship/SKILL.md) | [Authorized delivery](playbooks/authorized-delivery.md) |
 | Durable multi-phase execution, multi-PR queue, or overnight run | `run` | [`patpat-run`](../patpat-run/SKILL.md) | [Multi-phase run](playbooks/multi-phase-run.md) |
 
-Specialized workflows (`arena`, `swarm`, `automation`, `eval`, `perf`, `learn`) remain back-office execution playbooks referenced in the [route catalog](references/route-catalog.md) and dispatched internally by the agent under these 8 routes. Users do not choose from a menu. Users still only state the goal. Inspect, execute, or measure before asking. Ask only for product preference, authority, a destructive action, security, or another human-only choice. Choose the smallest reliable path from signals: reversibility, blast radius, uncertainty, external side effects, security, auth, billing, architecture, duration, parallel need, and delivery or merge intent. Do not expose named user-selectable modes.
-
-If no narrow route fits, use `patpat-architect` or `patpat-run`. For specialized overlap resolution or secondary workflows, consult the [route catalog](references/route-catalog.md).
-
-Overnight, "don't stop", or "going to bed" continues the matched playbook through verify, review, and default commit-and-PR, then stops merge-ready. Merge only when the user explicitly names land or merge. Never deploy by implication.
+Consult the [route catalog](references/route-catalog.md) only for specialized workflows (`arena`, `swarm`, `automation`, `eval`, `perf`, `learn`) or overlap. If no narrow route fits, use `patpat-architect` or `patpat-run`.
 
 ## Run the graph
 
-Read [the execution graph](references/execution-graph.md), the matched workflow, its playbook, and only the principles those files link.
+Read the matched workflow and relevant references. Read [the execution graph](references/execution-graph.md) for fuller or durable work and when failed evidence requires a return edge. Reuse unchanged instructions already loaded in this session.
 
 ```text
 FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY
@@ -75,7 +71,7 @@ MUTATING + delivery intent? -> DEFAULT SHIP (commit + PR)
 LAND? -> MERGE a green verified PR
 ```
 
-A proof contract names the 5 canonical fields: Claim, Surface, Action, Expect (aliased from expected observation), and Cleanup. Cover material requirements using [proof over proxy](principles/proof-over-proxy.md). Mutating work still defines the 5-field proof contract before editing and still verifies on the authoritative surface. Independent review remains required before default ship, land or merge, durable-run LEARN or REPORT, and for auth, billing, secrets, architecture, or cross-cutting work. Focused verify without independent review is allowed only for non-shipping local reversible edits.
+A proof contract names Claim, Surface, Action, Expect, and Cleanup. Cover material requirements using [proof over proxy](principles/proof-over-proxy.md). Independent review remains required before default ship, land or merge, durable-run LEARN or REPORT, and for auth, billing, secrets, architecture, or cross-cutting work. Focused verify without independent review is allowed only for non-shipping local reversible edits.
 
 When evidence fails, classify it as an implementation defect, verifier defect, or environment blocker. Return to the earliest invalid state. After three failures from the same unchanged blocker, stop and name the evidence required to continue.
 
@@ -85,6 +81,7 @@ Enter `LEARN?` only for a recurring failure worth encoding.
 
 - Ordinary in-scope edits proceed under `/patpat` without asking permission to type.
 - Explicit `/patpat` or `$patpat` activation authorizes the loop, proof, and verify; it does not by itself force independent review or a PR. [Default delivery](playbooks/default-delivery.md) runs only when delivery intent exists. Higher-priority repository rules and `don't commit` / `local only` still win.
+- Overnight, "don't stop", or "going to bed" is delivery intent: continue through verify, review, and commit-and-PR, then stop merge-ready. Never deploy by implication.
 - Merge a green verified PR only when the user explicitly names land or merge. Treat ambiguous `ship it` as commit-and-PR, not merge.
 - Pause for production deploy, package publish, force-push, data deletion, secret rotation, and risky auth, billing, or permission changes.
 - Workers never ship. The parent ships.

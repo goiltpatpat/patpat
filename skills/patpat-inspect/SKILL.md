@@ -1,11 +1,11 @@
 ---
 name: patpat-inspect
-description: Investigate a repository and explain how behavior works or why it reached its current shape, including placement, ownership, layering, and critique after an explanation, without making changes. Use for how-does-X-work, where-should-this-live, who-owns-this, are-we-sure, and why-was-this-shaped questions. Do not use for fix, ship, or merge work.
+description: Explain repository behavior, ownership, placement, or historical design decisions without editing. Use for how, why, and diagnosis-only questions; not implementation or delivery.
 ---
 
 # Patpat Inspect
 
-When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
+For a bounded read-only question, use this skill and its relevant references. Read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full for uncertainty, sensitive data, or cross-cutting investigation. Do not load the router or reread unchanged instructions already loaded in this session.
 
 Read [repository truth](../patpat-loop/principles/repository-truth.md) and apply the [investigation playbook](../patpat-loop/playbooks/investigation.md). Report with the [how-report contract](references/how-report.md). When explanation clarity needs structure that prose hides, choose the smallest form from [earned representation](../patpat-loop/references/earned-representation.md).
 

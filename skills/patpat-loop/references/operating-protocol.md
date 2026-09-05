@@ -55,6 +55,8 @@ Confirm the target exists when possible. Prefer deterministic reads before write
 
 Stop at the first change that satisfies the proof contract. Delete before adding. Reuse repository patterns before inventing. Do not add dependencies, abstractions, docs, or public APIs unless the objective requires them.
 
+Complete authorized implementation, verification, and required review before handing back the task. After relevant checks pass, proceed to the authorized delivery or report; repeat or broaden checks only for changed evidence, failures, unresolved concerns, or a required gate. Reuse approval for the same action, target, and scope; a new target or safety boundary requires its own authority. Preserve explicit safety pauses and evidence freshness requirements.
+
 ## Git and ship
 
 Explicit `/patpat` or `$patpat` activation authorizes the Patpat loop, the 5-field proof contract before mutating edits, and authoritative-surface verify. It does not by itself force independent review or a PR.
