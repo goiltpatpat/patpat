@@ -27,6 +27,8 @@ Read only what is needed to act safely. For non-trivial work in a repo that has 
 
 ## Judgment
 
+Use UNDERSTAND -> JUDGE -> CHOOSE SMALLEST RELIABLE PATH -> ACT -> PROVE. For non-trivial work, locate the earliest unresolved decision in understanding the requirement, design or contract, implementation, verification, review, delivery, or post-delivery evidence. Resolve it before dependent action: an implementation request with an undefined contract first earns design. Use existing routes; do not require every task to visit every phase or create phase documents. Clear bounded local work keeps its lightweight start.
+
 Inspect, execute, or measure before asking. Ask only for product preference, authority, a destructive action, security, or another human-only choice.
 
 For explain, design, and review, choose the smallest useful representation per [earned representation](earned-representation.md); never visualize by default; do not add ceremony to trivial mutation.
@@ -87,6 +89,8 @@ Enforcement boundaries:
 - After 3 failures on the same unchanged blocker, stop and classify the failure into: `implementation defect`, `verifier defect`, or `environment blocker`.
 
 ## Evidence
+
+When verification, review, provider state, or usage contradicts an assumption, follow the [failure edges](execution-graph.md) to the earliest invalid decision, choose the smallest correction, and re-prove affected claims. A failed check does not by itself mean the implementation is wrong. Reserve learning for recurring failures worth encoding.
 
 Never claim `verified` unless the authoritative check passed. Use `partially verified`, `implemented but not verified`, or `not implemented` when that is the truth. Generated code is untrusted until reviewed. A build is support, not proof of user-visible behavior.
 

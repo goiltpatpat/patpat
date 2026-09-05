@@ -61,7 +61,7 @@ TRANSITIONS = {
     "PROOF_CONTRACT": {"ACT", "INSPECT"},
     "ACT": {"VERIFY"},
     "VERIFY": {"REVIEW", "ACT", "PROOF_CONTRACT", "INSPECT"},
-    "REVIEW": {"LEARN", "REPORT", "ACT", "VERIFY"},
+    "REVIEW": {"LEARN", "REPORT", "ACT", "VERIFY", "INSPECT", "PROOF_CONTRACT"},
     "LEARN": {"VERIFY", "REPORT"},
     "REPORT": set(),
     "BLOCKED": set(),
@@ -653,7 +653,12 @@ def transition(root: Path, run_id: str, destination: str) -> dict[str, Any]:
                 raise RunStateError(f"{destination} requires current verified evidence")
             if not receipt_is_fresh(state["review"], state, snapshot, "pass", independent=True):
                 raise RunStateError(f"{destination} requires current independent review")
-        if destination in {"ACT", "VERIFY"}:
+        revisiting_contract = (
+            destination == "INSPECT" and source != "FRAME"
+        ) or (destination == "PROOF_CONTRACT" and source in {"VERIFY", "REVIEW"})
+        if revisiting_contract:
+            state["proof_contract"] = None
+        if destination in {"ACT", "VERIFY"} or revisiting_contract:
             state["epoch"] += 1
             state["verification"] = None
             state["review"] = None
@@ -1213,6 +1218,62 @@ def run_self_test() -> None:
         transition(root, "fresh-admission", "LEARN")
         transition(root, "fresh-admission", "REPORT")
         assert status(root, "fresh-admission")["node"] == "REPORT"
+
+        for source in ("VERIFY", "REVIEW"):
+            for destination in ("INSPECT", "PROOF_CONTRACT"):
+                run_id = f"feedback-{source}-{destination}".lower().replace("_", "-")
+                verification_path, review = prepare_review_run(run_id)
+                if source == "VERIFY":
+                    transition(root, run_id, "VERIFY")
+                    record_receipt(root, run_id, "verification", "Observed", f"file:{verification_path}", "integration-owner", "verified")
+                else:
+                    record_receipt(root, run_id, "review", "Reviewed", review, "reviewer", "pass")
+                before = load_state(root, run_id)
+                transition(root, run_id, destination)
+                after = load_state(root, run_id)
+                assert after["epoch"] > before["epoch"], "feedback retained the old evidence epoch"
+                assert after["proof_contract"] is None, "feedback retained the invalid proof contract"
+                assert after["verification"] is None and after["review"] is None
+                assert after["authorities"] == before["authorities"]
+                assert after["prohibitions"] == before["prohibitions"]
+                for gate in ("pre-edit", "verify", "ship", "merge"):
+                    assert not check_gate(root, run_id, gate)[0], f"feedback left {gate} open"
+                for terminal in ("LEARN", "REPORT"):
+                    expect_atomic_rejection(run_id, lambda node=terminal: transition(root, run_id, node), "feedback completion without proof")
+                if destination == "INSPECT":
+                    transition(root, run_id, "PROOF_CONTRACT")
+                expect_atomic_rejection(run_id, lambda: transition(root, run_id, "ACT"), "feedback ACT without a revised contract")
+                record_proof_contract(root, run_id, {
+                    "claim": "R1: requested output; R2: rejected input leaves data unchanged",
+                    "surface": "R1, R2: public interface",
+                    "action": "R1: valid input; R2: invalid input",
+                    "expect": "R1: requested value; R2: rejection and unchanged data",
+                    "cleanup": "R1, R2: remove fixtures",
+                })
+                assert not check_gate(root, run_id, "verify")[0], "old receipt certified a revised claim"
+                transition(root, run_id, "ACT")
+                transition(root, run_id, "VERIFY")
+                expect_atomic_rejection(run_id, lambda: transition(root, run_id, "REVIEW"), "feedback reused verification")
+                record_receipt(root, run_id, "verification", "R1 and R2 observed", f"file:{verification_path}", "integration-owner", "verified")
+                transition(root, run_id, "REVIEW")
+                record_receipt(root, run_id, "review", "Coverage reviewed", review, "reviewer", "pass")
+                transition(root, run_id, "REPORT")
+
+        verification_path, _ = prepare_review_run("stale-feedback")
+        verification_path.write_text("contradictory evidence\n", encoding="utf-8")
+        transition(root, "stale-feedback", "INSPECT")
+        assert load_state(root, "stale-feedback")["proof_contract"] is None
+
+        initialize(root, "forward-contract", "Preserve initial proof", "owner", [], [], [], [])
+        transition(root, "forward-contract", "INSPECT")
+        record_proof_contract(root, "forward-contract", {
+            "claim": "Local edit preserves behavior", "surface": "artifact",
+            "action": "inspect artifact", "expect": "only requested text changes", "cleanup": "none",
+        })
+        original = load_state(root, "forward-contract")["proof_contract"]
+        transition(root, "forward-contract", "PROOF_CONTRACT")
+        assert load_state(root, "forward-contract")["proof_contract"] == original
+        transition(root, "forward-contract", "ACT")
 
         initialize(root, "main-run", "Prove state transitions", "integration-owner", ["open-pr"], ["deploy"], ["source.txt"], [])
         initial_status = status(root, "main-run")

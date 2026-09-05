@@ -8,9 +8,9 @@ Read [repository truth](../principles/repository-truth.md), [proof over proxy](.
 2. Use a separate read-only reviewer for high-risk work when delegation is available and authorized; omit the intended conclusion.
 3. Trace changed contracts, callers, side effects, and safety boundaries.
 4. Execute the solution-integrity audit.
-5. Try to falsify the implementation and each proof claim.
+5. Reconcile material requirements with the proof contract, then try to falsify the implementation and each proof claim. Passing declared claims does not cover an omitted requirement.
 6. Report evidence-backed findings by severity (`blocker`, `high`, `medium`, `low`) and discard speculative style noise. When the main issue is a change in shape, prefer a compact diff-shaped or tree form from [earned representation](../references/earned-representation.md).
-7. Require the smallest correction and named re-verification for accepted findings.
+7. For accepted findings, name the earliest invalid requirement, design, implementation, or proof decision using the [failure edges](../references/execution-graph.md), then require the smallest correction and named re-verification.
 8. Inspect the corrected artifact rather than accepting a remediation summary.
 9. State residual gaps; review never authorizes delivery.
 
