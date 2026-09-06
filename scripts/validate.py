@@ -79,6 +79,14 @@ Close repository mutations through:
 
 - [`patpat-verify`](../patpat-verify/SKILL.md)
 - [`patpat-review`](../patpat-review/SKILL.md)"""
+LOCAL_PROOF_CLOSURE_BLOCK = """## Proof closure
+
+Define the five-field proof contract before any mutation. Close mutating work with:
+
+- Always: [`patpat-verify`](../patpat-verify/SKILL.md), using authoritative evidence.
+- When required: [`patpat-review`](../patpat-review/SKILL.md) for delivery intent, auth/security/billing/secrets, architecture or cross-cutting scope, durable-run completion, land/merge, or another operating-protocol review gate.
+
+For clear, bounded, reversible local work with none of those review requirements, proceed from verification to REPORT without independent review."""
 READ_ONLY_BOUNDARY_BLOCK = """## Mutation boundary
 
 Remain read-only with respect to repository implementation and external delivery. Limit incidental verifier artifacts to the declared proof contract, clean them up, and hand any authorized mutation back to `patpat-loop`."""
@@ -783,7 +791,12 @@ def validate_root(root: Path) -> list[str]:
             labels = ", ".join(sorted(path.parent.name for path in missing))
             errors.append(f"{workflow}: missing proof closure to {labels}")
         operational = operational_markdown(workflow.read_text(encoding="utf-8"))
-        if not operational.rstrip().endswith(PROOF_CLOSURE_BLOCK):
+        expected_closure = (
+            LOCAL_PROOF_CLOSURE_BLOCK
+            if skill_name in {"patpat-change", "patpat-debug"}
+            else PROOF_CLOSURE_BLOCK
+        )
+        if not operational.rstrip().endswith(expected_closure):
             errors.append(f"{workflow}: missing canonical proof closure directive")
 
     for skill_name, policy in sorted(SKILL_POLICIES.items()):
@@ -1188,7 +1201,7 @@ def run_self_test(root: Path) -> list[str]:
         skill = fixture / "skills" / "patpat-change" / "SKILL.md"
         text = skill.read_text(encoding="utf-8")
         skill.write_text(
-            text.replace(PROOF_CLOSURE_BLOCK, f"<!--\n{PROOF_CLOSURE_BLOCK}\n-->", 1),
+            text.replace(LOCAL_PROOF_CLOSURE_BLOCK, f"<!--\n{LOCAL_PROOF_CLOSURE_BLOCK}\n-->", 1),
             encoding="utf-8",
         )
 
@@ -1219,7 +1232,7 @@ def run_self_test(root: Path) -> list[str]:
         skill = fixture / "skills" / "patpat-change" / "SKILL.md"
         text = skill.read_text(encoding="utf-8")
         skill.write_text(
-            text.replace(PROOF_CLOSURE_BLOCK, "Never use verification or review.", 1),
+            text.replace(LOCAL_PROOF_CLOSURE_BLOCK, "Never use verification or review.", 1),
             encoding="utf-8",
         )
 
@@ -1327,6 +1340,26 @@ def run_self_test(root: Path) -> list[str]:
             ("Cursor logo missing file", cursor_logo_missing_file, "logo file is missing"),
         ]
     )
+
+    # Instruction-contract regressions, not live-agent behavioral evidence.
+    for skill_name in ("patpat-change", "patpat-debug", "patpat-run", "patpat-ship"):
+        local = skill_name in {"patpat-change", "patpat-debug"}
+        before = LOCAL_PROOF_CLOSURE_BLOCK if local else PROOF_CLOSURE_BLOCK
+        replacements = [PROOF_CLOSURE_BLOCK if local else LOCAL_PROOF_CLOSURE_BLOCK]
+        if local:
+            replacements.extend([
+                LOCAL_PROOF_CLOSURE_BLOCK.replace("Always:", "Optionally:", 1),
+                LOCAL_PROOF_CLOSURE_BLOCK.replace("Define the five-field proof contract before any mutation.", "Mutate without a proof contract.", 1),
+                LOCAL_PROOF_CLOSURE_BLOCK.replace("When required:", "Never:", 1),
+            ])
+        for index, after in enumerate(replacements):
+            def drift_closure(fixture: Path, name: str = skill_name, old: str = before, new: str = after) -> None:
+                skill = fixture / "skills" / name / "SKILL.md"
+                text = skill.read_text(encoding="utf-8")
+                assert old in text
+                skill.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+            cases.append((f"{skill_name} closure drift {index}", drift_closure, "canonical proof closure directive"))
 
     failures: list[str] = []
     with tempfile.TemporaryDirectory(prefix="patpat-validator-") as temp_directory:

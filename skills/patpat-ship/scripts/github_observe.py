@@ -34,6 +34,31 @@ query($owner: String!, $name: String!, $number: Int!) {
       merged
       mergeable
       reviewDecision
+      mergeStateStatus
+      baseRef {
+        name
+        branchProtectionRule {
+          requiresApprovingReviews
+          requiredApprovingReviewCount
+          requiresCodeOwnerReviews
+          requireLastPushApproval
+        }
+        rules(first: 100) {
+          nodes {
+            type
+            parameters {
+              __typename
+              ... on PullRequestParameters {
+                requiredApprovingReviewCount
+                requireCodeOwnerReview
+                requireLastPushApproval
+                requiredReviewers { minimumApprovals }
+              }
+            }
+          }
+          pageInfo { hasNextPage endCursor }
+        }
+      }
       reviewThreads(first: 100) {
         nodes { isResolved }
         pageInfo { hasNextPage endCursor }
@@ -138,6 +163,45 @@ def normalize_check(raw: Any, index: int) -> dict[str, str | None]:
     raise ObserverError(f"checks[{index}] has unsupported type: {kind!r}")
 
 
+def provider_review_not_required(pr: dict[str, Any], base: str) -> bool:
+    """Recognize only complete, same-response no-approval policy; never infer it from jobs."""
+    if "reviewDecision" not in pr or pr["reviewDecision"] is not None:
+        return False
+    # Also require GitHub's aggregate gate, not MERGEABLE or viewer bypass rights.
+    if pr.get("mergeStateStatus") != "CLEAN":
+        return False
+    ref = pr.get("baseRef")
+    if not isinstance(ref, dict) or ref.get("name") != base or "branchProtectionRule" not in ref:
+        return False
+    classic = ref["branchProtectionRule"]
+    if classic is not None:
+        if not isinstance(classic, dict) or not (
+            classic.get("requiresApprovingReviews") is False
+            and type(classic.get("requiredApprovingReviewCount")) is int
+            and classic["requiredApprovingReviewCount"] == 0
+            and classic.get("requiresCodeOwnerReviews") is False
+            and classic.get("requireLastPushApproval") is False
+        ):
+            return False
+    for raw in nodes(ref.get("rules"), "baseRef.rules"):
+        rule = mapping(raw, "baseRef.rules.node")
+        if rule.get("type") in {"DELETION", "NON_FAST_FORWARD", "REQUIRED_STATUS_CHECKS"}:
+            continue
+        if rule.get("type") != "PULL_REQUEST":
+            return False  # Uninterpreted rule types cannot earn an exemption.
+        params = rule.get("parameters")
+        if not isinstance(params, dict) or not (
+            params.get("__typename") == "PullRequestParameters"
+            and type(params.get("requiredApprovingReviewCount")) is int
+            and params["requiredApprovingReviewCount"] == 0
+            and params.get("requireCodeOwnerReview") is False
+            and params.get("requireLastPushApproval") is False
+            and params.get("requiredReviewers") == []
+        ):
+            return False
+    return True
+
+
 def observation_document(
     response: Any,
     *,
@@ -220,6 +284,9 @@ def observation_document(
     }.get(raw_review)
     if review_decision is None:
         raise ObserverError(f"pullRequest.reviewDecision is unsupported: {raw_review!r}")
+    policy_proven = provider_review_not_required(pr, provider_base)
+    if policy_proven:
+        review_decision = "not_required"
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -249,6 +316,10 @@ def observation_document(
             "base_ref": provider_base,
             "draft": draft,
             "review_decision": review_decision,
+            **({"review_policy": {
+                "base_ref": pr["baseRef"],
+                "merge_state_status": pr["mergeStateStatus"],
+            }} if policy_proven else {}),
             "mergeability": mergeability,
             "checks": checks,
         },
@@ -439,6 +510,99 @@ def self_test() -> None:
     )
     assert absent_review_result["verdict"] == "pending"
     assert absent_review_result["reasons"][0]["code"] == "review_pending"
+
+    # A null decision alone is not proof; complete provider policy can be.
+    policy_fixture = json.loads(json.dumps(absent_review_fixture))
+    policy_pr = policy_fixture["data"]["repository"]["pullRequest"]
+    policy_pr["mergeStateStatus"] = "CLEAN"
+    policy_pr["baseRef"] = {
+        "name": "main",
+        "branchProtectionRule": None,
+        "rules": {
+            "nodes": [{"type": "PULL_REQUEST", "parameters": {
+                "__typename": "PullRequestParameters",
+                "requiredApprovingReviewCount": 0,
+                "requireCodeOwnerReview": False,
+                "requireLastPushApproval": False,
+                "requiredReviewers": [],
+            }}],
+            "pageInfo": {"hasNextPage": False},
+        },
+    }
+    policy_document = observation_document(policy_fixture, **{**common, "required_review": False})
+    assert evaluate(policy_document, evaluated_at=common["observed_at"])["verdict"] == "ready", "complete zero-review provider policy remained blocked"
+    assert policy_document["observation"]["review_policy"]["base_ref"] == policy_pr["baseRef"]
+    assert evaluate(observation_document(policy_fixture, **common), evaluated_at=common["observed_at"])["verdict"] == "pending"
+    for decision, expected in (("REVIEW_REQUIRED", "pending"), ("CHANGES_REQUESTED", "blocked"), ("APPROVED", "ready")):
+        candidate = json.loads(json.dumps(policy_fixture))
+        candidate["data"]["repository"]["pullRequest"]["reviewDecision"] = decision
+        result = evaluate(observation_document(candidate, **{**common, "required_review": False}), evaluated_at=common["observed_at"])
+        assert result["verdict"] == expected
+
+    # None means a deleted field in these malformed/incomplete provider fixtures.
+    policy_drift = [
+        (("reviewDecision",), "UNKNOWN"),
+        (("reviewDecision",), None),
+        (("mergeStateStatus",), "BLOCKED"),
+        (("mergeStateStatus",), "UNSTABLE"),
+        (("mergeStateStatus",), None),
+        (("baseRef", "name"), "other"),
+        (("baseRef", "branchProtectionRule"), None),
+        (("baseRef", "branchProtectionRule"), {}),
+        (("baseRef", "rules"), None),
+        (("baseRef", "rules", "pageInfo", "hasNextPage"), True),
+        (("baseRef", "rules", "pageInfo", "hasNextPage"), None),
+        (("baseRef", "rules", "nodes", 0, "type"), "FUTURE_REVIEW_RULE"),
+        (("baseRef", "rules", "nodes", 0, "parameters"), {}),
+    ]
+    parameter_path = ("baseRef", "rules", "nodes", 0, "parameters")
+    for field, bad in (
+        ("requiredApprovingReviewCount", 1),
+        ("requiredApprovingReviewCount", False),
+        ("requiredApprovingReviewCount", "0"),
+        ("requireCodeOwnerReview", True),
+        ("requireLastPushApproval", True),
+        ("requiredReviewers", [{"minimumApprovals": 1}]),
+    ):
+        policy_drift.extend(((parameter_path + (field,), bad), (parameter_path + (field,), None)))
+    for path, value in policy_drift:
+        candidate = json.loads(json.dumps(policy_fixture))
+        target = candidate["data"]["repository"]["pullRequest"]
+        for part in path[:-1]:
+            target = target[part]
+        if value is None:
+            del target[path[-1]]
+        else:
+            target[path[-1]] = value
+        try:
+            result = evaluate(observation_document(candidate, **{**common, "required_review": False}), evaluated_at=common["observed_at"])
+        except ObserverError:
+            continue
+        assert result["verdict"] != "ready", f"policy drift accepted: {path}={value!r}"
+
+    classic_clear = {
+        "requiresApprovingReviews": False, "requiredApprovingReviewCount": 0,
+        "requiresCodeOwnerReviews": False, "requireLastPushApproval": False,
+    }
+    policy_pr["baseRef"]["branchProtectionRule"] = classic_clear
+    assert provider_review_not_required(policy_pr, "main")
+    for field in classic_clear:
+        for bad in (True, None):
+            policy_pr["baseRef"]["branchProtectionRule"] = {**classic_clear, field: bad}
+            assert not provider_review_not_required(policy_pr, "main"), field
+    policy_pr["baseRef"]["branchProtectionRule"] = None
+    stricter = json.loads(json.dumps(policy_pr["baseRef"]["rules"]["nodes"][0]))
+    stricter["parameters"]["requiredApprovingReviewCount"] = 1
+    policy_pr["baseRef"]["rules"]["nodes"].append(stricter)
+    assert not provider_review_not_required(policy_pr, "main")
+
+    for binding in ({"repository": "other/project"}, {"base_ref": "other"}, {"head_sha": "b" * 40}):
+        result = evaluate(
+            {**policy_document, "binding": {**policy_document["binding"], **binding}},
+            evaluated_at=common["observed_at"],
+        )
+        assert result["verdict"] != "ready"
+    assert evaluate(policy_document, evaluated_at="2026-08-29T12:16:00Z")["verdict"] != "ready"
 
     paged = fixture()
     paged["data"]["repository"]["pullRequest"]["reviewThreads"]["pageInfo"]["hasNextPage"] = True

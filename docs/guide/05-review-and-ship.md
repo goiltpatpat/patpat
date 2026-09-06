@@ -49,6 +49,8 @@ python3 skills/patpat-ship/scripts/github_observe.py \
 
 Observation schema v4 binds the expected base branch and preserves the no-required-check field for compatibility, but that field does not grant readiness without provider policy evidence. The watcher evaluates freshness against its own UTC clock. Set a bounded `max_observation_age_seconds`; expired observations or timestamps beyond the bounded clock skew cannot become merge-ready evidence. Older observations fail closed and must be recollected; do not fill new fields from guesses.
 
+A null GitHub review decision remains review-required unless the same response proves no approval requirement through the exact base ref's classic protection and complete [active repository/organization rules](https://docs.github.com/en/graphql/reference/git#ref), with `mergeStateStatus=CLEAN`. The observer retains that policy in `observation.review_policy`; it is provider-derived observation data, not a signed attestation. Approval counts, code-owner or last-push approval, and required reviewer lists prevent the exemption. Uninterpreted rule types remain conservative; the exemption currently recognizes pull-request, required-status-check, deletion, and non-fast-forward rules only. Explicit provider review restrictions and `--require-review` still win. This does not replace Patpat's independent local review or grant merge authority.
+
 ## Keep merge authority separate
 
 Opening a pull request is the default delivery boundary. `Finish`, `keep going`, `overnight`, or `babysit` do not authorize merge. Only explicit `land` or `merge` language permits Patpat to merge a green reviewed pull request. Production deployment and package publication remain separate approval gates.

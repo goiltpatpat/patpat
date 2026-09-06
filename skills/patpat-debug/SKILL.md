@@ -19,11 +19,11 @@ Change one causal variable at a time. Preserve only material failed hypotheses t
 
 When the defect is a mismatch against a reference image or migrated UI, apply the [visual equivalence playbook](../patpat-loop/playbooks/visual-equivalence.md) after reproducing the defect. Preserve the pre-edit reference and comparison harness.
 
-For clear, bounded, reversible local work without delivery intent or high-risk boundaries, the closure below requires verify only; skip independent review. Otherwise apply the operating protocol's review requirements before completion.
-
 ## Proof closure
 
-Close repository mutations through:
+Define the five-field proof contract before any mutation. Close mutating work with:
 
-- [`patpat-verify`](../patpat-verify/SKILL.md)
-- [`patpat-review`](../patpat-review/SKILL.md)
+- Always: [`patpat-verify`](../patpat-verify/SKILL.md), using authoritative evidence.
+- When required: [`patpat-review`](../patpat-review/SKILL.md) for delivery intent, auth/security/billing/secrets, architecture or cross-cutting scope, durable-run completion, land/merge, or another operating-protocol review gate.
+
+For clear, bounded, reversible local work with none of those review requirements, proceed from verification to REPORT without independent review.
