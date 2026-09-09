@@ -11,6 +11,8 @@ Translate every material user requirement, including preservation and safety con
 - Observe the result and material side effects directly.
 - Record the action, result, and limitation.
 
+For tests and evaluators, call the subject through the interface its users or the authoritative verifier uses and assert a literal observed result or side effect. A check that would still pass if the imported implementation returned `undefined` or `None`, or that only proves a function was called, a constant was copied, or a fixture agrees with itself, is not behavioral proof. Replace it with a concrete input and expected output, or remove it when no observable contract exists.
+
 Classify the oracle as repository, runtime, independent reference, or lockstep. Claims of runtime equivalence require an independent reference or lockstep comparison; a build, local implementation, or same-context reviewer cannot prove equivalence.
 
 Bind durable evidence to the exact revision or snapshot it checked, the relevant inputs and environment, and the oracle used. A material change to any binding makes the evidence stale; recollect it instead of carrying a green result forward.
