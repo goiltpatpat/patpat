@@ -20,11 +20,13 @@ Read [proof over proxy](../patpat-loop/principles/proof-over-proxy.md) and [pres
 7. Inspect the final diff and version-control state for unrelated changes.
 8. Record the command or action, observed result, cleanup, and limitation for each material claim; do not mark the whole request verified with uncovered outcomes.
 
+For every test or evaluator used as evidence, apply the behavioral check from [proof over proxy](../patpat-loop/principles/proof-over-proxy.md): a mock-call assertion, copied constant, self-referential expected value, or fixture-only agreement cannot prove user-observed behavior. Replace it with a concrete input and literal expected output or side effect, or classify the claim as static instead.
+
 ## Claim-adaptive verification and proxy rejection
 
 Match verification depth to the claim and risk:
 
-- **Behavioral claims**: Vary material inputs, relevant error branches, or state transitions when safe and practical. Static contract checks may support the result but do not alone prove runtime behavior.
+- **Behavioral claims**: Vary material inputs, relevant error branches, or state transitions when safe and practical. Call the subject through the authoritative interface and assert the literal observed result or material effect. A mock interaction, call count, truthiness check, copied constant, or clean compilation does not prove the behavior by itself.
 - **Static claims**: Use deterministic structure, schema, type, or content checks when that is the authoritative surface. Do not manufacture runtime theater for a non-runtime claim.
 - **Proxy evidence**: Fixtures and mocks may isolate a contract, but they do not replace the real system when the claim concerns that system. Reject narrative summaries, hardcoded fixture answers, and clean compilation as sole behavioral proof.
 - **Fresh binding**: Bind evidence to the exact candidate revision or a reproducible working-tree snapshot, plus material inputs, environment, and oracle. Require the committed head for commit-, push-, PR-, or delivery-bound claims. Reject stale, cached, or transferred logs.
