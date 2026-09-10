@@ -12,6 +12,13 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import dry_run_loop  # noqa: E402
 
 
+def configure_output() -> None:
+    """Keep contract-eval output runnable on narrow Windows code pages."""
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if reconfigure is not None:
+        reconfigure(encoding="utf-8", errors="replace")
+
+
 EARNED = ROOT / "skills" / "patpat-loop" / "references" / "earned-representation.md"
 HOW_REPORT = ROOT / "skills" / "patpat-inspect" / "references" / "how-report.md"
 INSPECT_SKILL = ROOT / "skills" / "patpat-inspect" / "SKILL.md"
@@ -177,6 +184,7 @@ def run_self_test() -> None:
 
 
 def main() -> int:
+    configure_output()
     if "--self-test" in sys.argv or not sys.argv[1:]:
         run_self_test()
         return 0
