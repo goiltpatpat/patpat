@@ -11,6 +11,8 @@ Read [repository truth](../patpat-loop/principles/repository-truth.md), [smalles
 
 Ground the design in current repository evidence. Name the contract, its callers, the changed behavior, migration impact, compatibility risk, rollback path, and proof contract.
 
+For a material architecture decision or a change that crosses a meaningful boundary, the architecture output must include a compact caller usage sketch, the core data or type shape, boundary-relevant signatures, failure modes, rejected alternatives, and the proof that will show implementation still preserves the chosen shape. If implementation needs an unplanned parameter, state escape hatch, or compatibility path, stop and revisit the sketch before adding a workaround. Keep smaller local changes on the bounded-change path.
+
 Prefer a design that reduces degrees of freedom and reuses repository structure. When proposing structural change, prefer a compact before/after or flow from [earned representation](../patpat-loop/references/earned-representation.md). Seek independent review before implementing auth, billing, permissions, destructive migrations, production infrastructure, or public contract changes. Stop for explicit approval when required.
 
 Keep architecture work read-only by default. Do not edit implementation files. When the user also requested implementation, finish the design gate and hand the authorized unit to `patpat-change` under `patpat-loop` instead of implementing inside this workflow.
