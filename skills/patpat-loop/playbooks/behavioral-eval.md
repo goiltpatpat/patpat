@@ -11,6 +11,8 @@ Read [proof over proxy](../principles/proof-over-proxy.md) and [earned paralleli
 7. Record verifier or environment limitations separately from skill defects.
 8. Promote, revise, or reject the change based on observed behavior.
 
+The frozen rubric must name the oracle for each behavioral criterion: returned value, changed state, emitted effect, or bounded invariant. Use a literal expected result for deterministic output, the material effect for void or side-effect-only work, an awaited result for async work, and an independently derived invariant for nondeterministic work. A behavioral criterion that cannot name an observable oracle is invalid and the trial is `INCONCLUSIVE`; classify evidence as static only when the requirement itself is static from the outset.
+
 Live-agent receipts must record host, Patpat revision, the rubric frozen before execution, prompt digests, event-stream or transcript digests and paths, before/after artifacts and commands (not self-report), cleanup, and verdict. Missing raw evidence is `INCONCLUSIVE`; a receipt from another revision or host is stale.
 
 Judgment failure classes are instruction-contract checks, not live-agent behavioral proof. Rubric examples: unnecessary questions, unnecessary planning, unnecessary artifacts, unnecessary fan-out, unnecessary abstraction, over-rigor on simple work, under-escalation on risky work, proxy proof, symptom patches, ignored architecture friction, context-window waste, and crossed authority. Include instruction-contract examples for unnecessary ask versus inspect, over-plan, over-fan-out, over-rigor on trivial work, under-rigor on auth, proxy versus authoritative surface, and local-only versus delivery.

@@ -20,7 +20,7 @@ Read [proof over proxy](../patpat-loop/principles/proof-over-proxy.md) and [pres
 7. Inspect the final diff and version-control state for unrelated changes.
 8. Record the command or action, observed result, cleanup, and limitation for each material claim; do not mark the whole request verified with uncovered outcomes.
 
-For every test or evaluator used as evidence, apply the behavioral check from [proof over proxy](../patpat-loop/principles/proof-over-proxy.md): a mock-call assertion, copied constant, self-referential expected value, or fixture-only agreement cannot prove user-observed behavior. Replace it with a concrete input and literal expected output or side effect, or classify the claim as static instead.
+For every test or evaluator used as evidence, apply the behavioral oracle from [proof over proxy](../patpat-loop/principles/proof-over-proxy.md). A mock-call assertion, copied constant, self-referential expected value, or fixture-only agreement cannot prove user-observed behavior; use a concrete input and observed output/effect. If a behavioral claim has no observable oracle, report `INCONCLUSIVE`; use static evidence only for requirements that are static from the outset.
 
 ## Claim-adaptive verification and proxy rejection
 
