@@ -31,6 +31,21 @@ PROTOCOL = ROOT / "skills" / "patpat-loop" / "references" / "operating-protocol.
 CHANGE_SKILL = ROOT / "skills" / "patpat-change" / "SKILL.md"
 DEBUG_SKILL = ROOT / "skills" / "patpat-debug" / "SKILL.md"
 
+ARCHITECT_SKILL_REQUIREMENTS = (
+    "Apply the [architecture change playbook]",
+    "Keep smaller local changes on the bounded-change path.",
+)
+ARCHITECTURE_CHANGE_REQUIREMENTS = (
+    "Redesign as if the requirement had been present from the start",
+    "smallest viable bolt-on",
+    "For a material architecture decision or a change that crosses a meaningful boundary",
+    "compact design sketch from caller usage through that boundary",
+    "Include the core data or type shape, boundary signatures, failure modes, rejected alternatives, and the proof that will preserve the chosen shape",
+    "Keep smaller local changes on the bounded-change path.",
+    "state rejected alternatives with evidence",
+    "return to the design step before adding a workaround",
+)
+
 
 def _text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
@@ -94,6 +109,78 @@ def assert_change_debug_not_mandated() -> None:
         ):
             if banned in text:
                 raise AssertionError(f"patpat-{label} must not mandate diagrams ({banned!r})")
+
+
+def assert_architecture_contract(
+    architect: str | None = None,
+    architecture_change: str | None = None,
+) -> None:
+    architect_text = (architect if architect is not None else _text(ARCHITECT_SKILL)).lower()
+    change_text = (
+        architecture_change if architecture_change is not None else _text(ARCHITECTURE_CHANGE)
+    ).lower()
+    for requirement in ARCHITECT_SKILL_REQUIREMENTS:
+        if requirement.lower() not in architect_text:
+            raise AssertionError(f"architect routing contract missing: {requirement}")
+    for requirement in ARCHITECTURE_CHANGE_REQUIREMENTS:
+        if requirement.lower() not in change_text:
+            raise AssertionError(f"architecture change contract missing: {requirement}")
+
+
+def assert_architecture_contract_rejects_drift() -> None:
+    architect = _text(ARCHITECT_SKILL)
+    change = _text(ARCHITECTURE_CHANGE)
+    mutations = (
+        (
+            "architect bounded-local path",
+            architect.replace("Keep smaller local changes on the bounded-change path.", "", 1),
+            change,
+        ),
+        (
+            "playbook conditional scope",
+            architect,
+            change.replace(
+                "For a material architecture decision or a change that crosses a meaningful boundary",
+                "For all changes",
+                1,
+            ),
+        ),
+        (
+            "caller-to-boundary sketch fields",
+            architect,
+            change.replace(
+                "boundary signatures, failure modes, rejected alternatives",
+                "boundary signatures, rejected alternatives",
+                1,
+            ),
+        ),
+        (
+            "evidence-backed design choice",
+            architect,
+            change.replace("state rejected alternatives with evidence", "state rejected alternatives", 1),
+        ),
+        (
+            "return to design before workaround",
+            architect,
+            change.replace(
+                "return to the design step before adding a workaround",
+                "add a workaround",
+                1,
+            ),
+        ),
+        (
+            "playbook bounded-local path",
+            architect,
+            change.replace("Keep smaller local changes on the bounded-change path.", "", 1),
+        ),
+    )
+    for label, weakened_architect, weakened_change in mutations:
+        try:
+            assert_architecture_contract(weakened_architect, weakened_change)
+        except AssertionError:
+            pass
+        else:
+            raise AssertionError(f"architecture evaluator accepted drift: {label}")
 
 
 def assert_representation_matrix() -> None:
@@ -167,6 +254,8 @@ def run_self_test() -> None:
     assert_earned_reference()
     assert_surfaces_link()
     assert_change_debug_not_mandated()
+    assert_architecture_contract()
+    assert_architecture_contract_rejects_drift()
     assert_representation_matrix()
     print("Patpat representation eval self-test passed.")
     print()
