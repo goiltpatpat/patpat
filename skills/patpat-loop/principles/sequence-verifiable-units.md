@@ -6,4 +6,4 @@ Verify each unit before starting the next. A unit is an engineering boundary, no
 
 A verifiable unit is not a throwaway compatibility layer. Do not add a dual path just to make an intermediate step look complete. If the same transform will run more than once, build a rerunnable tool after the first proven manual unit and use that tool for the rest of the wave.
 
-In multi-phase, long-running, or autonomous execution, where remote authority exists and push is not prohibited, push after each verified unit once its proof passes. Pushing the verified branch snapshot preserves progress on the remote repository and protects the run against process loss, rate limits, or context compaction.
+A configured Git remote is a destination, not authority. Remote Git writes remain fail-closed: a remote existing grants no push authority by itself. In multi-phase, long-running, or autonomous execution, push after a verified unit once its proof passes only when existing delivery intent or continuation authority permits remote writes and repository or user policy does not prohibit them. Without that authority, checkpoint locally only.

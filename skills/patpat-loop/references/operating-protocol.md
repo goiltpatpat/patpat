@@ -63,7 +63,7 @@ Explicit `/patpat` or `$patpat` activation authorizes the Patpat loop, the 5-fie
 
 Default commit-and-PR requires delivery intent. Delivery intent is explicit commit, PR, or ship language (`open a PR`, `commit`, `ship it`, named ship route), overnight or continuation (`overnight`, `going to bed`, `don't stop`), or explicit land or merge. Prefer these existing signals. Do not expose named user-selectable modes.
 
-Without delivery intent, local reversible mutating work uses proof, focused verify, and REPORT; skip independent review; do not open a PR. Opt out with `don't commit`, `don't open a PR`, or `local only`.
+Without delivery intent, local reversible mutating work uses proof, focused verify, and REPORT; skip independent review; do not open a PR. Opt out with `don't commit`, `don't open a PR`, or `local only`. Remote capability is not remote authority; a configured remote or available credentials grant no push authority by themselves. Remote Git writes remain fail-closed and require delivery intent or continuation authority.
 
 With delivery intent, verify, independent review, and default delivery remain required. Auth, billing, secrets, architecture, or cross-cutting work always requires independent review even when delivery intent is absent.
 
