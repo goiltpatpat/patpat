@@ -252,6 +252,36 @@ def ship_plan(
     return "commit-and-pr"
 
 
+def unit_checkpoint_plan(
+    *,
+    unit_verified: bool,
+    patpat_activated: bool = True,
+    explicit_delivery: bool = False,
+    continuation: bool = False,
+    explicit_merge: bool = False,
+    opt_out: bool = False,
+    repo_allows_delivery: bool = True,
+    remote_configured: bool = True,
+) -> str:
+    """Evaluate remote vs local checkpoint authority for a verified unit.
+
+    Invariant: Remote capability (remote_configured=True) is not remote authority.
+    Remote Git writes remain fail-closed: pushing a verified unit snapshot requires
+    existing delivery intent or continuation authority, and is denied if opted out
+    (local only, don't commit, don't push) or prohibited by repository policy.
+    Without that authority, checkpoints remain strictly local.
+    """
+    if not unit_verified:
+        return "stop-missing-proof"
+    if opt_out or not repo_allows_delivery:
+        return "checkpoint-local-only"
+    # Remote capability alone grants no authority:
+    has_remote_write_authority = bool(explicit_delivery or continuation or explicit_merge)
+    if has_remote_write_authority:
+        return "push-verified-unit-snapshot"
+    return "checkpoint-local-only"
+
+
 def fan_out(*, kind: str, worktree_or_sandbox: bool, shared_worktree: bool, read_only: bool) -> str:
     if kind not in {"arena", "swarm", "autopilot"}:
         return "serial"
@@ -653,6 +683,22 @@ def run_self_test() -> None:
     assert explicit_merge_intent("ship it") is False
     assert continuation_intent("work overnight") is True
     assert continuation_intent("merge this") is False
+
+    # Remote capability is not remote authority:
+    # 1. Activation alone or remote configured alone -> checkpoint local only
+    assert unit_checkpoint_plan(unit_verified=True, patpat_activated=True, remote_configured=True) == "checkpoint-local-only"
+    # 2. Local-only prohibition -> checkpoint local only
+    assert unit_checkpoint_plan(unit_verified=True, explicit_delivery=True, opt_out=True) == "checkpoint-local-only"
+    assert unit_checkpoint_plan(unit_verified=True, continuation=True, opt_out=True) == "checkpoint-local-only"
+    assert unit_checkpoint_plan(unit_verified=True, explicit_delivery=True, repo_allows_delivery=False) == "checkpoint-local-only"
+    # 3. Explicit delivery -> qualified progress push permitted
+    assert unit_checkpoint_plan(unit_verified=True, explicit_delivery=True) == "push-verified-unit-snapshot"
+    # 4. Continuation authority -> qualified progress push permitted
+    assert unit_checkpoint_plan(unit_verified=True, continuation=True) == "push-verified-unit-snapshot"
+    # 5. Remote configured alone without delivery/continuation authority -> checkpoint local only
+    assert unit_checkpoint_plan(unit_verified=True, remote_configured=True, explicit_delivery=False, continuation=False) == "checkpoint-local-only"
+    # 6. Unverified unit -> stop missing proof
+    assert unit_checkpoint_plan(unit_verified=False, explicit_delivery=True) == "stop-missing-proof"
 
     assert fan_out(kind="arena", worktree_or_sandbox=True, shared_worktree=False, read_only=False) == "serial-fallback"
     assert fan_out(kind="arena", worktree_or_sandbox=False, shared_worktree=True, read_only=False) == "serial-fallback"
