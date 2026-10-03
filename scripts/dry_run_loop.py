@@ -65,6 +65,10 @@ def route(prompt: str) -> str:
         return "pr-babysit"
     if "worktree" in text and ("clean" in text or "prune" in text):
         return "worktree-cleanup"
+    if "interrogate" in text or "adversarial review" in text:
+        return "interrogate"
+    if "unslop" in text or "cut ai tells" in text:
+        return "unslop"
     if "timeout" in text or "bug" in text or "repro" in text or "fix" in text:
         return "debug"
     if explicit_merge_intent(prompt) or "open the pr" in text:
@@ -279,6 +283,103 @@ def issue_loop(
     if requested_write in allowed_writes and fresh_authority:
         return "coordinator-write-authorized"
     return "triage-readonly-write-denied"
+
+
+def verification_verdict(
+    *,
+    candidate_hash: str,
+    verified_hash: str,
+    behavioral_oracle_passed: bool,
+    proxy_passed: bool = False,
+    has_observable_oracle: bool = True,
+) -> str:
+    """Evaluate verification claim freshness and authoritative evidence."""
+    if not candidate_hash or candidate_hash != verified_hash:
+        return "stale-verification"
+    if not has_observable_oracle:
+        return "inconclusive"
+    if not behavioral_oracle_passed:
+        if proxy_passed:
+            return "proxy-theater-rejected"
+        return "not-verified"
+    return "verified"
+
+
+def design_boundary_decision(
+    *,
+    approved_signatures: set[str],
+    candidate_signatures: set[str],
+    unapproved_workaround: bool = False,
+    hidden_mutable_state: bool = False,
+) -> str:
+    """Enforce return-to-design when implementation drifts outside approved boundaries."""
+    if unapproved_workaround or hidden_mutable_state:
+        return "return-to-design"
+    if not candidate_signatures.issubset(approved_signatures):
+        return "return-to-design"
+    return "proceed-to-implementation"
+
+
+def interrogate_audit(
+    *,
+    diff: str = "",
+    security_defect: str | None = None,
+    concurrency_defect: str | None = None,
+    epistemic_defect: str | None = None,
+    anti_slop_defect: str | None = None,
+) -> dict[str, object]:
+    """Simulate adversarial review across skeptical angles."""
+    findings = []
+    if security_defect:
+        findings.append({"angle": "security", "severity": "high", "detail": security_defect})
+    if concurrency_defect:
+        findings.append({"angle": "concurrency", "severity": "high", "detail": concurrency_defect})
+    if epistemic_defect:
+        findings.append({"angle": "epistemic", "severity": "blocker", "detail": epistemic_defect})
+    if anti_slop_defect:
+        findings.append({"angle": "anti-slop", "severity": "medium", "detail": anti_slop_defect})
+
+    verdict = "no-findings" if not findings else "findings-surfaced"
+    return {
+        "verdict": verdict,
+        "findings": findings,
+        "can_land": verdict == "no-findings",
+    }
+
+
+BANNED_AI_STEMS = (
+    ("additionally", r"\badditionally\b"),
+    ("crucial", r"\bcrucial\b"),
+    ("pivotal", r"\bpivotal\b"),
+    ("delve", r"\bdelv\w*\b"),
+    ("enhance", r"\benhanc\w*\b"),
+    ("foster", r"\bfoster\w*\b"),
+    ("intricate", r"\bintricate\b"),
+    ("landscape", r"\blandscape\b"),
+    ("tapestry", r"\btapestry\b"),
+    ("testament", r"\btestament\b"),
+    ("underscore", r"\bunderscore\b"),
+    ("vibrant", r"\bvibrant\b"),
+)
+
+
+def unslop_lint(text: str) -> dict[str, object]:
+    """Detect AI writing patterns, buzzwords, and narrative comments."""
+    violations: list[str] = []
+    lower = text.lower()
+    for name, pattern in BANNED_AI_STEMS:
+        if re.search(pattern, lower):
+            violations.append(f"banned-word:{name}")
+    if re.search(r"\b(highlighting|ensuring|reflecting|showcasing|fostering)\b", lower):
+        violations.append("superficial-participial-clause")
+    if "—" in text:
+        violations.append("em-dash-overuse")
+    if re.search(r"#.*(?:crucial|delv|highlight|robust implementation)", text, re.IGNORECASE):
+        violations.append("narrative-code-comment")
+    return {
+        "clean": len(violations) == 0,
+        "violations": violations,
+    }
 
 
 def explicit_merge_intent(prompt: str) -> bool:
@@ -499,7 +600,34 @@ def run_self_test() -> None:
     clear_local = start_plan(clear_bounded_reversible_local=True, mutating=True)
     assert clear_local["kind"] == "lightweight-start"
     assert representation_plan(kind="trivial_mutation")["form"] == "prose"
-    assert representation_plan(kind="trivial_mutation")["adds_planning_ceremony"] is False
+    assert route("please interrogate this diff") == "interrogate"
+    assert route("unslop this report") == "unslop"
+
+    # Verification freshness and theater
+    assert verification_verdict(candidate_hash="abc", verified_hash="abc", behavioral_oracle_passed=True) == "verified"
+    assert verification_verdict(candidate_hash="abc", verified_hash="xyz", behavioral_oracle_passed=True) == "stale-verification"
+    assert verification_verdict(candidate_hash="abc", verified_hash="abc", behavioral_oracle_passed=False, proxy_passed=True) == "proxy-theater-rejected"
+    assert verification_verdict(candidate_hash="abc", verified_hash="abc", behavioral_oracle_passed=False, proxy_passed=False) == "not-verified"
+    assert verification_verdict(candidate_hash="abc", verified_hash="abc", behavioral_oracle_passed=False, has_observable_oracle=False) == "inconclusive"
+
+    # Architecture boundary enforcement
+    assert design_boundary_decision(approved_signatures={"foo()"}, candidate_signatures={"foo()"}) == "proceed-to-implementation"
+    assert design_boundary_decision(approved_signatures={"foo()"}, candidate_signatures={"foo()", "unapproved()"}) == "return-to-design"
+    assert design_boundary_decision(approved_signatures={"foo()"}, candidate_signatures={"foo()"}, unapproved_workaround=True) == "return-to-design"
+
+    # Interrogation adversarial review
+    clean_audit = interrogate_audit()
+    assert clean_audit["verdict"] == "no-findings" and clean_audit["can_land"] is True
+    flawed_audit = interrogate_audit(security_defect="unmasked AWS key")
+    assert flawed_audit["verdict"] == "findings-surfaced" and flawed_audit["can_land"] is False
+
+    # Unslop detection
+    clean_text = unslop_lint("def compute(x: int) -> int: return x * 2")
+    assert clean_text["clean"] is True
+    sloppy_text = unslop_lint("# Crucial calculation delving into metrics — ensuring accuracy")
+    assert sloppy_text["clean"] is False
+    assert "em-dash-overuse" in sloppy_text["violations"]
+    assert "superficial-participial-clause" in sloppy_text["violations"]
 
     print("Patpat loop dry-run self-test passed.")
 
