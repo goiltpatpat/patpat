@@ -35,6 +35,7 @@ Read the linked file when the trigger fires. Cite a principle only when it chang
 - [Boundary discipline](principles/boundary-discipline.md) at CLI, config, network, and auth edges. Guard the boundary. Trust internal types.
 - [Preserve safety](principles/preserve-safety.md) on any auth, permission, billing, secret, or destructive path. Simplicity must not weaken a gate.
 - [Proof over proxy](principles/proof-over-proxy.md) before claiming done. Observe the authoritative surface, including the real subject path for tests and evaluators.
+- [Explain the number](principles/explain-the-number.md) before trusting a metric. Name the limiter and rule out proxy artifacts.
 - [Fix root causes](principles/fix-root-causes.md) on defects. Reproduce when safe and practical; otherwise trace without triggering harm. Do not silence a crash with a nil check. After two fixes sharing one premise fail the same gate, attack the premise: write it, run a small census, and remove the recurring asymmetry before adding another fix.
 - [Sequence verifiable units](principles/sequence-verifiable-units.md) on multi-step work. A verifiable unit is not a throwaway compatibility layer. Build a rerunnable tool after the first proven manual unit.
 - [Idempotent effects](principles/idempotent-effects.md) on retries, installs, and lifecycle steps.

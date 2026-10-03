@@ -9,7 +9,7 @@ For a bounded read-only question, use this skill and its relevant references. Re
 
 Read [repository truth](../patpat-loop/principles/repository-truth.md) and apply the [investigation playbook](../patpat-loop/playbooks/investigation.md). Report with the [how-report contract](references/how-report.md). When explanation clarity needs structure that prose hides, choose the smallest form from [earned representation](../patpat-loop/references/earned-representation.md).
 
-This skill explains how repository behavior works, where it lives, who owns it, which layer it occupies, and any critique that follows that explanation. Questions about why the code reached its current shape go to [rationale forensics](../patpat-loop/playbooks/rationale-forensics.md).
+This skill explains how repository behavior works, where it lives, who owns it, which layer it occupies, and any critique that follows that explanation. Questions about why the code reached its current shape go to [rationale forensics](../patpat-loop/playbooks/rationale-forensics.md). When the request asks to recall or re-anchor working context across sessions ("where did I leave off", "catch me up", "recall recent work"), apply [session takeover](../patpat-loop/playbooks/session-takeover.md) and deliver its four-part capsule.
 
 For a live resource symptom, apply [runtime forensics](../patpat-loop/playbooks/runtime-forensics.md) and capture passively. For a supplied trace, profile, spindump, or heap snapshot, apply [trace forensics](../patpat-loop/playbooks/trace-forensics.md). Do not hot-patch, inject, or alter a live process inside this read-only workflow.
 
