@@ -9,6 +9,22 @@ For a bounded local proof, use this skill and its relevant references. Read the 
 
 Read [proof over proxy](../patpat-loop/principles/proof-over-proxy.md) and [preserve safety](../patpat-loop/principles/preserve-safety.md).
 
+## The Iron Law of Verification
+
+```text
+NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE
+```
+
+If the verification command was not executed in the current turn, you are strictly forbidden from declaring that tests pass, the issue is fixed, or the change is verified.
+
+### The 5-Step Gate Function
+
+1. **IDENTIFY**: Specify the authoritative command or check that proves the claim.
+2. **RUN**: Execute the full command freshly on the authoritative surface.
+3. **READ**: Inspect raw stdout, stderr, and exit code directly (sanitizing tokens and secrets via available sanitizers or inline credential masking).
+4. **VERIFY**: Confirm the observed output strictly satisfies the expected criteria.
+5. **ONLY THEN**: Make the claim and attach the raw evidence.
+
 ## Build the proof
 
 1. Reconcile the requested outcomes with the proof contract using proof over proxy; name missing requirements before running checks.

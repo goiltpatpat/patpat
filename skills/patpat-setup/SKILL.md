@@ -1,6 +1,7 @@
 ---
 name: patpat-setup
 description: Inspect the active agent host and install or validate Patpat through its supported native plugin manager or an explicit Agent Skills directory. Use for Patpat installation, discovery, update, removal, or host compatibility questions.
+disable-model-invocation: true
 ---
 
 # Patpat Setup

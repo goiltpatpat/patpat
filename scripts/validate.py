@@ -22,7 +22,7 @@ SEMVER_PATTERN = re.compile(
     r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
 )
 LINK_PATTERN = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
-ALLOWED_FRONTMATTER = {"name", "description"}
+ALLOWED_FRONTMATTER = {"name", "description", "disable-model-invocation"}
 MODE_SKILLS = {"patpat", "patpat-loop"}
 PUBLISHED_SOURCE = "https://github.com/goiltpatpat/patpat"
 ALLOWED_SKILL_POLICIES = {"mutating", "read-only", "support", "router"}
@@ -37,6 +37,7 @@ SKILL_POLICIES = {
     "patpat-eval": "support",
     "patpat-impact": "read-only",
     "patpat-inspect": "read-only",
+    "patpat-interrogate": "read-only",
     "patpat-learn": "mutating",
     "patpat-loop": "router",
     "patpat-perf": "mutating",
@@ -47,6 +48,7 @@ SKILL_POLICIES = {
     "patpat-ship": "mutating",
     "patpat-skill": "mutating",
     "patpat-swarm": "mutating",
+    "patpat-unslop": "read-only",
     "patpat-verifier": "mutating",
     "patpat-verify": "read-only",
 }

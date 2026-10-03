@@ -1,6 +1,7 @@
 ---
 name: patpat-arena
 description: Run isolated competing attempts at the same brief, pick a base, graft the strongest parts, and verify the synthesis. Use for /patpat-arena, competing designs, or when one attempt would lock the wrong shape.
+disable-model-invocation: true
 ---
 
 # Patpat Arena

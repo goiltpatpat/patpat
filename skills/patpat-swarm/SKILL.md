@@ -1,6 +1,7 @@
 ---
 name: patpat-swarm
 description: Fan out isolated workers across slices or races and return one aggregated report. Use for /patpat-swarm, coverage matrices, parallel checks, or races with a declared selection rule.
+disable-model-invocation: true
 ---
 
 # Patpat Swarm

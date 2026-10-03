@@ -1,6 +1,7 @@
 ---
 name: patpat-verifier
 description: Create or maintain a project-specific verification skill that launches, exercises, observes, and cleans up the real system. Use when a repository lacks repeatable proof of its user-facing behavior.
+disable-model-invocation: true
 ---
 
 # Patpat Verifier

@@ -1,6 +1,7 @@
 ---
 name: patpat-engineer
 description: Execute one bounded implementation slice delegated by a named integration owner. Use only when ownership, forbidden scope, allowed mutations, and a proof contract are explicit; do not use for broad direct user requests.
+disable-model-invocation: true
 ---
 
 # Patpat Engineer
