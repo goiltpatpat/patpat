@@ -1,6 +1,6 @@
 # Performance Playbook
 
-Read [proof over proxy](../principles/proof-over-proxy.md), [fix root causes](../principles/fix-root-causes.md), and [smallest safe change](../principles/smallest-safe-change.md).
+Read [proof over proxy](../principles/proof-over-proxy.md), [explain the number](../principles/explain-the-number.md), [fix root causes](../principles/fix-root-causes.md), and [smallest safe change](../principles/smallest-safe-change.md). Apply the [benchmark checklist](../references/benchmark-checklist.md).
 
 1. Define the user-visible metric, workload, environment, units, and acceptable target.
 2. Capture a repeatable baseline and preserve the raw artifact.
