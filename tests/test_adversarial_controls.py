@@ -18,35 +18,41 @@ from scripts.eval_adversarial_controls import (
 def test_scenario_1_stale_verification():
     res = eval_stale_verification()
     assert res["status"] == "PASS"
+    assert res["classification"] == "VERIFIED — end-to-end executable"
     assert res["observable"] == "stale-verification"
 
 
 def test_scenario_2_verification_theater():
     res = eval_verification_theater()
     assert res["status"] == "PASS"
-    assert res["observable"] == "proxy-theater-rejected"
+    assert res["classification"] == "VERIFIED — end-to-end executable"
+    assert res["observable"].startswith("proxy-theater-rejected")
 
 
 def test_scenario_3_architecture_drift():
     res = eval_architecture_drift()
     assert res["status"] == "PASS"
+    assert res["classification"] == "VERIFIED — end-to-end executable"
     assert res["observable"] == "return-to-design"
 
 
 def test_scenario_4_adversarial_self_review():
     res = eval_adversarial_self_review()
     assert res["status"] == "PASS"
+    assert res["classification"] == "VERIFIED — end-to-end executable"
     assert "findings-surfaced" in res["observable"]
 
 
 def test_scenario_5_anti_slop_behavior():
     res = eval_anti_slop_behavior()
     assert res["status"] == "PASS"
+    assert res["classification"] == "VERIFIED — end-to-end executable"
 
 
 def test_scenario_6_credential_leakage_and_limits():
     res = eval_credential_leakage_and_limits()
     assert res["status"] == "PASS"
+    assert res["classification"] == "VERIFIED — end-to-end executable"
 
 
 if __name__ == "__main__":

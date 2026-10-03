@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import ast
+import hashlib
 import importlib.util
 import re
 import sys
@@ -285,6 +287,21 @@ def issue_loop(
     return "triage-readonly-write-denied"
 
 
+def compute_candidate_fingerprint(target_path: Path | str) -> str:
+    """Derive deterministic SHA-256 identity from real filesystem state."""
+    path = Path(target_path)
+    if path.is_file():
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    if path.is_dir():
+        hasher = hashlib.sha256()
+        for p in sorted(path.rglob("*")):
+            if p.is_file():
+                hasher.update(p.relative_to(path).as_posix().encode("utf-8"))
+                hasher.update(hashlib.sha256(p.read_bytes()).digest())
+        return hasher.hexdigest()
+    raise FileNotFoundError(f"Candidate path does not exist: {target_path}")
+
+
 def verification_verdict(
     *,
     candidate_hash: str,
@@ -305,6 +322,55 @@ def verification_verdict(
     return "verified"
 
 
+def verify_candidate_receipt(
+    *,
+    candidate_path: Path | str,
+    verified_receipt: dict[str, object],
+    behavioral_oracle_passed: bool,
+    proxy_passed: bool = False,
+    has_observable_oracle: bool = True,
+) -> str:
+    """Evaluate verification claim binding directly against candidate filesystem fingerprint."""
+    current_hash = compute_candidate_fingerprint(candidate_path)
+    verified_hash = str(verified_receipt.get("candidate_hash", ""))
+    return verification_verdict(
+        candidate_hash=current_hash,
+        verified_hash=verified_hash,
+        behavioral_oracle_passed=behavioral_oracle_passed,
+        proxy_passed=proxy_passed,
+        has_observable_oracle=has_observable_oracle,
+    )
+
+
+def extract_ast_boundary_shape(source_code: str) -> dict[str, object]:
+    """Derive contract signatures and architectural boundary properties from Python source AST."""
+    tree = ast.parse(source_code)
+    signatures: set[str] = set()
+    unapproved_workarounds = False
+    hidden_mutable_state = False
+
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            args = [arg.arg for arg in node.args.args]
+            signatures.add(f"{node.name}({', '.join(args)})")
+            name_lower = node.name.lower()
+            if any(k in name_lower for k in ("fallback", "compat", "workaround", "escape", "bypass")):
+                unapproved_workarounds = True
+            for a in node.args.args:
+                arg_lower = a.arg.lower()
+                if any(k in arg_lower for k in ("workaround", "escape", "bypass", "compat", "fallback")):
+                    unapproved_workarounds = True
+        elif isinstance(node, ast.Assign):
+            if isinstance(node.value, (ast.Dict, ast.List, ast.Set)):
+                hidden_mutable_state = True
+
+    return {
+        "signatures": signatures,
+        "unapproved_workaround": unapproved_workarounds,
+        "hidden_mutable_state": hidden_mutable_state,
+    }
+
+
 def design_boundary_decision(
     *,
     approved_signatures: set[str],
@@ -320,6 +386,72 @@ def design_boundary_decision(
     return "proceed-to-implementation"
 
 
+def design_boundary_from_source(
+    *,
+    approved_signatures: set[str],
+    candidate_source: str,
+) -> str:
+    """Evaluate architecture drift directly from candidate source AST without manual flags."""
+    shape = extract_ast_boundary_shape(candidate_source)
+    return design_boundary_decision(
+        approved_signatures=approved_signatures,
+        candidate_signatures=shape["signatures"],
+        unapproved_workaround=shape["unapproved_workaround"],
+        hidden_mutable_state=shape["hidden_mutable_state"],
+    )
+
+
+def discover_defects_from_diff(diff: str) -> list[dict[str, str]]:
+    """Inspect raw diff to discover concrete defects without pre-supplied metadata."""
+    findings: list[dict[str, str]] = []
+    added_lines = [
+        line[1:] for line in diff.splitlines()
+        if line.startswith("+") and not line.startswith("+++")
+    ]
+    for line in added_lines:
+        stripped = line.strip()
+        # 1. Security angle: credentials, PATs, secret keys
+        if re.search(r"ghp_[A-Za-z0-9_]{20,}", line):
+            findings.append({
+                "angle": "security",
+                "severity": "blocker",
+                "detail": "Discovered hardcoded GitHub personal access token in added diff line",
+            })
+        elif re.search(r"AKIA[0-9A-Z]{16}", line) or re.search(r"(?i)aws_secret_access_key\s*=", line):
+            findings.append({
+                "angle": "security",
+                "severity": "blocker",
+                "detail": "Discovered exposed AWS access key/credential in added diff line",
+            })
+        elif re.search(r"Bearer\s+[A-Za-z0-9_\-\.]{20,}", line):
+            findings.append({
+                "angle": "security",
+                "severity": "high",
+                "detail": "Discovered hardcoded Bearer authorization token in added diff line",
+            })
+
+        # 2. Epistemic angle: mock-only assertion substituted for authoritative verification
+        if (
+            re.search(r"\bassert\s+\w*mock\w*\.called\b", line)
+            or re.search(r"\.assert_called(?:_once)?\(\)", line)
+        ):
+            findings.append({
+                "angle": "epistemic",
+                "severity": "blocker",
+                "detail": "Discovered mock-only call assertion used as proxy for authoritative verification",
+            })
+
+        # 3. State & concurrency angle: un-synchronized global mutable state introduced
+        if re.search(r"\bglobal\s+\w+", line) or re.search(r"^[A-Z0-9_]+\s*:\s*(?:dict|list|set)\s*=", stripped) or re.search(r"^[A-Z0-9_]+\s*=\s*(?:\[\]|\{\}|set\(\))", stripped):
+            findings.append({
+                "angle": "state",
+                "severity": "high",
+                "detail": "Discovered un-synchronized global mutable state introduced in added lines",
+            })
+
+    return findings
+
+
 def interrogate_audit(
     *,
     diff: str = "",
@@ -328,8 +460,10 @@ def interrogate_audit(
     epistemic_defect: str | None = None,
     anti_slop_defect: str | None = None,
 ) -> dict[str, object]:
-    """Simulate adversarial review across skeptical angles."""
-    findings = []
+    """Simulate adversarial review across skeptical angles, discovering defects from diff."""
+    findings: list[dict[str, str]] = []
+    if diff:
+        findings.extend(discover_defects_from_diff(diff))
     if security_defect:
         findings.append({"angle": "security", "severity": "high", "detail": security_defect})
     if concurrency_defect:
@@ -615,11 +749,20 @@ def run_self_test() -> None:
     assert design_boundary_decision(approved_signatures={"foo()"}, candidate_signatures={"foo()", "unapproved()"}) == "return-to-design"
     assert design_boundary_decision(approved_signatures={"foo()"}, candidate_signatures={"foo()"}, unapproved_workaround=True) == "return-to-design"
 
-    # Interrogation adversarial review
+    # AST-derived architecture boundary
+    approved_src = "def process_event(event):\n    return event\n"
+    drifted_src = "def process_event(event, workaround_flag=True):\n    return event\n"
+    assert design_boundary_from_source(approved_signatures={"process_event(event)"}, candidate_source=approved_src) == "proceed-to-implementation"
+    assert design_boundary_from_source(approved_signatures={"process_event(event)"}, candidate_source=drifted_src) == "return-to-design"
+
+    # Interrogation adversarial review & diff discovery
     clean_audit = interrogate_audit()
     assert clean_audit["verdict"] == "no-findings" and clean_audit["can_land"] is True
     flawed_audit = interrogate_audit(security_defect="unmasked AWS key")
     assert flawed_audit["verdict"] == "findings-surfaced" and flawed_audit["can_land"] is False
+    diff_discovered = interrogate_audit(diff="--- a/x.py\n+++ b/x.py\n+ token = 'ghp_012345678901234567890123456789012345'")
+    assert diff_discovered["verdict"] == "findings-surfaced" and diff_discovered["can_land"] is False
+    assert any(f["angle"] == "security" for f in diff_discovered["findings"])
 
     # Unslop detection
     clean_text = unslop_lint("def compute(x: int) -> int: return x * 2")
