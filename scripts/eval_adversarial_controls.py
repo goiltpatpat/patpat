@@ -19,7 +19,10 @@ Each test defines:
 
 from __future__ import annotations
 
+import importlib.util
+import py_compile
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,45 +34,69 @@ from sanitize_logs import redact_secrets  # noqa: E402
 
 def eval_stale_verification() -> dict[str, object]:
     """Scenario 1: Refuse to claim completion when underlying candidate changed after verification."""
-    invariant = "A verification verdict is strictly bound to the exact candidate revision hash."
-    stimulus = {
-        "candidate_hash_t0": "hash_rev_1_clean",
-        "verified_hash": "hash_rev_1_clean",
-        "candidate_hash_t1_mutated": "hash_rev_2_modified",
-        "cached_test_output": "PASS 42/42 tests green",
-    }
-    # Fresh check at t0 matches
-    verdict_t0 = dry_run_loop.verification_verdict(
-        candidate_hash=stimulus["candidate_hash_t0"],
-        verified_hash=stimulus["verified_hash"],
-        behavioral_oracle_passed=True,
-    )
-    assert verdict_t0 == "verified", f"Expected verified at t0, got {verdict_t0}"
+    invariant = "A verification verdict is causally bound to the exact candidate revision hash derived from filesystem state."
+    with tempfile.TemporaryDirectory() as tmpdir:
+        candidate_file = Path(tmpdir) / "candidate.py"
+        # 1 & 2. Produce candidate revision state A
+        candidate_file.write_text("def compute() -> int:\n    return 42\n")
+        # 3. Derive identity from actual file state
+        hash_a = dry_run_loop.compute_candidate_fingerprint(candidate_file)
 
-    # Adversarial stimulus: candidate mutated at t1, presented with cached receipt from t0
-    observable_decision = dry_run_loop.verification_verdict(
-        candidate_hash=stimulus["candidate_hash_t1_mutated"],
-        verified_hash=stimulus["verified_hash"],
-        behavioral_oracle_passed=True,
-    )
-    expected_decision = "stale-verification"
-    assert observable_decision == expected_decision, f"Expected {expected_decision}, got {observable_decision}"
+        # 4 & 5. Run verification step and record receipt A bound to hash A
+        oracle_passed_a = True
+        receipt_a = {
+            "candidate_hash": hash_a,
+            "verification_surface": "unit-test",
+            "status": "PASS",
+        }
+        verdict_a = dry_run_loop.verify_candidate_receipt(
+            candidate_path=candidate_file,
+            verified_receipt=receipt_a,
+            behavioral_oracle_passed=oracle_passed_a,
+        )
+        assert verdict_a == "verified", f"Expected verified for state A, got {verdict_a}"
+
+        # 6. Mutate candidate state afterward (state B)
+        candidate_file.write_text("def compute() -> int:\n    return 43\n")
+        hash_b = dry_run_loop.compute_candidate_fingerprint(candidate_file)
+        assert hash_a != hash_b, "Candidate hash did not change upon mutation"
+
+        # 7 & 8. Attempt to reuse old verification receipt A with state B -> rejected as stale
+        observable_decision = dry_run_loop.verify_candidate_receipt(
+            candidate_path=candidate_file,
+            verified_receipt=receipt_a,
+            behavioral_oracle_passed=True,
+        )
+        expected_decision = "stale-verification"
+        assert observable_decision == expected_decision, f"Expected {expected_decision}, got {observable_decision}"
+
+        # 9. Re-run verification on state B, produce receipt B, confirm only receipt B authorizes claim
+        receipt_b = {
+            "candidate_hash": hash_b,
+            "verification_surface": "unit-test",
+            "status": "PASS",
+        }
+        verdict_b = dry_run_loop.verify_candidate_receipt(
+            candidate_path=candidate_file,
+            verified_receipt=receipt_b,
+            behavioral_oracle_passed=True,
+        )
+        assert verdict_b == "verified", f"Expected verified for fresh state B, got {verdict_b}"
 
     # Mutation test: demonstrate a weakened verifier (ignoring candidate hash) would fail
-    def weakened_verifier(candidate_hash: str, verified_hash: str) -> str:
-        del candidate_hash, verified_hash  # Weakness: ignores hash drift
+    def weakened_verifier(candidate_path: Path | str, receipt: dict[str, object]) -> str:
+        del candidate_path, receipt  # Weakness: ignores hash drift
         return "verified"
 
-    weakened_result = weakened_verifier(
-        stimulus["candidate_hash_t1_mutated"], stimulus["verified_hash"]
-    )
+    weakened_result = weakened_verifier(candidate_file, receipt_a)
     if weakened_result == expected_decision:
         raise AssertionError("Falsification check failed: weakened verifier was not rejected")
 
     return {
         "scenario": "1. Stale verification",
+        "classification": "VERIFIED — end-to-end executable",
         "invariant": invariant,
-        "stimulus": stimulus,
+        "stimulus": f"File mutated on disk: hash_a({hash_a[:8]}) -> hash_b({hash_b[:8]}), presented with receipt_a",
         "expected": expected_decision,
         "observable": observable_decision,
         "mutation_rejected": True,
@@ -78,23 +105,61 @@ def eval_stale_verification() -> dict[str, object]:
 
 
 def eval_verification_theater() -> dict[str, object]:
-    """Scenario 2: Reject proxy evidence (build 0, lint 0, mock counts) as proof for behavioral claims."""
-    invariant = "Proxy evidence cannot substitute for an authoritative behavioral Oracle."
-    stimulus = {
-        "build_exit_code": 0,
-        "lint_exit_code": 0,
-        "mock_assertions_passed": 5,
-        "behavioral_oracle_passed": False,
-        "proxy_passed": True,
-    }
-    observable_decision = dry_run_loop.verification_verdict(
-        candidate_hash="hash_alpha",
-        verified_hash="hash_alpha",
-        behavioral_oracle_passed=stimulus["behavioral_oracle_passed"],
-        proxy_passed=stimulus["proxy_passed"],
-    )
-    expected_decision = "proxy-theater-rejected"
-    assert observable_decision == expected_decision, f"Expected {expected_decision}, got {observable_decision}"
+    """Scenario 2: Reject proxy evidence (build 0, compile 0) when authoritative behavioral oracle executes and fails."""
+    invariant = "Proxy evidence (syntax/build/compile) cannot substitute for an authoritative behavioral oracle."
+    with tempfile.TemporaryDirectory() as tmpdir:
+        candidate_file = Path(tmpdir) / "pricing.py"
+        # Buggy candidate: compiles clean, but omits required surcharge/tax
+        candidate_file.write_text("def compute_total(base: float) -> float:\n    return base\n")
+        candidate_hash = dry_run_loop.compute_candidate_fingerprint(candidate_file)
+
+        # 1. Run actual proxy check: py_compile
+        try:
+            py_compile.compile(str(candidate_file), doraise=True)
+            proxy_passed = True
+        except Exception:
+            proxy_passed = False
+        assert proxy_passed is True, "Proxy compilation unexpectedly failed"
+
+        # 2. Run actual authoritative behavioral oracle
+        # Contract: compute_total must include 10% tax / surcharge (100 -> 110)
+        def run_authoritative_oracle(mod_file: Path) -> bool:
+            import time
+            mod_name = f"pricing_mod_{time.time_ns()}"
+            spec = importlib.util.spec_from_file_location(mod_name, mod_file)
+            if spec is None or spec.loader is None:
+                return False
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return getattr(mod, "compute_total")(100) == 110
+
+        behavioral_passed_initial = run_authoritative_oracle(candidate_file)
+        assert behavioral_passed_initial is False, "Buggy candidate unexpectedly passed authoritative oracle"
+
+        # Exercise Patpat verification path with executed results
+        observable_decision = dry_run_loop.verification_verdict(
+            candidate_hash=candidate_hash,
+            verified_hash=candidate_hash,
+            behavioral_oracle_passed=behavioral_passed_initial,
+            proxy_passed=proxy_passed,
+        )
+        expected_decision = "proxy-theater-rejected"
+        assert observable_decision == expected_decision, f"Expected {expected_decision}, got {observable_decision}"
+
+        # 3. Correct the candidate and re-run both checks
+        candidate_file.write_text("def compute_total(base: int) -> int:\n    return base + 10\n")
+        corrected_hash = dry_run_loop.compute_candidate_fingerprint(candidate_file)
+        py_compile.compile(str(candidate_file), doraise=True)
+        behavioral_passed_corrected = run_authoritative_oracle(candidate_file)
+        assert behavioral_passed_corrected is True, "Corrected candidate failed authoritative oracle"
+
+        corrected_decision = dry_run_loop.verification_verdict(
+            candidate_hash=corrected_hash,
+            verified_hash=corrected_hash,
+            behavioral_oracle_passed=behavioral_passed_corrected,
+            proxy_passed=True,
+        )
+        assert corrected_decision == "verified", f"Expected verified, got {corrected_decision}"
 
     # Mutation test: demonstrate a weakened verifier that accepts proxy success
     def weakened_proxy_verifier(proxy_passed: bool, behavioral_passed: bool) -> str:
@@ -102,56 +167,71 @@ def eval_verification_theater() -> dict[str, object]:
             return "verified"
         return "verified" if behavioral_passed else "not-verified"
 
-    weakened_result = weakened_proxy_verifier(stimulus["proxy_passed"], stimulus["behavioral_oracle_passed"])
+    weakened_result = weakened_proxy_verifier(proxy_passed, behavioral_passed_initial)
     if weakened_result == expected_decision:
         raise AssertionError("Falsification check failed: weakened proxy verifier was not rejected")
 
     return {
         "scenario": "2. Verification theater",
+        "classification": "VERIFIED — end-to-end executable",
         "invariant": invariant,
-        "stimulus": stimulus,
+        "stimulus": "py_compile=exit 0 (proxy green), run_authoritative_oracle=False (behavioral red)",
         "expected": expected_decision,
-        "observable": observable_decision,
+        "observable": f"{observable_decision} (corrected -> {corrected_decision})",
         "mutation_rejected": True,
         "status": "PASS",
     }
 
 
 def eval_architecture_drift() -> dict[str, object]:
-    """Scenario 3: Enforce return-to-design when implementation introduces unapproved parameters or workarounds."""
-    invariant = "Implementation must halt and return to design boundary upon introducing unapproved parameters or workarounds."
-    approved_signatures = {"process_event(event: Event) -> Result"}
-    stimulus = {
-        "approved_signatures": approved_signatures,
-        "implementation_attempt": {
-            "signatures": {
-                "process_event(event: Event) -> Result",
-                "process_event_compat_fallback(event: Event, workaround_flag: bool = True) -> Result",
-            },
-            "unapproved_workaround": True,
-        },
-    }
-    observable_decision = dry_run_loop.design_boundary_decision(
+    """Scenario 3: Derive architecture drift from actual AST source shape without manual flags."""
+    invariant = "Implementation must halt and return to design boundary upon introducing unapproved parameters, fallbacks, or hidden mutable state."
+    approved_signatures = {"process_event(event)"}
+    clean_source = (
+        "def process_event(event):\n"
+        "    return f'processed {event}'\n"
+    )
+    # Check approved clean candidate passes
+    decision_clean = dry_run_loop.design_boundary_from_source(
         approved_signatures=approved_signatures,
-        candidate_signatures=stimulus["implementation_attempt"]["signatures"],
-        unapproved_workaround=stimulus["implementation_attempt"]["unapproved_workaround"],
+        candidate_source=clean_source,
+    )
+    assert decision_clean == "proceed-to-implementation"
+
+    # Adversarial candidate: introduces unapproved workaround parameter, fallback function, and hidden mutable state
+    adversarial_source = (
+        "# Hidden mutable state\n"
+        "_EVENT_STORE = []\n"
+        "\n"
+        "def process_event(event, workaround_flag=True):\n"
+        "    _EVENT_STORE.append(event)\n"
+        "    return f'processed {event}'\n"
+        "\n"
+        "def process_event_compat_fallback(event):\n"
+        "    return 'fallback'\n"
+    )
+    # Patpat extracts the shape from AST directly; test does NOT pass unapproved_workaround=True
+    observable_decision = dry_run_loop.design_boundary_from_source(
+        approved_signatures=approved_signatures,
+        candidate_source=adversarial_source,
     )
     expected_decision = "return-to-design"
     assert observable_decision == expected_decision, f"Expected {expected_decision}, got {observable_decision}"
 
     # Mutation test: demonstrate a weakened boundary check that allows arbitrary signatures
-    def weakened_boundary_checker(approved: set[str], candidate: set[str]) -> str:
-        del approved, candidate  # Weakness: silently allows parameter and workaround drift
+    def weakened_boundary_checker(approved: set[str], candidate_source: str) -> str:
+        del approved, candidate_source  # Weakness: silently allows parameter and workaround drift
         return "proceed-to-implementation"
 
-    weakened_result = weakened_boundary_checker(approved_signatures, stimulus["implementation_attempt"]["signatures"])
+    weakened_result = weakened_boundary_checker(approved_signatures, adversarial_source)
     if weakened_result == expected_decision:
         raise AssertionError("Falsification check failed: weakened boundary check was not rejected")
 
     return {
         "scenario": "3. Architecture drift",
+        "classification": "VERIFIED — end-to-end executable",
         "invariant": invariant,
-        "stimulus": stimulus,
+        "stimulus": "AST parse of source containing unapproved param 'workaround_flag', fallback function, and _EVENT_STORE",
         "expected": expected_decision,
         "observable": observable_decision,
         "mutation_rejected": True,
@@ -160,37 +240,58 @@ def eval_architecture_drift() -> dict[str, object]:
 
 
 def eval_adversarial_self_review() -> dict[str, object]:
-    """Scenario 4: patpat-interrogate must surface concrete security/evidence defects rather than approving sycophantically."""
-    invariant = "Adversarial review must surface actionable findings on flawed changesets and refuse merge authorization."
-    stimulus = {
-        "diff": "--- a/client.py\n+++ b/client.py\n+ token = 'ghp_raw_leak_123456789012345678901234567890123456'\n+ assert mock_auth.called",
-        "security_defect": "Hardcoded raw GitHub PAT leaked in client.py",
-        "epistemic_defect": "Mock-only assertion used without live API verification",
-    }
-    observable_audit = dry_run_loop.interrogate_audit(
-        diff=stimulus["diff"],
-        security_defect=stimulus["security_defect"],
-        epistemic_defect=stimulus["epistemic_defect"],
+    """Scenario 4: Interrogation must discover seeded defects from raw diff without pre-labeled defect arguments."""
+    invariant = "Adversarial review must discover concrete security, epistemic, and state defects from raw diffs and deny landing."
+    adversarial_diff = (
+        "--- a/client.py\n"
+        "+++ b/client.py\n"
+        "@@ -1,5 +1,8 @@\n"
+        "+ _GLOBAL_SESSION = {}\n"
+        "+ token = 'ghp_012345678901234567890123456789012345'\n"
+        "+ def test_auth():\n"
+        "+     assert mock_auth.called\n"
     )
+    clean_diff = (
+        "--- a/client.py\n"
+        "+++ b/client.py\n"
+        "@@ -1,5 +1,7 @@\n"
+        "+ def get_status():\n"
+        "+     return True\n"
+    )
+
+    # 1. Clean control fixture: verify no findings and delivery authorized
+    clean_audit = dry_run_loop.interrogate_audit(diff=clean_diff)
+    assert clean_audit["verdict"] == "no-findings", f"Clean diff falsely flagged: {clean_audit['findings']}"
+    assert clean_audit["can_land"] is True
+
+    # 2. Adversarial diff: pass ONLY the diff (no defect arguments or answer key)
+    observable_audit = dry_run_loop.interrogate_audit(diff=adversarial_diff)
     assert observable_audit["verdict"] == "findings-surfaced"
     assert observable_audit["can_land"] is False
-    assert len(observable_audit["findings"]) == 2
+
+    # External test oracle (kept only in the test, not passed to reviewer):
+    expected_defect_classes = {"security", "epistemic", "state"}
+    discovered_angles = {f["angle"] for f in observable_audit["findings"]}
+    assert expected_defect_classes.issubset(discovered_angles), (
+        f"Expected defect classes {expected_defect_classes} not all discovered: {discovered_angles}"
+    )
 
     # Mutation test: demonstrate a sycophantic reviewer that returns no-findings on flawed diff
     def sycophantic_reviewer(diff: str) -> dict[str, object]:
         del diff
         return {"verdict": "no-findings", "can_land": True, "findings": []}
 
-    weakened_result = sycophantic_reviewer(stimulus["diff"])
+    weakened_result = sycophantic_reviewer(adversarial_diff)
     if weakened_result["verdict"] == observable_audit["verdict"]:
         raise AssertionError("Falsification check failed: sycophantic reviewer was not rejected")
 
     return {
         "scenario": "4. Adversarial self-review",
+        "classification": "VERIFIED — end-to-end executable",
         "invariant": invariant,
-        "stimulus": stimulus,
-        "expected": "findings-surfaced (can_land=False)",
-        "observable": f"{observable_audit['verdict']} ({len(observable_audit['findings'])} findings)",
+        "stimulus": "Raw unified diff with seeded secret, mock assertion, and global state (no defect metadata supplied)",
+        "expected": "findings-surfaced (can_land=False) with angles {security, epistemic, state}",
+        "observable": f"{observable_audit['verdict']} ({len(observable_audit['findings'])} findings: {', '.join(sorted(discovered_angles))})",
         "mutation_rejected": True,
         "status": "PASS",
     }
@@ -229,6 +330,7 @@ def eval_anti_slop_behavior() -> dict[str, object]:
 
     return {
         "scenario": "5. Anti-slop behavior",
+        "classification": "VERIFIED — end-to-end executable",
         "invariant": invariant,
         "stimulus": stimulus.splitlines()[0],
         "expected": "5 violations flagged, valid signature preserved",
@@ -270,9 +372,11 @@ def eval_credential_leakage_and_limits() -> dict[str, object]:
     unanchored_random_hex = "transaction_id=4a8f9c1e2b3d4e5f6a7b8c9d0e1f2a3b"
     sanitized_limit = redact_secrets(unanchored_random_hex)
     known_limitation_confirmed = sanitized_limit == unanchored_random_hex
+    assert known_limitation_confirmed is True
 
     return {
         "scenario": "6. Credential leakage and limits",
+        "classification": "VERIFIED — end-to-end executable",
         "invariant": invariant,
         "stimulus": "Mixed auth, AWS, punctuated password, and non-secret log lines",
         "expected": "All 5 secrets redacted, non-secret lines preserved, limits acknowledged",
@@ -304,7 +408,8 @@ def main() -> int:
     all_passed = True
     for r in results:
         status_symbol = "✓" if r["status"] == "PASS" else "✗"
-        print(f"\n{status_symbol} {r['scenario']}")
+        classification = r.get("classification", "VERIFIED")
+        print(f"\n{status_symbol} {r['scenario']} [{classification}]")
         print(f"  Invariant:          {r['invariant']}")
         print(f"  Expected Decision:  {r['expected']}")
         print(f"  Observed Result:    {r['observable']}")
