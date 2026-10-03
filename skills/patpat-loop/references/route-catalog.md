@@ -31,5 +31,7 @@ Read this catalog only when the common routes in `patpat-loop` do not settle the
 | Design or scaffold an external automation for a concrete integration | [`patpat-automation`](../../patpat-automation/SKILL.md) | [Automation design](../playbooks/automation-design.md) |
 | Multi-phase sequencing or several contracts | [`patpat-plan`](../../patpat-plan/SKILL.md) | [Bespoke workflow](../playbooks/bespoke-workflow.md) |
 | Install, update, remove, or validate Patpat on an agent host | [`patpat-setup`](../../patpat-setup/SKILL.md) | Use the workflow directly |
+| Cut AI patterns, fluff, and superficial writing | [`patpat-unslop`](../../patpat-unslop/SKILL.md) | Use the workflow directly |
+| Adversarial multi-angle review before delivery | [`patpat-interrogate`](../../patpat-interrogate/SKILL.md) | Use the workflow directly |
 
 Resolve overlaps by the earliest unsettled decision. Architect first when the target contract is unsettled. Plan when the remaining problem is sequencing. Impact assesses downstream risk without designing the replacement. A prototype settles an empirical fork instead of asking the human to choose.

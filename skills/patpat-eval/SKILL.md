@@ -1,6 +1,7 @@
 ---
 name: patpat-eval
 description: Evaluate whether an agent skill triggers and performs correctly using isolated, evidence-based trials. Use after non-trivial skill changes or when routing quality is uncertain.
+disable-model-invocation: true
 ---
 
 # Patpat Eval
