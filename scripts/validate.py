@@ -35,6 +35,7 @@ SKILL_POLICIES = {
     "patpat-debug": "mutating",
     "patpat-engineer": "mutating",
     "patpat-eval": "support",
+    "patpat-game-builder": "mutating",
     "patpat-impact": "read-only",
     "patpat-inspect": "read-only",
     "patpat-interrogate": "read-only",
@@ -42,6 +43,7 @@ SKILL_POLICIES = {
     "patpat-loop": "router",
     "patpat-perf": "mutating",
     "patpat-plan": "read-only",
+    "patpat-repository-diagram": "mutating",
     "patpat-review": "read-only",
     "patpat-run": "mutating",
     "patpat-setup": "mutating",
@@ -58,8 +60,10 @@ EXPECTED_MUTATING_SKILLS = {
     "patpat-change",
     "patpat-debug",
     "patpat-engineer",
+    "patpat-game-builder",
     "patpat-learn",
     "patpat-perf",
+    "patpat-repository-diagram",
     "patpat-run",
     "patpat-setup",
     "patpat-ship",
@@ -86,7 +90,7 @@ LOCAL_PROOF_CLOSURE_BLOCK = """## Proof closure
 Define the five-field proof contract before any mutation. Close mutating work with:
 
 - Always: [`patpat-verify`](../patpat-verify/SKILL.md), using authoritative evidence.
-- When required: [`patpat-review`](../patpat-review/SKILL.md) for delivery intent, auth/security/billing/secrets, architecture or cross-cutting scope, durable-run completion, land/merge, or another operating-protocol review gate.
+- When required: [`patpat-review`](../patpat-review/SKILL.md) for delivery intent, auth/security/billing/secrets, architecture or cross-cutting scope, durable-run LEARN or REPORT, land/merge, or another operating-protocol review gate.
 
 For clear, bounded, reversible local work with none of those review requirements, proceed from verification to REPORT without independent review."""
 READ_ONLY_BOUNDARY_BLOCK = """## Mutation boundary
@@ -795,7 +799,7 @@ def validate_root(root: Path) -> list[str]:
         operational = operational_markdown(workflow.read_text(encoding="utf-8"))
         expected_closure = (
             LOCAL_PROOF_CLOSURE_BLOCK
-            if skill_name in {"patpat-change", "patpat-debug"}
+            if skill_name in {"patpat-change", "patpat-debug", "patpat-game-builder"}
             else PROOF_CLOSURE_BLOCK
         )
         if not operational.rstrip().endswith(expected_closure):
@@ -814,6 +818,9 @@ def validate_root(root: Path) -> list[str]:
     run_script = root / "skills" / "patpat-run" / "scripts" / "run_state.py"
     if not run_script.is_file():
         errors.append(f"{run_script}: missing durable run engine")
+    diagram_renderer = root / "skills" / "patpat-repository-diagram" / "scripts" / "render.py"
+    if not diagram_renderer.is_file():
+        errors.append(f"{diagram_renderer}: missing native repository-diagram renderer")
     codex_smoke = root / "scripts" / "smoke_codex_plugin.py"
     if not codex_smoke.is_file():
         errors.append(f"{codex_smoke}: missing isolated Codex marketplace smoke test")
@@ -870,7 +877,126 @@ def skill_directories(skills_root: Path) -> list[Path]:
     )
 
 
+SELF_TEST_IGNORED_DIRECTORY_NAMES = {
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "__pycache__",
+    "memory-bank",
+}
+SELF_TEST_IGNORED_ROOT_NAMES = {".playwright-cli", "project.md", "test_infra.md"}
+
+
+def is_ignored_self_test_path(relative: Path) -> bool:
+    parts = tuple(part.casefold() for part in relative.parts)
+    if not parts:
+        return False
+    if parts[-1] == "receipt.json" or parts[-1].endswith((".jsonl", ".stderr.txt")):
+        return True
+    if any(part in SELF_TEST_IGNORED_DIRECTORY_NAMES for part in parts):
+        return True
+    if parts[0] in SELF_TEST_IGNORED_ROOT_NAMES and (
+        parts[0] == ".playwright-cli" or len(parts) == 1
+    ):
+        return True
+    if parts[0] == ".agents" and len(parts) > 1 and parts[1] != "plugins":
+        return True
+    if len(parts) >= 2 and parts[0] == "docs" and parts[1] == "diagrams":
+        return True
+    return parts[-1].endswith((".pyc", ".pyo"))
+
+
+def self_test_fixture_ignore(source_root: Path) -> Callable[[str, list[str]], list[str]]:
+    source_root = source_root.resolve()
+
+    def ignore(directory: str, names: list[str]) -> list[str]:
+        skipped: set[str] = set()
+        parent = Path(directory)
+        for name in names:
+            try:
+                relative = (parent / name).relative_to(source_root)
+            except ValueError:
+                continue
+            if is_ignored_self_test_path(relative):
+                skipped.add(name)
+        return sorted(skipped)
+
+    return ignore
+
+
+def copy_self_test_source(source_root: Path, destination: Path) -> None:
+    """Copy a stable, local self-test source without following links or ignored state."""
+    source_root = source_root.resolve()
+    destination = destination.resolve()
+    if (
+        source_root == destination
+        or source_root in destination.parents
+        or destination in source_root.parents
+    ):
+        raise RuntimeError("self-test snapshot destination must not overlap its source tree")
+
+    try:
+        git_root = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=source_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        git_root = None
+    is_git_root = (
+        git_root is not None
+        and git_root.returncode == 0
+        and Path(git_root.stdout.strip()).resolve() == source_root
+    )
+    if not is_git_root:
+        shutil.copytree(
+            source_root,
+            destination,
+            symlinks=True,
+            ignore=self_test_fixture_ignore(source_root),
+        )
+        for directory, dirnames, filenames in os.walk(destination, followlinks=False):
+            for name in (*dirnames, *filenames):
+                candidate = Path(directory) / name
+                if candidate.is_symlink():
+                    raise RuntimeError(f"self-test source contains a symlink: {candidate.relative_to(destination)}")
+        return
+
+    listing = subprocess.run(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+        cwd=source_root,
+        check=False,
+        capture_output=True,
+    )
+    if listing.returncode != 0:
+        raise RuntimeError(f"git could not inventory the source tree: {listing.stderr.decode(errors='replace')}")
+
+    for raw_path in listing.stdout.split(b"\0"):
+        if not raw_path:
+            continue
+        relative = Path(os.fsdecode(raw_path))
+        if relative.is_absolute() or ".." in relative.parts:
+            raise RuntimeError(f"git returned a path outside the source tree: {relative}")
+        if is_ignored_self_test_path(relative):
+            continue
+        source = source_root / relative
+        target = destination / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if source.is_symlink():
+            raise RuntimeError(f"self-test source contains a symlink: {relative}")
+        elif source.is_file():
+            shutil.copy2(source, target)
+        elif source.is_dir():
+            shutil.copytree(source, target, ignore=self_test_fixture_ignore(source_root))
+        else:
+            raise RuntimeError(f"source file disappeared during self-test snapshot: {relative}")
+
+
 def run_self_test(root: Path) -> list[str]:
+    root = root.resolve()
     cases: list[tuple[str, Callable[[Path], None], str]] = []
 
     def break_name(fixture: Path) -> None:
@@ -1332,7 +1458,7 @@ def run_self_test(root: Path) -> list[str]:
             ("auto-discovered command", add_conventional_command, "unadmitted plugin component path"),
             ("commented proof closure", comment_out_proof_closure, "canonical proof closure directive"),
             ("read-only boundary drift", remove_read_only_boundary, "canonical read-only mutation boundary"),
-            ("mutating proof closure", break_proof_closure, "missing proof closure"),
+            ("mutating proof closure", break_proof_closure, "missing canonical proof closure directive"),
             ("unclassified skill", remove_skill_policy_target, "Skill policy registry mismatch"),
             ("Antigravity logo field", add_logo_to_antigravity, "unsupported manifest fields"),
             ("Codex logo field", add_logo_to_codex, "unsupported manifest fields"),
@@ -1364,15 +1490,146 @@ def run_self_test(root: Path) -> list[str]:
             cases.append((f"{skill_name} closure drift {index}", drift_closure, "canonical proof closure directive"))
 
     failures: list[str] = []
+    with tempfile.TemporaryDirectory(prefix="patpat-validator-copy-test-") as temp_directory:
+        fixture_source = Path(temp_directory) / "source"
+        (fixture_source / "docs" / "guide").mkdir(parents=True)
+        (fixture_source / "docs" / "Diagrams").mkdir()
+        (fixture_source / ".agents" / "plugins").mkdir(parents=True)
+        (fixture_source / ".agents" / "teamwork_preview_fixture" / "pstack_cache" / "scripts").mkdir(parents=True)
+        (fixture_source / ".playwright-cli").mkdir()
+        (fixture_source / "docs" / "guide" / "installing.md").write_text("guide\n", encoding="utf-8")
+        (fixture_source / "docs" / "Diagrams" / "local.html").write_text("local render\n", encoding="utf-8")
+        (fixture_source / ".agents" / "plugins" / "marketplace.json").write_text("{}\n", encoding="utf-8")
+        (fixture_source / ".playwright-cli" / "capture.png").write_bytes(b"local screenshot")
+        (fixture_source / "PROJECT.md").write_text("local agent context\n", encoding="utf-8")
+        (fixture_source / "TEST_INFRA.md").write_text("local test context\n", encoding="utf-8")
+        (fixture_source / "receipt.json").write_text("private receipt\n", encoding="utf-8")
+        (fixture_source / "trial.jsonl").write_text("private trial\n", encoding="utf-8")
+        (fixture_source / "codex.stderr.txt").write_text("private stderr\n", encoding="utf-8")
+        (fixture_source / ".agents" / "teamwork_preview_fixture" / "pstack_cache" / "scripts" / "watch-pr").write_text(
+            "local run artifact\n",
+            encoding="utf-8",
+        )
+        fixture_copy = Path(temp_directory) / "fixture"
+        copy_self_test_source(fixture_source, fixture_copy)
+        if (
+            (fixture_copy / "docs" / "Diagrams").exists()
+            or not (fixture_copy / "docs" / "guide" / "installing.md").is_file()
+            or not (fixture_copy / ".agents" / "plugins" / "marketplace.json").is_file()
+            or (fixture_copy / ".agents" / "teamwork_preview_fixture").exists()
+            or (fixture_copy / ".playwright-cli").exists()
+            or (fixture_copy / "PROJECT.md").exists()
+            or (fixture_copy / "TEST_INFRA.md").exists()
+            or (fixture_copy / "receipt.json").exists()
+            or (fixture_copy / "trial.jsonl").exists()
+            or (fixture_copy / "codex.stderr.txt").exists()
+        ):
+            failures.append(
+                "self-test: fixture copy did not prune local artifacts while preserving package docs and marketplace"
+            )
+
+        git_fixture_source = Path(temp_directory) / "git-source"
+        shutil.copytree(fixture_source, git_fixture_source)
+        git_init = subprocess.run(
+            ["git", "init", "--quiet"],
+            cwd=git_fixture_source,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if git_init.returncode != 0:
+            failures.append(f"self-test: could not initialize Git copy fixture: {git_init.stderr}")
+        else:
+            git_add = subprocess.run(
+                ["git", "add", "--all", "--force"],
+                cwd=git_fixture_source,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if git_add.returncode != 0:
+                failures.append(f"self-test: could not track Git copy fixture: {git_add.stderr}")
+            else:
+                git_fixture_copy = Path(temp_directory) / "git-fixture"
+                copy_self_test_source(git_fixture_source, git_fixture_copy)
+                if (
+                    (git_fixture_copy / "docs" / "Diagrams").exists()
+                    or not (git_fixture_copy / "docs" / "guide" / "installing.md").is_file()
+                    or not (git_fixture_copy / ".agents" / "plugins" / "marketplace.json").is_file()
+                    or (git_fixture_copy / ".agents" / "teamwork_preview_fixture").exists()
+                    or (git_fixture_copy / ".playwright-cli").exists()
+                    or (git_fixture_copy / "PROJECT.md").exists()
+                    or (git_fixture_copy / "TEST_INFRA.md").exists()
+                    or (git_fixture_copy / "receipt.json").exists()
+                    or (git_fixture_copy / "trial.jsonl").exists()
+                    or (git_fixture_copy / "codex.stderr.txt").exists()
+                ):
+                    failures.append(
+                        "self-test: Git-backed fixture copy did not prune tracked local artifacts"
+                    )
+        try:
+            copy_self_test_source(fixture_source, fixture_source / "nested-copy")
+        except RuntimeError as error:
+            if "overlap" not in str(error):
+                failures.append("self-test: source snapshot rejected overlap for the wrong reason")
+        else:
+            failures.append("self-test: source snapshot accepted a destination inside its source")
+
+        symlink_source = Path(temp_directory) / "symlink-source"
+        symlink_source.mkdir()
+        outside_file = Path(temp_directory) / "outside.txt"
+        outside_file.write_text("outside source", encoding="utf-8")
+        outside_link = symlink_source / "outside-link.txt"
+        try:
+            outside_link.symlink_to(outside_file)
+        except (NotImplementedError, OSError):
+            pass
+        else:
+            symlink_snapshot = Path(temp_directory) / "symlink-snapshot"
+            try:
+                copy_self_test_source(symlink_source, symlink_snapshot)
+            except RuntimeError as error:
+                if "symlink" not in str(error) or not (symlink_snapshot / "outside-link.txt").is_symlink():
+                    failures.append("self-test: source snapshot did not safely refuse an external symlink")
+            else:
+                failures.append("self-test: source snapshot followed a symlink outside its source")
+
+            if shutil.which("git"):
+                git_symlink_source = Path(temp_directory) / "git-symlink-source"
+                git_symlink_source.mkdir()
+                git_init = subprocess.run(
+                    ["git", "init", "--quiet"],
+                    cwd=git_symlink_source,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                if git_init.returncode != 0:
+                    failures.append(f"self-test: could not initialize Git symlink fixture: {git_init.stderr}")
+                else:
+                    git_outside_link = git_symlink_source / "outside-link.txt"
+                    try:
+                        git_outside_link.symlink_to(outside_file)
+                    except (NotImplementedError, OSError):
+                        pass
+                    else:
+                        git_symlink_snapshot = Path(temp_directory) / "git-symlink-snapshot"
+                        try:
+                            copy_self_test_source(git_symlink_source, git_symlink_snapshot)
+                        except RuntimeError as error:
+                            if (
+                                "symlink" not in str(error)
+                                or (git_symlink_snapshot / "outside-link.txt").is_symlink()
+                            ):
+                                failures.append("self-test: Git snapshot did not safely refuse an external symlink")
+                        else:
+                            failures.append("self-test: Git snapshot followed a symlink outside its source")
+
     with tempfile.TemporaryDirectory(prefix="patpat-validator-") as temp_directory:
         temp_root = Path(temp_directory)
         for index, (name, mutate, expected) in enumerate(cases):
             fixture = temp_root / f"fixture-{index}"
-            shutil.copytree(
-                root,
-                fixture,
-                ignore=shutil.ignore_patterns(".git", "memory-bank", "__pycache__", "*.pyc"),
-            )
+            shutil.copytree(root, fixture, ignore=self_test_fixture_ignore(root))
             mutate(fixture)
             fixture_errors = validate_root(fixture)
             if not any(expected in error for error in fixture_errors):
@@ -1386,6 +1643,17 @@ def run_self_test(root: Path) -> list[str]:
     )
     if result.returncode != 0:
         failures.append(f"self-test: durable run engine failed: {result.stdout}{result.stderr}")
+    diagram_renderer = root / "skills" / "patpat-repository-diagram" / "scripts" / "render.py"
+    diagram_result = subprocess.run(
+        [sys.executable, str(diagram_renderer), "self-test"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if diagram_result.returncode != 0:
+        failures.append(
+            f"self-test: repository-diagram renderer failed: {diagram_result.stdout}{diagram_result.stderr}"
+        )
     decisions_helper = root / "skills" / "patpat-run" / "scripts" / "decisions.py"
     decisions_result = subprocess.run(
         [sys.executable, str(decisions_helper), "--self-test"],
@@ -1557,7 +1825,14 @@ def main() -> int:
     root = (args.root or Path(__file__).resolve().parents[1]).resolve()
     errors = validate_root(root)
     if not errors and args.self_test:
-        errors.extend(run_self_test(root))
+        try:
+            # Copy once, then run repeated mutation fixtures from local temporary storage.
+            with tempfile.TemporaryDirectory(prefix="patpat-validator-source-") as directory:
+                snapshot = Path(directory) / "source"
+                copy_self_test_source(root, snapshot)
+                errors.extend(run_self_test(snapshot))
+        except (OSError, RuntimeError) as error:
+            errors.append(f"self-test: unable to create an isolated source snapshot: {error}")
 
     if errors:
         print(f"Validation failed with {len(errors)} error(s):")

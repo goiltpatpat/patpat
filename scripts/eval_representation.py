@@ -73,11 +73,17 @@ def assert_earned_reference() -> None:
                 raise AssertionError(f"earned-representation missing phrase {needle!r}")
     if "/show-me" not in blob:
         raise AssertionError("earned-representation must forbid /show-me")
-    forbidders = ("visual mode", "presentation subsystem", "top-level route")
+    forbidders = ("automatic visualizer", "general presentation subsystem")
     lower = blob.lower()
     for phrase in forbidders:
         if phrase not in lower:
             raise AssertionError(f"earned-representation must forbid {phrase!r}")
+    if "explicit requests for an interactive diagram or visual" not in lower:
+        raise AssertionError("earned-representation must route explicit diagram requests")
+    if "whether the source is an idea, a plan, or a codebase" not in lower:
+        raise AssertionError("earned-representation must cover brief, plan, and repository diagrams")
+    if "focused [`patpat-repository-diagram`]" not in lower:
+        raise AssertionError("earned-representation must preserve the focused interactive-diagram route")
 
 
 def assert_surfaces_link() -> None:
@@ -204,6 +210,8 @@ def assert_representation_matrix() -> None:
     assert complex_artifact["form"] == "focused-artifact"
     trivial = dry_run_loop.representation_plan(kind="trivial_mutation")
     assert trivial["form"] == "prose"
+    diagram = dry_run_loop.representation_plan(kind="repository_diagram")
+    assert diagram["form"] == "interactive-diagram-artifact" and diagram["visualize"] is True
     assert trivial["adds_planning_ceremony"] is False
     assert trivial["adds_reporting_ceremony"] is False
     for sample in (
@@ -214,6 +222,7 @@ def assert_representation_matrix() -> None:
         shape,
         complex_simple,
         complex_artifact,
+        diagram,
         trivial,
     ):
         assert sample["adds_planning_ceremony"] is False

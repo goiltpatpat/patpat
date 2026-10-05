@@ -24,6 +24,6 @@ Do not claim completion from generation, compilation, or tests alone when the ch
 Define the five-field proof contract before any mutation. Close mutating work with:
 
 - Always: [`patpat-verify`](../patpat-verify/SKILL.md), using authoritative evidence.
-- When required: [`patpat-review`](../patpat-review/SKILL.md) for delivery intent, auth/security/billing/secrets, architecture or cross-cutting scope, durable-run completion, land/merge, or another operating-protocol review gate.
+- When required: [`patpat-review`](../patpat-review/SKILL.md) for delivery intent, auth/security/billing/secrets, architecture or cross-cutting scope, durable-run LEARN or REPORT, land/merge, or another operating-protocol review gate.
 
 For clear, bounded, reversible local work with none of those review requirements, proceed from verification to REPORT without independent review.

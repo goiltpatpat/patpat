@@ -140,6 +140,10 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 | [Project verifier](skills/patpat-loop/playbooks/project-verifier.md) | Build or repair project-local proof against the real system. |
 | [Learning](skills/patpat-loop/playbooks/learning.md) | Encode a recurring failure as the smallest durable constraint. |
 | [Automation design](skills/patpat-loop/playbooks/automation-design.md) | Design fail-closed automation for a named integration. |
+| [Build a playable slice](skills/patpat-game-builder/playbooks/build-playable-slice.md) | Implement the smallest end-to-end game loop for a concrete brief. |
+| [Diagnose gameplay](skills/patpat-game-builder/playbooks/diagnose-gameplay.md) | Find the first gameplay state that diverges from the expected result. |
+| [Verify a playthrough](skills/patpat-game-builder/playbooks/verify-playthrough.md) | Prove rules, player input, visuals, and target-runtime behavior separately. |
+| [Visual iteration](skills/patpat-game-builder/playbooks/visual-iteration.md) | Improve requested game presentation against frozen, observable conditions. |
 
 </details>
 
@@ -155,6 +159,8 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 | [`patpat`](skills/patpat/SKILL.md) | Slash alias for the loop. `/patpat` is the default entry. |
 | [`patpat-loop`](skills/patpat-loop/SKILL.md) | The work is non-trivial and needs the full loop. |
 | [`patpat-inspect`](skills/patpat-inspect/SKILL.md) | Explain, audit, or diagnose without editing. |
+| [`patpat-repository-diagram`](skills/patpat-repository-diagram/SKILL.md) | Turn an idea, plan, or codebase into a beautiful interactive diagram with editable JSON and standalone HTML/SVG. |
+| [`patpat-game-builder`](skills/patpat-game-builder/SKILL.md) | Build a playable game slice or gameplay feature, then verify the real player path. |
 | [`patpat-plan`](skills/patpat-plan/SKILL.md) | Sequence verifiable phases without implementing them. |
 | [`patpat-impact`](skills/patpat-impact/SKILL.md) | Prove blast radius and downstream invariants. |
 | [`patpat-architect`](skills/patpat-architect/SKILL.md) | Settle contracts, migrations, and risk first. |
@@ -163,13 +169,15 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 | [`patpat-perf`](skills/patpat-perf/SKILL.md) | Improve a measured resource regression. |
 | [`patpat-verify`](skills/patpat-verify/SKILL.md) | Test a claim on the real artifact or user surface. |
 | [`patpat-review`](skills/patpat-review/SKILL.md) | Independently try to falsify the change and its evidence. |
+| [`patpat-interrogate`](skills/patpat-interrogate/SKILL.md) | Challenge a design or change from adversarial perspectives. |
 | [`patpat-run`](skills/patpat-run/SKILL.md) | Drive or resume a durable multi-phase graph. |
 | [`patpat-arena`](skills/patpat-arena/SKILL.md) | Compete isolated attempts and synthesize one verified result. |
 | [`patpat-swarm`](skills/patpat-swarm/SKILL.md) | Cover slices or races and return one report. |
 | [`patpat-setup`](skills/patpat-setup/SKILL.md) | Install, validate, or remove Patpat on a host. |
 | [`patpat-ship`](skills/patpat-ship/SKILL.md) | Commit-and-PR when delivery intent exists; merge only when explicitly named. |
 | [`patpat-skill`](skills/patpat-skill/SKILL.md) | Author a reusable skill. |
-| [`patpat-eval`](skills/patpat-eval/SKILL.md) | Evaluate skill triggering with isolated prompts. |
+| [`patpat-eval`](skills/patpat-eval/SKILL.md) | Evaluate skill triggering and behavior against the authorized project with an evidence rubric. |
+| [`patpat-unslop`](skills/patpat-unslop/SKILL.md) | Cut superficial patterns and fluff from text or diffs. |
 | [`patpat-verifier`](skills/patpat-verifier/SKILL.md) | Create or maintain a project-specific verifier. |
 | [`patpat-learn`](skills/patpat-learn/SKILL.md) | Encode a recurring failure. |
 | [`patpat-automation`](skills/patpat-automation/SKILL.md) | Design fail-closed automation. Do not enable it yet. |
@@ -219,12 +227,13 @@ After verify and review, delivery intent (not activation alone) commits and open
 ## Validate
 
 <details>
-<summary>Full validation suite</summary>
+<summary>Local validation suite</summary>
 
 ```bash
 python3 scripts/validate.py --self-test
 python3 scripts/dry_run_loop.py --self-test
 python3 scripts/eval_inspect.py --self-test
+python3 scripts/eval_representation.py --self-test
 python3 scripts/eval_parallel.py --self-test
 python3 scripts/eval_why.py --self-test
 python3 scripts/install_skills.py --self-test
@@ -243,6 +252,7 @@ python3 scripts/smoke_grok_plugin.py
 ```
 
 `eval_why.py` requires a source checkout with Git history; do not use it as an installed-artifact smoke test.
+Codex and Antigravity smoke commands require their respective CLIs and use isolated homes. The GitHub workflow is the authoritative CI contract; this local list also includes extended checks that CI does not run.
 
 </details>
 

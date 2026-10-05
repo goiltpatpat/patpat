@@ -11,11 +11,16 @@ __pycache__/
 .coverage
 htmlcov/
 
+# Local diagram renders and browser inspection artifacts
+/docs/diagrams/
+/.playwright-cli/
+.patpat-diagram.lock
+
 # Operating system metadata
 .DS_Store
 Thumbs.db
 
-# Private Codex canary artifacts (never Git)
+# Private agent-evaluation artifacts (never Git)
 receipt.json
 *.jsonl
 *.stderr.txt

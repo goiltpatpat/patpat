@@ -4,12 +4,14 @@ Read [proof over proxy](../principles/proof-over-proxy.md) and [earned paralleli
 
 1. Declare the capability, failure conditions, and scoring rubric before trials.
 2. Prepare one positive trigger, one neighboring negative trigger, and a representative task when practical.
-3. Create isolated disposable workspaces with equivalent inputs and organic names. Keep candidate, eval, test, judge, and rubric vocabulary out of candidate-visible paths and prompts.
+3. Use the user-authorized project. Use only an already-approved isolation surface when independent state is necessary; do not create a canary or disposable project solely for evaluation. Keep candidate, eval, test, judge, and rubric vocabulary out of candidate-visible paths and prompts.
 4. Run trials without revealing the expected conclusion, scoring rubric, or another candidate's output. Preserve the raw event stream or transcript at an inspectable path and bind it by content digest.
 5. Inspect resulting artifacts, commands, evidence, cleanup, and scope control.
 6. Compare results against the declared rubric; do not score self-reports.
 7. Record verifier or environment limitations separately from skill defects.
 8. Promote, revise, or reject the change based on observed behavior.
+
+For routing-sensitive or otherwise stochastic skill behavior, predeclare the repeat count and expected result per prompt. If equivalent independent trials cannot be run safely in an approved surface, run only non-mutating cases and mark repeat-rate claims `INCONCLUSIVE`. Report trigger counts and rates only for routing criteria; report pass counts and rates per behavioral criterion for other tasks. A single pass proves only that trial, and aggregate rates are descriptive: never hide or relabel a failed run as passing. Keep repeats sequential unless every run has independently isolated inputs and state.
 
 The frozen rubric must name the oracle for each behavioral criterion: returned value, changed state, emitted effect, or bounded invariant. Use a literal expected result for deterministic output, the material effect for void or side-effect-only work, an awaited result for async work, and an independently derived invariant for nondeterministic work. A behavioral criterion that cannot name an observable oracle is invalid and the trial is `INCONCLUSIVE`; classify evidence as static only when the requirement itself is static from the outset.
 

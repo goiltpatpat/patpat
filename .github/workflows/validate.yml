@@ -34,6 +34,7 @@ jobs:
           python3 scripts/sanitize_logs.py --self-test
           python3 scripts/eval_adversarial_controls.py --self-test
           python3 scripts/eval_inspect.py --self-test
+          python3 scripts/eval_representation.py --self-test
           python3 scripts/eval_why.py --self-test
           python3 scripts/probe_codex_behavior.py --self-test
           python3 scripts/publish_codex_attestation.py --self-test
@@ -122,4 +123,5 @@ jobs:
           python scripts/install_skills.py --self-test
           python scripts/update_skills.py --self-test
           python scripts/stage_plugin.py --self-test
+          python skills/patpat-repository-diagram/scripts/render.py self-test
           python skills/patpat-run/scripts/run_state.py --self-test

@@ -11,6 +11,8 @@ Read [repository truth](../patpat-loop/principles/repository-truth.md), [sequenc
 
 Inspect enough repository evidence to name the contracts, dependencies, risks, and authoritative surfaces. Define one falsifiable completion predicate. Split work only at boundaries that can independently return to a verified state.
 
+Resolve material unknowns from repository evidence first. Group any remaining answerable decisions by dependency and ask only questions whose answers would change the contract, sequence, or acceptance; continue independent work while an answer is pending.
+
 Remain read-only. Produce phases with verification and rollback hooks, unresolved facts, authority gates, and the smallest safe first unit. Hand implementation to the matching focused workflow or `patpat-run`; do not implement inside this skill.
 
 ## Mutation boundary

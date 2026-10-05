@@ -8,7 +8,7 @@ Canonical skill tree: [`skills/`](skills/). Host adapters are thin manifests ove
 
 1. Identify the host, available CLI, requested scope, and source.
 2. Select one route. Do not combine native plugin installation with copied skills in the same host scope.
-3. Stage a working tree that contains Memory Bank or other ignored files before any native Codex or Antigravity install.
+3. Stage a working tree that contains Memory Bank or local artifacts before any native Codex or Antigravity install. The stager excludes local Memory Bank and `docs/diagrams/` but does not apply every `.gitignore` rule; inspect the staged package for other machine-local files inside allowed paths.
 
 Published source: `https://github.com/goiltpatpat/patpat`. Plugin id: `patpat@patpat`.
 
