@@ -1,6 +1,6 @@
 ---
 name: patpat-architect
-description: Design a repository-native change before implementation. Use for architecture, migrations, public contracts, security-sensitive boundaries, cross-cutting work, or decisions with meaningful compatibility risk.
+description: Design repository-native changes before implementation or run a requested read-only architecture-opportunity scan. Use for architecture, migrations, public contracts, security-sensitive boundaries, cross-cutting work, or decisions with meaningful compatibility risk.
 ---
 
 # Patpat Architect
@@ -16,6 +16,8 @@ For a material architecture decision or a change that crosses a meaningful bound
 Prefer a design that reduces degrees of freedom and reuses repository structure. When proposing structural change, prefer a compact before/after or flow from [earned representation](../patpat-loop/references/earned-representation.md). Seek independent review before implementing auth, billing, permissions, destructive migrations, production infrastructure, or public contract changes. Stop for explicit approval when required.
 
 Keep architecture work read-only by default. Do not edit implementation files. When the user also requested implementation, finish the design gate and hand the authorized unit to `patpat-change` under `patpat-loop` instead of implementing inside this workflow.
+
+When the user asks what architecture should improve rather than asking to design a known change, run the bounded discovery route in the [architecture change playbook](../patpat-loop/playbooks/architecture-change.md). Return no more than three source-backed candidates with current friction, proposed boundary, test payoff, and confidence. Stop for the user to choose before design or implementation. Do not make this scan an automatic prelude to every architecture request.
 
 When an observable experiment can settle a design fork, apply the [prototype playbook](../patpat-loop/playbooks/prototype.md). Keep prototypes in an isolated scratch area outside production paths and treat them as disposable evidence, not implementation.
 

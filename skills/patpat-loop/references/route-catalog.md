@@ -2,9 +2,13 @@
 
 Read this catalog only when the common routes in `patpat-loop` do not settle the workflow.
 
+When one request requires outputs from more than one specialized row, keep `patpat-loop` as the orchestrator and run each relevant workflow; do not choose one specialist and drop another explicit deliverable. Use `patpat-plan` when dependent phases need a separate execution plan.
+
 | Intent | Workflow | Playbook |
 | --- | --- | --- |
 | Why the code reached this shape | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [Rationale forensics](../playbooks/rationale-forensics.md) |
+| Build or extend a playable game from a concrete brief | [`patpat-game-builder`](../../patpat-game-builder/SKILL.md) | [Build slice](../../patpat-game-builder/playbooks/build-playable-slice.md); [diagnose](../../patpat-game-builder/playbooks/diagnose-gameplay.md), [verify playthrough](../../patpat-game-builder/playbooks/verify-playthrough.md), and [visual iteration](../../patpat-game-builder/playbooks/visual-iteration.md) when applicable |
+| Turn an idea, plan, or codebase into an interactive visual | [`patpat-repository-diagram`](../../patpat-repository-diagram/SKILL.md) | Use only for an explicit diagram or visual request; brief-only and repository-backed evidence are both supported |
 | Blast-radius or downstream-regression analysis | [`patpat-impact`](../../patpat-impact/SKILL.md) | [Blast radius](../playbooks/blast-radius.md) |
 | Cheap deterministic regression target exists | [`patpat-debug`](../../patpat-debug/SKILL.md) | [Regression first](../playbooks/regression-first.md) |
 | Latency, CPU, memory, throughput, or one-off resource regression | [`patpat-perf`](../../patpat-perf/SKILL.md) | [Performance](../playbooks/performance.md) |

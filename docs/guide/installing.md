@@ -6,7 +6,7 @@ Patpat's scripts and hooks require Python 3.11 or newer.
 
 Agents should follow [`AGENTS.md`](../../AGENTS.md). The published source is `https://github.com/goiltpatpat/patpat`. The Codex plugin id is `patpat@patpat`.
 
-Stage a working tree that contains Memory Bank or other ignored files before native Codex or Antigravity install. A clean clone of the published repository does not need staging.
+Stage a working tree that contains Memory Bank or local artifacts before native Codex or Antigravity install. The stager excludes local Memory Bank and `docs/diagrams/`, but does not apply every `.gitignore` rule; inspect the staged package when other machine-local files sit inside allowed paths. A clean clone of the published repository does not need staging.
 
 ## Grok CLI
 

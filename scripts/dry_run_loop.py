@@ -26,6 +26,183 @@ DISABLE_MODE = re.compile(
     r"^\s*(?:disable\s+(?:/|\$)?patpat(?:-loop)?|opt\s+out(?:\s+of)?\s+patpat(?:-loop)?)\s*[.!?]?\s*$",
     re.IGNORECASE,
 )
+INTERACTIVE_DIAGRAM_INTENT = re.compile(
+    r"\b(?:draw|create|make|generate|render|map|show|provide|visuali[sz]e|turn|transform)\b.{0,100}\b(?:architecture\s+|workflow\s+|sequence\s+|data[- ]?flow\s+|lifecycle\s+)?(?:diagram|flowchart|interactive\s+(?:visual|map)|visualization|visualisation|visual\s+(?:map|of|for|about))\b"
+    r"|(?:วาด|สร้าง|ทำ|จัดทำ|ขอ|ช่วยวาด|ช่วยสร้าง|ช่วยทำ|อยากได้|ขอดู|เปลี่ยน).{0,100}(?:diagram|flowchart|แผนภาพ|ไดอะแกรม|ผังงาน|ภาพโต้ตอบ|ภาพสรุป)"
+    r"|(?:แปลง|ทำ|สร้าง).{0,80}(?:ไอเดีย|แผน|เรื่อง|โค้ดเบส|repository).{0,70}(?:ภาพโต้ตอบ|ภาพสรุป|แผนภาพ|ไดอะแกรม)",
+    re.IGNORECASE,
+)
+REPOSITORY_DIAGRAM_DENIAL = re.compile(
+    r"\b(?:do\s+not|don't|dont|never|not)\s+(?!just\b|only\b|merely\b|simply\b)"
+    r"(?:draw|create|make|generate|render|map|show|provide|visuali[sz]e)\b"
+    r"|\b(?:avoid|without)\s+(?:drawing|creating|making|generating|rendering|mapping|showing|providing|visuali[sz]ing)\b"
+    r"|(?:ไม่ต้อง|อย่า|ห้าม|ไม่)(?!\s*(?:แค่|เพียง))\s*(?:วาด|สร้าง|ทำ|จัดทำ|แสดง)",
+    re.IGNORECASE,
+)
+REPOSITORY_DIAGRAM_EXPLANATION = re.compile(
+    r"\b(?:explain|describe|tell\s+me\s+about|what\s+does|how\s+does|why\s+does)\b[^.!?;\n]{0,80}\b(?:diagram|flowchart)\b"
+    r"|(?:อธิบาย|เล่า|บอก|สรุป).{0,80}(?:แผนภาพ|ไดอะแกรม|ผังงาน|diagram|flowchart)",
+    re.IGNORECASE,
+)
+REPOSITORY_DIAGRAM_EXPLANATION_REQUEST = re.compile(
+    r"\b(?:explain|describe)\b[^.!?;\n]{0,100}\bwith\s+(?:an?\s+)?(?:architecture\s+|workflow\s+|sequence\s+|data[- ]?flow\s+|lifecycle\s+)?(?:diagram|flowchart)\b"
+    r"|(?:อธิบาย|เล่า|สรุป).{0,100}(?:ด้วย|พร้อม).{0,24}(?:แผนภาพ|ไดอะแกรม|ผังงาน|diagram|flowchart)",
+    re.IGNORECASE,
+)
+GAME_BUILD_REQUEST = re.compile(
+    r"\b(?:build|create|make|develop|implement|extend|prototype|add)\b.{0,80}\b(?:playable\s+)?(?:game|gameplay|video\s+game)\b"
+    r"|\b(?:add|change|improve|remove|tune|increase|decrease|fix|adjust)\b.{0,80}\b(?:to|for|in)\s+(?:this\s+|the\s+)?(?:game|gameplay)\b"
+    r"|\b(?:add|change|improve|remove|tune)\b.{0,60}\b(?:this|the|my|our)\s+game(?:'s|’s)\b"
+    r"|(?:สร้าง|ทำ|พัฒนา|ต่อยอด|เพิ่ม).{0,80}(?:เกม|เกมเพลย์|game)",
+    re.IGNORECASE,
+)
+GAME_BUILD_DENIAL = re.compile(
+    r"\b(?:do\s+not|don't|dont|never|without|avoid)\b(?!\s+(?:just|only|merely|simply)\b)[^.!?;\n]{0,80}\b(?:build|create|make|develop|implement|extend|prototype|add|change|improve|remove|tune|increase|decrease|fix|adjust|debug|diagnose|investigate|edit|update|refactor|rewrite|repair|modify)\b"
+    r"|\bnot\s+(?:build|create|make|develop|implement|extend|prototype|add|change|improve|remove|tune|increase|decrease|fix|adjust|debug|diagnose|investigate|edit|update|refactor|rewrite|repair|modify)\b"
+    r"|\b(?:there\s+is\s+)?no\s+need\s+to\s+(?:build|create|make|develop|implement|extend|prototype|add|change|improve|remove|tune|increase|decrease|fix|adjust|debug|diagnose|investigate|edit|update|refactor|rewrite|repair|modify)\b"
+    r"|\bnot\s+necessary\s+to\s+(?:build|create|make|develop|implement|extend|prototype|add|change|improve|remove|tune|increase|decrease|fix|adjust|debug|diagnose|investigate|edit|update|refactor|rewrite|repair|modify)\b"
+    r"|(?:ไม่ต้อง|ไม่ควร|ไม่อยาก|ไม่เอา|อย่า|ห้าม)(?!\s*(?:แค่|เพียง)).{0,40}\b(?:build|create|make|develop|implement|extend|prototype|add|change|improve|remove|tune|increase|decrease|fix|adjust|debug|diagnose|investigate|edit|update|refactor|rewrite|repair|modify)\b"
+    r"|(?:ไม่ต้อง|ไม่ควร|ไม่อยาก|ไม่เอา|อย่า|ห้าม)(?!\s*(?:แค่|เพียง)).{0,40}(?:สร้าง|ทำ|พัฒนา|ต่อยอด|เพิ่ม|เปลี่ยน|ปรับ|แก้|ลบ)"
+    r"|ไม่\s*(?:สร้าง|ทำ|พัฒนา|ต่อยอด|เพิ่ม|เปลี่ยน|ปรับ|แก้|ลบ)",
+    re.IGNORECASE,
+)
+GAME_EXISTING_GAME_EXTENSION = re.compile(
+    r"\b(?:add|change|extend|improve|implement|remove|tune|refine|increase|decrease|fix|adjust)\b.{0,60}\b(?:this|that|existing|current)\s+(?:game|one)\b"
+    r"|\b(?:add|change|extend|improve|implement|remove|tune|refine|increase|decrease|fix|adjust)\b.{0,50}\b(?:to|in)\s+(?:it|this\s+one|that\s+one)\b"
+    r"|\b(?:build|create|make|develop|prototype|implement)\b.{0,40}\b(?:it|one|this\s+one|that\s+one)\b"
+    r"|(?:เพิ่ม|เปลี่ยน|ปรับปรุง|แก้|ลบ|ปรับ).{0,60}(?:เกมเดิม|เกมปัจจุบัน|เกมนี้|เกมนั้น)",
+    re.IGNORECASE,
+)
+GAME_NEW_GAME_DENIAL = re.compile(
+    r"\b(?:do\s+not|don't|dont|never|not)\s+(?:build|create|make|develop)\s+(?:(?:a|an|another)\s+)?new\s+(?:video\s+)?game\b"
+    r"|(?:ไม่ต้อง|ไม่ควร|ไม่อยาก|ไม่เอา|อย่า|ห้าม).{0,32}(?:สร้าง|ทำ|พัฒนา).{0,12}เกมใหม่"
+    r"|ไม่\s*(?:สร้าง|ทำ|พัฒนา).{0,12}เกมใหม่",
+    re.IGNORECASE,
+)
+GAME_EXPLICIT_EXISTING_GAME_TARGET = re.compile(
+    r"\b(?:this|that|existing|current)\s+(?:game|one)\b|เกม(?:เดิม|ปัจจุบัน|นี้|นั้น)",
+    re.IGNORECASE,
+)
+GAME_NEW_GAME_DENIAL_BEFORE_COMMA = re.compile(
+    r"\b(?:do\s+not|don't|dont|never)\s+(?:build|create|make|develop)\s+(?:a\s+|another\s+)?new\s+(?:video\s+)?game\s*,\s*(?:(?:and|but)\s+)?(?:(?:just|simply)\s+)?(?=(?:add|change|extend|improve|implement|remove|tune|refine)\b)",
+    re.IGNORECASE,
+)
+GAME_ARTIFACT_REFERENCE_REQUEST = re.compile(
+    r"\b(?:add|build|create|develop|implement|make|prepare|write|draft|outline)\b.{0,32}\b(?:it|one|another)\b"
+    r"|(?:เพิ่ม|สร้าง|ทำ|พัฒนา|ต่อยอด|เขียน|ร่าง).{0,30}(?:มัน|อีกอัน|อีกฉบับ)",
+    re.IGNORECASE,
+)
+GAME_BUILD_PRONOUN_REQUEST = re.compile(
+    r"\b(?:build|create|make|develop|implement|prototype)\s+(?:it|one)\b",
+    re.IGNORECASE,
+)
+GAME_PRIMARY_IMPLEMENTATION = re.compile(
+    r"^\s*(?:(?:please|kindly)\s+)?(?:build|create|make|develop|implement|prototype)\s+(?:(?:a|an|the|small|simple|browser|2d|3d|playable|runnable)\s+){0,3}game\s+from\s+(?:this|the|that)\s+(?:test\s+)?plan\b",
+    re.IGNORECASE,
+)
+GAME_DESIGN_DOCUMENT_MENTION = re.compile(
+    r"\bgame\s+design\s+(?:docs?|documents?)\b|\bgdds?\b|\bgame\s+pitches?\b|เอกสารออกแบบเกม|พิตช์เกม",
+    re.IGNORECASE,
+)
+GAME_CONTEXT_MENTION = re.compile(r"\b(?:game|gameplay|video\s+game)\b|เกม|เกมเพลย์", re.IGNORECASE)
+GAMEPLAY_ISSUE_CONTEXT = re.compile(
+    r"\b(?:game|gameplay|video\s+game)\b.{0,80}\b(?:is|feels|seems|plays)\s+(?:not\s+)?(?:balanced|unbalanced|too\s+slow|too\s+fast|too\s+hard|too\s+easy|unfair|unresponsive|clunky|frustrating|broken)\b"
+    r"|(?:เกม|เกมเพลย์).{0,40}(?:ไม่สมดุล|ช้าเกินไป|เร็วเกินไป|ยากเกินไป|ง่ายเกินไป|ควบคุมยาก|ไม่ตอบสนอง)",
+    re.IGNORECASE,
+)
+GAMEPLAY_TARGET_MUTATION = re.compile(
+    r"\b(?:add|change|extend|improve|implement|remove|tune|refine|increase|decrease|fix|adjust)\b.{0,60}\b(?:player|character|movement|controls?|input|speed|velocity|jump|damage|health|enemy|combat|attack|dodge|cooldown|camera|physics|level|spawn|collision|score|progression|inventory|save|pacing|balance|difficulty|feedback|hud|ui)\b"
+    r"|(?:เพิ่ม|เปลี่ยน|ปรับปรุง|ต่อยอด|แก้|ลบ|ปรับ|ลด).{0,60}(?:ผู้เล่น|ตัวละคร|การเคลื่อนไหว|ปุ่ม|ความเร็ว|ท่ากระโดด|พลัง|ศัตรู|ต่อสู้|โจมตี|ท่าหลบ|คูลดาวน์|กล้อง|ฟิสิกส์|ด่าน|คะแนน|คลัง|บันทึก|จังหวะ|ความยาก|การตอบสนอง|มัน|เกมนี้)",
+    re.IGNORECASE,
+)
+NON_DIAGRAM_CODE_CHANGE = re.compile(
+    r"\b(?:fix|debug|implement|build|develop|add|change|update|edit|remove|refactor|rewrite|repair|modify|extend|adjust)\b.{0,80}\b(?:bug|issue|error|auth(?:entication|orization)?|code|feature|endpoint|api|file|function|method|class|module|service|database|schema|tests?|readme(?:\.md)?|docs?)\b"
+    r"|(?:แก้|เพิ่ม|เปลี่ยน|อัปเดต|ปรับปรุง|ลบ|ปรับ|พัฒนา|สร้าง).{0,60}(?:บั๊ก|ข้อผิดพลาด|ระบบยืนยันตัวตน|auth|API|โค้ด|ฟีเจอร์|ไฟล์|ฟังก์ชัน|คลาส|โมดูล|บริการ|ฐานข้อมูล|สคีมา|เทสต์|README|เอกสาร)",
+    re.IGNORECASE,
+)
+GAMEPLAY_PRESENTATION_REQUEST = re.compile(
+    r"\b(?:add|change|create|enhance|fix|improve|make|polish|refine|adjust|clarify|tune)\b.{0,70}"
+    r"\b(?:(?:this|the|my|our)\s+)?game(?:play)?(?:['’]s)?\b.{0,55}"
+    r"\b(?:visual(?:\s+feedback)?|visuals|feedback|hud|ui|presentation|readability)\b"
+    r"|\b(?:game|gameplay)\b.{0,65}\b(?:visual\s+feedback|visuals?|hud|ui|presentation|readability)\b"
+    r"|(?:เกม|เกมเพลย์).{0,60}(?:ภาพ|การแสดงผล|feedback|hud|ui|ความชัด|อ่านง่าย)"
+    r"|(?:ปรับ|แก้|ปรับปรุง|ทำให้|เพิ่ม).{0,45}(?:ภาพ|การแสดงผล|feedback|hud|ui|ความชัด|อ่านง่าย).{0,45}(?:เกม|เกมเพลย์)",
+    re.IGNORECASE,
+)
+GAME_DOCUMENT_TARGET = re.compile(
+    r"\b(?:readme(?:\.md)?|changelog(?:\.md)?|docs?(?:/[\w.-]+)*|documentation|release\s+notes?|contributing(?:\.md)?|manual|guides?)\b"
+    r"|(?:^|[\s`])[\w./-]+\.(?:md|rst|txt|adoc)\b"
+    r"|(?:เอกสาร|คู่มือ|บันทึกการเปลี่ยนแปลง)",
+    re.IGNORECASE,
+)
+GAME_DOCUMENT_CONTENT_REQUEST = re.compile(
+    r"\b(?:add|write|draft|include|create|update|edit|prepare|document)\b.{0,40}\b(?:section|note|paragraph|chapter|page|entry|article|guide|description|explanation)\b"
+    r"|\b(?:section|note|paragraph|chapter|page|entry)\b.{0,48}\b(?:about|for|on|covering)\b.{0,50}\b(?:game|gameplay|player|character|movement|controls?|input|speed|jump|damage|health|enemy|combat|attack|dodge|cooldown|camera|physics|level|score|difficulty)\b"
+    r"|(?:เพิ่ม|เขียน|ร่าง|ใส่|จัดทำ|อัปเดต|แก้ไข).{0,35}(?:หัวข้อ|โน้ต|หมายเหตุ|ย่อหน้า|บท|หน้า|รายการ|คำอธิบาย).{0,50}(?:เกม|เกมเพลย์|ผู้เล่น|ตัวละคร|การเคลื่อนไหว|ปุ่ม|ความเร็ว|ศัตรู|ต่อสู้|โจมตี|ความยาก)",
+    re.IGNORECASE,
+)
+GAME_ACTION_BOUNDARY = re.compile(
+    r"\band\s+(?=(?:add|change|extend|improve|implement|remove|tune|refine|increase|decrease|fix|adjust|update|write|edit|document)\b)"
+    r"|\bthen\s+(?=(?:add|change|extend|improve|implement|remove|tune|refine|increase|decrease|fix|adjust|update|write|edit|document)\b)"
+    r"|,\s*(?=(?:add|change|extend|improve|implement|remove|tune|refine|increase|decrease|fix|adjust|update|write|edit|document)\b)"
+    r"|และ\s*(?=(?:เพิ่ม|เปลี่ยน|ปรับปรุง|ต่อยอด|แก้|ลบ|ปรับ|ลด|อัปเดต|เขียน|แก้ไข))",
+    re.IGNORECASE,
+)
+
+
+def has_gameplay_target_mutation(clause: str) -> bool:
+    actions = GAME_ACTION_BOUNDARY.split(clause)
+    return any(
+        GAMEPLAY_TARGET_MUTATION.search(action)
+        and not (GAME_DOCUMENT_TARGET.search(action) or GAME_DOCUMENT_CONTENT_REQUEST.search(action))
+        for action in actions
+    )
+
+
+GAME_CONCEPT_ONLY = re.compile(
+    r"\b(?:add|build|create|develop|implement|make|write|draft|outline|brainstorm|compare|critique|review|discuss)\b.{0,80}\b(?:game\s+concepts?|game\s+ideas?|game\s+design\s+docs?|game\s+design\s+documents?|gdds?|game\s+pitches?)\b"
+    r"|(?:สร้าง|เขียน|ร่าง|ระดมความคิด|เปรียบเทียบ|วิจารณ์|รีวิว|คุย|เพิ่ม).{0,80}(?:แนวคิดเกม|ไอเดียเกม|เอกสารออกแบบเกม|พิตช์เกม)"
+    r"|(?:สร้าง|เขียน|ร่าง|ระดมความคิด|เปรียบเทียบ|วิจารณ์|รีวิว|คุย|เพิ่ม).{0,80}\bgame\s+(?:concepts?|ideas?|design\s+docs?|design\s+documents?|pitches?|gdds?)\b",
+    re.IGNORECASE,
+)
+GAME_DOCUMENTATION_ONLY = re.compile(
+    r"\b(?:add|build|create|implement|make|write|draft|prepare|outline|review|critique)\b.{0,24}\b(?:(?:unit|integration|acceptance|qa|smoke)\s+)?tests?(?:\s+(?:plans?|strateg(?:y|ies)|matrices|checklists|cases?|suites?|coverage|specs?|documents?|docs?))?\b"
+    r"|\b(?:add|build|create|implement|make|write|draft|prepare|outline|review|critique)\b.{0,24}\b(?:test|qa|acceptance|verification)\s+(?:plans?|strateg(?:y|ies)|matrices|checklists|specs?|documents?|docs?)\b"
+    r"|\b(?:build|create|make|develop|implement|write|draft|prepare|outline|review|critique)\b.{0,32}\b(?:(?:production|development|release|project|milestone|launch)\s+)?(?:plans?|roadmaps?|schedules?|proposals?|strateg(?:y|ies)|estimates?|briefs?)\b.{0,48}\b(?:for|to|about|on)\b.{0,48}\b(?:game|gameplay|video\s+game)\b"
+    r"|\b(?:build|create|make|develop|implement|write|draft|prepare|outline|review|critique)\b.{0,16}\bgame\s+(?:plans?|roadmaps?|proposals?)\b"
+    r"|(?:ช่วย|กรุณา)?(?:สร้าง|ทำ|เขียน|ร่าง|จัดทำ|เตรียม|วางแผน).{0,32}(?:แผน(?:การผลิต|การพัฒนา|พัฒนา|โครงการ|งาน)?|game\s+(?:plans?|roadmaps?|proposals?)|(?:(?:production|development|release|project|milestone|launch)\s+)?(?:plans?|roadmaps?|schedules?|proposals?|strateg(?:y|ies)|estimates?|briefs?)).{0,48}(?:เกม|game|เกมเพลย์|gameplay)"
+    r"|(?:สร้าง|ทำ|เขียน|ร่าง|จัดทำ|เตรียม).{0,48}(?:แผนทดสอบ|กลยุทธ์ทดสอบ|เมทริกซ์ทดสอบ|รายการตรวจสอบ|กรณีทดสอบ|ชุดทดสอบ|เอกสารทดสอบ)"
+    r"|(?:สร้าง|ทำ|เขียน|ร่าง|จัดทำ|เตรียม).{0,48}\b(?:(?:(?:unit|integration|acceptance|qa|smoke)\s+)?tests?(?:\s+(?:plans?|strateg(?:y|ies)|matrices|checklists|cases?|suites?|coverage|specs?|documents?|docs?))?|(?:test|qa|acceptance|verification)\s+(?:plans?|strateg(?:y|ies)|matrices|checklists|specs?|documents?|docs?))\b",
+    re.IGNORECASE,
+)
+GAME_BUILD_EXPLANATION = re.compile(
+    r"^\s*(?:(?:please|kindly)\s+)?(?:how\s+(?:(?:do|can|should|would)\s+(?:i|we|you)|to)\b|why\s+(?:did|does|is|was)\b|what\s+(?:do|does|is|are|can)\b|explain\b|describe\b|tell\s+me\b).{0,120}\b(?:game|gameplay|video\s+game)\b"
+    r"|^\s*(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:explain|describe|tell\s+me|show\s+me)\b.{0,120}\b(?:game|gameplay|video\s+game)\b"
+    r"|^\s*i\s+want\s+to\s+know\b.{0,80}\b(?:how|what|why)\b.{0,80}\b(?:game|gameplay|video\s+game)\b"
+    r"|^\s*(?:(?:ช่วย|กรุณา)\s*)?(?:อธิบาย|บอก|เล่า|สอน).{0,60}(?:วิธี|ขั้นตอน).{0,60}(?:สร้าง|ทำ|พัฒนา).{0,60}(?:เกม|เกมเพลย์)",
+    re.IGNORECASE,
+)
+GAME_RUNTIME_FAILURE = re.compile(
+    r"\b(?:game|gameplay)\b.{0,80}\b(?:crashes?|freezes?|hangs?|fails?|broken|not\s+working|won't\s+start|doesn't\s+start)\b"
+    r"|\b(?:crashes?|freezes?|hangs?|fails?|broken|not\s+working)\b.{0,80}\b(?:game|gameplay)\b",
+    re.IGNORECASE,
+)
+GAME_BUILD_FAILURE = re.compile(
+    r"\bgame(?:'s|’s)?\s+(?:build|compilation)\s+(?:(?:is|has|keeps)\s+)?(?:fail(?:ed|s|ure)?|error|broken|crash(?:ed|es)?)\b"
+    r"|\b(?:build|compilation)\b.{0,40}\b(?:for|of|in)\s+(?:this\s+|the\s+|a\s+)?game\b.{0,60}\b(?:fail(?:ed|s|ure)?|error|broken|crash(?:ed|es)?)\b"
+    r"|\bgame\b.{0,80}\b(?:fails?|failed)\s+to\s+(?:build|compile|launch)\b"
+    r"|\b(?:diagnose|debug|investigate|repair)\b.{0,80}\b(?:game|gameplay)\b"
+    r"|\b(?:game|gameplay)\b.{0,80}\b(?:does\s+not|doesn't|cannot|can't|won't)\s+(?:build|compile|launch)\b",
+    re.IGNORECASE,
+)
+GAME_IMPLEMENTATION_AFTER_CONCEPT = re.compile(
+    r"\b(?:build|create|make|develop|implement|prototype)\s+(?:(?:a|an|the|small|simple|browser|2d|3d)\s+){0,3}(?:playable|runnable)\s+game\b"
+    r"|\b(?:build|create|make|develop|implement|prototype)\s+(?:(?:a|an|the|small|simple|browser|2d|3d|playable|runnable)\s+){0,3}game\s+from\s+(?:this|the|that)\s+(?:(?:game|design)\s+)?concept\b"
+    r"|\b(?:build|create|make|develop|implement|prototype)\s+(?:it|one)\b.{0,40}\bfrom\s+(?:this|the|that)\s+(?:game\s+)?concept\b"
+    r"|(?:ลงมือทำ|เขียนโค้ด).{0,80}(?:เกมที่เล่นได้|เกมเพลย์)"
+    r"|(?:พัฒนา|สร้างต้นแบบ).{0,80}เกมที่เล่นได้",
+    re.IGNORECASE,
+)
 
 
 def load_hook():
@@ -37,10 +214,171 @@ def load_hook():
     return module
 
 
+def is_existing_game_continuation(prefix: str, suffix: str) -> bool:
+    return bool(
+        GAME_NEW_GAME_DENIAL.search(prefix)
+        and GAME_EXISTING_GAME_EXTENSION.search(suffix)
+        and GAME_EXPLICIT_EXISTING_GAME_TARGET.search(suffix)
+    )
+
+
+def split_game_request_clauses(text: str) -> list[str]:
+    clauses = re.split(r"[.!?;\n]+|\b(?:but|instead|rather)\b|แต่", text, flags=re.IGNORECASE)
+    sequential_clauses: list[str] = []
+    for clause in clauses:
+        remaining = clause
+        while (sequence := re.search(r"\bthen\b|แล้ว", remaining, re.IGNORECASE)) and (
+            not GAME_BUILD_DENIAL.search(remaining[: sequence.start()])
+            or is_existing_game_continuation(
+                remaining[: sequence.start()], remaining[sequence.end() :]
+            )
+        ):
+            sequential_clauses.append(remaining[: sequence.start()])
+            remaining = remaining[sequence.end() :]
+        sequential_clauses.append(remaining)
+
+    split_clauses: list[str] = []
+    for clause in sequential_clauses:
+        negated_creation = GAME_NEW_GAME_DENIAL_BEFORE_COMMA.search(clause)
+        if negated_creation:
+            comma_offset = clause.find(",", negated_creation.start())
+            extension = clause[comma_offset + 1 :]
+            if (
+                GAME_EXISTING_GAME_EXTENSION.search(extension)
+                and GAME_EXPLICIT_EXISTING_GAME_TARGET.search(extension)
+            ):
+                split_clauses.extend((clause[:comma_offset], extension))
+            else:
+                split_clauses.append(clause)
+        else:
+            conjunction = re.search(
+                r"\band\s+(?=(?:build|develop|prototype|implement|code|program|extend|add|change|improve|remove|tune|refine)\b)"
+                r"|และ\s*(?=(?:สร้าง|ทำ|พัฒนา|ต่อยอด|เพิ่ม|เปลี่ยน|ปรับ|ลบ))",
+                clause,
+                re.IGNORECASE,
+            )
+            if conjunction and (
+                not GAME_BUILD_DENIAL.search(clause[: conjunction.start()])
+                or is_existing_game_continuation(
+                    clause[: conjunction.start()], clause[conjunction.end() :]
+                )
+            ):
+                split_clauses.extend((clause[: conjunction.start()], clause[conjunction.end() :]))
+            else:
+                split_clauses.append(clause)
+    return split_clauses
+
+
+def has_affirmative_game_request(text: str) -> bool:
+    clauses = split_game_request_clauses(text)
+    context = "none"
+    for clause in clauses:
+        if not clause.strip():
+            continue
+        if GAME_BUILD_DENIAL.search(clause):
+            context = "none"
+            continue
+        if GAME_BUILD_EXPLANATION.search(clause):
+            context = "explanation"
+            continue
+        implementation_after_concept = GAME_IMPLEMENTATION_AFTER_CONCEPT.search(clause)
+        if GAME_DOCUMENTATION_ONLY.search(clause) or GAME_DESIGN_DOCUMENT_MENTION.search(clause):
+            if GAME_PRIMARY_IMPLEMENTATION.search(clause) or implementation_after_concept:
+                return True
+            context = "document"
+            continue
+        if context == "document" and GAME_ARTIFACT_REFERENCE_REQUEST.search(clause) and not implementation_after_concept:
+            context = "document"
+            continue
+        if GAME_CONCEPT_ONLY.search(clause) and not implementation_after_concept:
+            context = "concept"
+            continue
+        if context in {"concept", "explanation"} and GAME_BUILD_PRONOUN_REQUEST.search(clause):
+            return True
+        if implementation_after_concept:
+            return True
+        if GAME_BUILD_REQUEST.search(clause):
+            return True
+        if (
+            GAMEPLAY_ISSUE_CONTEXT.search(clause) or context == "gameplay-issue"
+        ) and has_gameplay_target_mutation(clause):
+            return True
+        if context == "gameplay-issue" and (
+            GAME_DOCUMENT_TARGET.search(clause)
+            or GAME_DOCUMENT_CONTENT_REQUEST.search(clause)
+        ):
+            continue
+        if GAME_EXISTING_GAME_EXTENSION.search(clause) and (
+            GAME_EXPLICIT_EXISTING_GAME_TARGET.search(clause)
+            or context == "game"
+            or GAME_CONTEXT_MENTION.search(clause)
+        ):
+            return True
+        if GAMEPLAY_ISSUE_CONTEXT.search(clause):
+            context = "gameplay-issue"
+        else:
+            context = "game" if GAME_CONTEXT_MENTION.search(clause) else "none"
+    return False
+
+
+def has_repository_diagram_request(text: str) -> bool:
+    clauses = re.split(
+        r"[,;.!?\n]+|\b(?:but|instead|however|rather)\b|(?:แต่|แต่ว่า|แทนที่จะ)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    for clause in clauses:
+        if REPOSITORY_DIAGRAM_DENIAL.search(clause):
+            continue
+        if INTERACTIVE_DIAGRAM_INTENT.search(clause) or REPOSITORY_DIAGRAM_EXPLANATION_REQUEST.search(clause):
+            return True
+    return False
+
+
+def has_compound_non_diagram_work(text: str) -> bool:
+    clauses = re.split(
+        r"[,;.!?\n]+|\b(?:then|and|but|instead|however|also)\b|(?:แล้ว|และ|แต่|แต่ว่า|แทนที่จะ)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    for clause in clauses:
+        if not clause.strip() or has_repository_diagram_request(clause):
+            continue
+        if GAME_BUILD_DENIAL.search(clause) or GAME_NEW_GAME_DENIAL.search(clause):
+            continue
+        if GAME_BUILD_EXPLANATION.search(clause):
+            continue
+        if (
+            has_affirmative_game_request(clause)
+            or has_gameplay_target_mutation(clause)
+            or GAME_IMPLEMENTATION_AFTER_CONCEPT.search(clause)
+            or GAME_EXISTING_GAME_EXTENSION.search(clause)
+            or GAME_BUILD_FAILURE.search(clause)
+            or GAME_RUNTIME_FAILURE.search(clause)
+            or NON_DIAGRAM_CODE_CHANGE.search(clause)
+        ):
+            return True
+    return False
+
+
 def route(prompt: str) -> str:
     text = prompt.lower()
     if DISABLE_MODE.fullmatch(prompt):
         return "disable"
+    if has_repository_diagram_request(text):
+        if has_compound_non_diagram_work(text):
+            return "loop"
+        return "repository-diagram"
+    if GAME_BUILD_FAILURE.search(text):
+        return "debug"
+    if GAME_RUNTIME_FAILURE.search(text) and not GAME_BUILD_REQUEST.search(text):
+        return "debug"
+    if GAMEPLAY_PRESENTATION_REQUEST.search(text) and not GAME_DOCUMENT_TARGET.search(text):
+        return "game-builder"
+    if has_affirmative_game_request(text):
+        return "game-builder"
+    if GAME_BUILD_EXPLANATION.search(text):
+        return "inspect"
     if "issue-loop" in text or "triage github issues" in text or "benny" in text:
         return "issue-loop"
     if "arena" in text or "competing" in text or "two layouts" in text:
@@ -51,6 +389,9 @@ def route(prompt: str) -> str:
         return "autopilot"
     if (
         "how does" in text
+        or "explain" in text
+        or "describe" in text
+        or "why did" in text
         or "why does" in text
         or "why was" in text
         or "why is" in text
@@ -59,6 +400,7 @@ def route(prompt: str) -> str:
         or "which skill owns" in text
         or "where should this live" in text
         or "where should" in text
+        or "อธิบาย" in text
     ):
         return "inspect"
     if "pause safely" in text or "go offline" in text:
@@ -166,6 +508,9 @@ def representation_plan(
     elif kind == "interaction_flow":
         form = "sequence-or-flow" if hard else "prose"
         reason = "interaction flow uses sequence/flow when hard in prose" if hard else "interaction flow stays prose when clear"
+    elif kind == "repository_diagram":
+        form = "interactive-diagram-artifact"
+        reason = "an explicitly requested idea, plan, or codebase visual uses the focused artifact route"
     elif kind == "complex_visual":
         if simpler_forms_insufficient:
             form = "focused-artifact"
@@ -586,6 +931,160 @@ def run_self_test() -> None:
 
     cases = {
         "How does auth reach this handler? Do not change files.": "inspect",
+        "Draw an architecture diagram of this repository.": "repository-diagram",
+        "Create a sequence diagram for this project.": "repository-diagram",
+        "Don't just describe the auth flow, draw a diagram.": "repository-diagram",
+        "Don't just explain the auth flow; create an architecture diagram.": "repository-diagram",
+        "Can you explain the architecture diagram of this repository?": "inspect",
+        "Do not draw an architecture diagram of this repository.": "loop",
+        "This repository has the current auth flow; draw a diagram for the proposed replacement design.": "repository-diagram",
+        "For this repository, create an architecture diagram of the proposed service.": "repository-diagram",
+        "Explain how this repository routes requests with a diagram.": "repository-diagram",
+        "Explain how this repository routes requests and draw an architecture diagram.": "repository-diagram",
+        "Can you describe the repository architecture and make a diagram?": "repository-diagram",
+        "ช่วยวาดไดอะแกรมบริการใหม่ของ repository นี้": "repository-diagram",
+        "Turn this idea into a beautiful interactive visual: Browser calls API then database.": "repository-diagram",
+        "Create an interactive plan diagram for a staged migration.": "repository-diagram",
+        "ช่วยทำภาพโต้ตอบจากไอเดียเรื่องระบบจองคิว": "repository-diagram",
+        "I have a plan for a feature; can you help me implement it?": "loop",
+        "What is a beautiful interactive diagram?": "loop",
+        "Build a playable browser game with keyboard movement and a restart loop.": "game-builder",
+        "Add a dodge move to this game.": "game-builder",
+        "Improve the controls in this game.": "game-builder",
+        "Do not add a dodge move to this game.": "loop",
+        "Create a test plan for the game's input state machine.": "loop",
+        "Build a test plan for this game's input state machine.": "loop",
+        "Add a test plan for this game's input state machine.": "loop",
+        "Implement a test plan for this game's input state machine.": "loop",
+        "Make a test matrix for the game's controls.": "loop",
+        "Build a test plan for a playable game.": "loop",
+        "Create a production plan for a new game.": "loop",
+        "Create a development roadmap for a new game.": "loop",
+        "Create a plan to build a game.": "loop",
+        "Create a game plan for a puzzle game.": "loop",
+        "Make a plan to build a game.": "loop",
+        "Make a game plan.": "loop",
+        "เกมนี้ไม่สมดุล ช่วยเพิ่มความเร็วตัวละคร": "game-builder",
+        "เกมนี้ไม่สมดุล ไม่ต้องเพิ่มความเร็วตัวละคร": "loop",
+        "This game feels unbalanced; increase player speed.": "game-builder",
+        "This game is not balanced, increase player speed.": "game-builder",
+        "This game feels unbalanced; add a section about player movement to the README.": "loop",
+        "The game feels unbalanced, add a section about player movement to README.md.": "loop",
+        "The game feels unbalanced; add a section about player movement.": "loop",
+        "This game feels unbalanced; add a README section about its visual feedback.": "loop",
+        "The game feels unbalanced; add a section about player movement, then increase player speed.": "game-builder",
+        "This game feels unbalanced; increase player speed and update the README.": "game-builder",
+        "This game feels unbalanced; update the README and increase player speed.": "game-builder",
+        "The game feels unbalanced; add a note about player movement to the README and increase player speed.": "game-builder",
+        "This game feels unbalanced; update the README, then increase player speed.": "game-builder",
+        "This game feels unbalanced; don't increase player speed.": "loop",
+        "This game has a checkpoint system. Remove the first section from the README.": "loop",
+        "This game is a puzzle. Increase the font size in the README.": "loop",
+        "The game is stable; fix the README typo.": "debug",
+        "The game is ready; add a note to the changelog.": "loop",
+        "ช่วยทำแผนการผลิตเกมใหม่": "loop",
+        "ช่วยทำ production plan สำหรับ game นี้": "loop",
+        "ช่วยทำ game plan สำหรับ puzzle game": "loop",
+        "Build a game design document from this concept.": "loop",
+        "Create a test plan for the game's input state machine, then build a playable game from it.": "game-builder",
+        "Create a test plan and build a playable game from it.": "game-builder",
+        "Create a test plan for this game, then add a dodge move to this game.": "game-builder",
+        "Add a dodge move to this game, then make a test plan for it.": "game-builder",
+        "Build a playable game from this test plan.": "game-builder",
+        "Why did this game's build fail?": "debug",
+        "Explain how this game's build pipeline works.": "inspect",
+        "Explain how to build a game with Godot.": "inspect",
+        "Please explain how to build a game with Godot.": "inspect",
+        "The build for this game fails on startup; diagnose it.": "debug",
+        "My game fails to build; please debug it.": "debug",
+        "My game crashes on startup.": "debug",
+        "Do not just explain the plan and implement the game.": "game-builder",
+        "Don't make a new game; extend this one with a dodge move.": "game-builder",
+        "Don't make a new game, extend this one with a dodge move.": "game-builder",
+        "Don't make a new game, just add a dodge move to this one.": "game-builder",
+        "Don't make a new game, and just add a dodge move to this one.": "game-builder",
+        "Don't make a new game, and just add another game.": "loop",
+        "Don't make a new game, and just build it.": "loop",
+        "Don't make a new game, then add a dodge move to this game.": "game-builder",
+        "Don't make a new game, and add a dodge move to this game.": "game-builder",
+        "Don't make a new game, then add a dodge move to it.": "loop",
+        "Don't build a game and add a dodge move to it.": "loop",
+        "Don't build a game and then add a dodge move to it.": "loop",
+        "Don't make a new game; don't extend this one with a dodge move.": "loop",
+        "Don't make a new game, don't extend this one with a dodge move.": "loop",
+        "Don't make a game and implement a save system.": "loop",
+        "Would you explain how to build a game with Godot?": "inspect",
+        "Explain how to build a game with Godot, then build a playable game from that explanation.": "game-builder",
+        "Explain how to build a game with Godot, then build it from that explanation.": "game-builder",
+        "Explain how to build a game with Godot, then create one based on that explanation.": "game-builder",
+        "ช่วยอธิบายวิธีสร้างเกมด้วย Godot แล้วช่วยสร้างเกมนี้ให้ด้วย": "game-builder",
+        "ช่วยอธิบายวิธีสร้างเกมด้วย Godot และสร้างเกมนี้ให้ด้วย": "game-builder",
+        "ไม่ต้องสร้างเกมใหม่ และเพิ่มท่าหลบให้เกมเดิม": "game-builder",
+        "ไม่ต้องสร้างเกมใหม่ แล้วเพิ่มท่าหลบให้เกมเดิม": "game-builder",
+        "ไม่ต้องสร้างเกมใหม่ แล้วเพิ่มท่าหลบให้มัน": "loop",
+        "ไม่ต้องสร้างเกมใหม่ และไม่ต้องเพิ่มท่าหลบให้เกมเดิม": "loop",
+        "Add a game design document for this project.": "loop",
+        "Implement a game design document for this project.": "loop",
+        "Write a game design document for a platformer, then create one for a puzzle game.": "loop",
+        "Write a game design document, then explain how to build a game, then build it from that explanation.": "game-builder",
+        "Help add two game ideas.": "loop",
+        "ช่วยเพิ่มไอเดียเกมสองแบบ": "loop",
+        "ช่วยสร้าง game concept สำหรับ puzzle": "loop",
+        "ช่วยทำ test plan สำหรับ game นี้": "loop",
+        "ช่วยทำแผนทดสอบ state machine ของเกมนี้": "loop",
+        "ช่วยอธิบายวิธีสร้างเกมด้วย Godot": "inspect",
+        "ไม่ต้องสร้างเกมใหม่ แต่เพิ่มท่าหลบให้เกมเดิม": "game-builder",
+        "ไม่ต้องสร้างเกมใหม่ แต่ไม่ต้องเพิ่มท่าหลบให้เกมเดิม": "loop",
+        "Extend this game's combat with a working dodge move and cooldown feedback.": "game-builder",
+        "ช่วยสร้างเกมเล็ก ๆ ที่เล่นได้ มีปุ่มควบคุมและเริ่มใหม่ได้": "game-builder",
+        "Create a game concept for a cozy puzzle game.": "loop",
+        "Build a playable browser game from this game concept.": "game-builder",
+        "Build a game from this game concept.": "game-builder",
+        "Write a game design document for a platformer.": "loop",
+        "Develop a game concept for a cozy puzzle game.": "loop",
+        "Develop a playable game from this concept.": "game-builder",
+        "Create a game concept for a cozy puzzle game, then build it.": "game-builder",
+        "Implement this game design as a playable browser game.": "game-builder",
+        "Use this game design document to build a playable game.": "game-builder",
+        "ช่วยสร้างแนวคิดเกมให้หน่อย": "loop",
+        "ช่วยเขียนแนวคิดเกมปริศนาสามแบบ": "loop",
+        "Discuss three possible game concepts without changing code.": "loop",
+        "Do not build a game; just compare three puzzle mechanics.": "loop",
+        "ไม่ต้องสร้างเกม ช่วยเปรียบเทียบแนวคิดเกมปริศนาสามแบบ": "loop",
+        "Explain how this game's architecture is organized.": "inspect",
+        "Create a diagram of the gameplay architecture.": "repository-diagram",
+        "Create a diagram of this game's visual feedback flow.": "repository-diagram",
+        "Create a diagram of this game's visual feedback flow, then add a dodge move to this game.": "loop",
+        "Create a diagram of this game's visual feedback flow, then add a dodge move.": "loop",
+        "Create a diagram of this game's visual feedback flow, but don't add a dodge move to this game.": "repository-diagram",
+        "Create a diagram of this game's visual feedback flow, then build a game.": "loop",
+        "Create an architecture diagram, then fix the auth bug.": "loop",
+        "Create an architecture diagram, then debug why the game crashes.": "loop",
+        "Create an architecture diagram, then fix the game build error.": "loop",
+        "Create an architecture diagram, but don't debug the game crash.": "repository-diagram",
+        "Create an architecture diagram, but don't diagnose the game crash.": "repository-diagram",
+        "Create an architecture diagram, but don't investigate the game crash.": "repository-diagram",
+        "Create an architecture diagram; no need to fix the auth bug.": "repository-diagram",
+        "Create an architecture diagram; it is not necessary to fix the auth bug.": "repository-diagram",
+        "Create an architecture diagram, then investigate why the game crashes.": "loop",
+        "Create an architecture diagram, but don't update the README.": "repository-diagram",
+        "ช่วยทำแผนภาพ flow ของเกมนี้ แล้วเพิ่มท่าหลบให้เกมเดิม": "loop",
+        "ช่วยทำแผนภาพ flow ของเกมนี้ แล้วสร้างเกมที่เล่นได้ด้วย": "loop",
+        "ช่วยทำแผนภาพ flow ของเกมนี้ แต่ไม่ต้องเพิ่มท่าหลบให้เกมนี้": "repository-diagram",
+        "ช่วยทำแผนภาพ flow แต่ไม่ต้อง debug game crash": "repository-diagram",
+        "ช่วยทำแผนภาพ flow แต่ไม่ต้องแก้เอกสาร": "repository-diagram",
+        "Make the game's visual feedback clearer.": "game-builder",
+        "Improve the game's visuals and HUD readability.": "game-builder",
+        "เกมเพลย์มี flow แบบนี้ ช่วยทำแผนภาพให้หน่อย": "repository-diagram",
+        "เกมนี้ feedback ยังไม่ชัด ช่วยปรับการแสดงผลให้ดีขึ้น": "game-builder",
+        "อย่าแค่อธิบาย flow นี้ ช่วยวาดแผนภาพ": "repository-diagram",
+        "ช่วยสร้างแผนภาพการไหลข้อมูลของ repository นี้ครับ": "repository-diagram",
+        "ช่วยสร้างไดอะแกรมของ repository นี้หน่อย": "repository-diagram",
+        "อธิบายการไหลของ repository นี้ แล้วช่วยสร้างแผนภาพ": "repository-diagram",
+        "ขอดูแผนภาพ architecture ของโปรเจกต์นี้": "repository-diagram",
+        "ช่วยอธิบายไดอะแกรมของ repository นี้หน่อย": "inspect",
+        "How does this repository store notes? Explain briefly.": "inspect",
+        "อธิบายการเก็บโน้ตใน repository นี้แบบสั้น ๆ": "inspect",
         "/patpat reproduce this timeout and fix the root cause": "debug",
         "which skill owns investigation vs rationale-forensics?": "inspect",
         "where should this live?": "inspect",
@@ -780,6 +1279,7 @@ def run_self_test() -> None:
     clear_local = start_plan(clear_bounded_reversible_local=True, mutating=True)
     assert clear_local["kind"] == "lightweight-start"
     assert representation_plan(kind="trivial_mutation")["form"] == "prose"
+    assert representation_plan(kind="repository_diagram")["form"] == "interactive-diagram-artifact"
     assert route("please interrogate this diff") == "interrogate"
     assert route("unslop this report") == "unslop"
 

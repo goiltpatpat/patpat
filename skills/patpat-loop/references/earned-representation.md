@@ -29,4 +29,4 @@ Applies primarily to inspect, architect, and review explanation surfaces. Must n
 
 ## Forbidden
 
-No `/show-me`, no visual mode, no presentation subsystem, and no new top-level route.
+No `/show-me`, automatic visualizer, or general presentation subsystem. Explicit requests for an interactive diagram or visual use the focused [`patpat-repository-diagram`](../../patpat-repository-diagram/SKILL.md) route, whether the source is an idea, a plan, or a codebase. Ordinary explanations and implementation work stay non-visual by default.

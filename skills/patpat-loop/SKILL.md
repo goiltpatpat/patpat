@@ -57,7 +57,7 @@ The user speaks plainly and invokes `/patpat` (or host equivalent). Select the r
 | Named commit, PR update, publish, or authorized deploy | `ship` | [`patpat-ship`](../patpat-ship/SKILL.md) | [Authorized delivery](playbooks/authorized-delivery.md) |
 | Durable multi-phase execution, multi-PR queue, or overnight run | `run` | [`patpat-run`](../patpat-run/SKILL.md) | [Multi-phase run](playbooks/multi-phase-run.md) |
 
-Consult the [route catalog](references/route-catalog.md) only for specialized workflows (`arena`, `swarm`, `automation`, `eval`, `perf`, `learn`) or overlap. If no narrow route fits, use `patpat-architect` or `patpat-run`.
+Consult the [route catalog](references/route-catalog.md) for specialized workflows (`arena`, `swarm`, `automation`, `eval`, `perf`, `learn`, explicit game-building requests, and idea, plan, or codebase diagram requests) or overlap. If no narrow route fits, use `patpat-architect` or `patpat-run`.
 
 ## Run the graph
 
