@@ -27,6 +27,19 @@ Choose the smallest type that answers the question:
 
 Choose the type that makes the subject easiest to understand. If several fit, make a judgment and state it in the artifact's summary; ask only when the distinction materially changes the story. If the user asks for a chat-only visual, return editable source and state which render checks were unavailable. Create project files only when the user requests an artifact or the project convention clearly expects it.
 
+## Optional Python import map
+
+For an explicitly requested Python dependency map, use the Patpat-owned static analyzer to derive `depends_on` edges from Python syntax before authoring the diagram. It uses only the Python standard library, scans Git-tracked and non-ignored untracked `.py` files, and never executes repository code or follows symlinks. Default import roots are the Git root and `src/` when present; pass `--python-root` for other actual import roots and `--scope` to focus the scan. A successful bounded analysis writes a complete `.imports.json` sidecar outside the repository and writes a diagram source only when resolvable repository imports exist and the strict geometry and renderer-size gates pass. It stops without partial artifacts if the Git inventory exceeds 8 MB, the candidate count exceeds 10,000 Python files, scanned source bytes exceed 64 MB, or import facts exceed 25,000. These limits keep both analysis and its review report bounded.
+
+```text
+python3 <skill-root>/scripts/import_graph.py --repo-root <git-root> --out-dir <temporary-outside-root> --name <slug> [--scope <relative-directory>] [--python-root <relative-import-root>] [--language en|th]
+python3 <skill-root>/scripts/render.py validate <temporary-outside-root>/<slug>.diagram.json --repo-root <git-root>
+python3 <skill-root>/scripts/render.py finalize <temporary-outside-root>/<slug>.diagram.json --repo-root <git-root> --out-dir <destination> --name <slug>
+python3 <skill-root>/scripts/render.py check <destination>/<slug>.html --repo-root <git-root>
+```
+
+Inspect the analyzer's JSON result before running the renderer commands above. If its status is `no-resolved-repository-imports`, keep the report and stop; no `.diagram.json` is created. A resource-limit error creates neither output file. Otherwise, the diagram contains only import relationships whose target is a parseable Python file inside the selected scope. The sidecar records hashes for readable files within the 1 MB cap, skipped files, standard-library imports, ambiguous or unresolved imports, layout adjustments, and analyzer limits. Oversize and non-regular sources are skipped before their contents are read and have no content hash. Do not hide unresolved counts or describe the graph as a call graph, runtime trace, or complete architecture. It does not infer symbol-level imports, import-time effects, or arbitrary dynamic loading. The generated spec must pass the renderer's strict geometry gate; if a safe route cannot be derived, keep the diagnostic report and do not emit a broken diagram. If the graph exceeds renderer limits, it likewise refuses to emit a truncated diagram. Keep the sidecar with the editable source during review; remove both when they are temporary.
+
 ## Trace and author
 
 1. Pick the evidence mode. For a brief-only diagram, work from the user's stated facts and make no repository claims. For a codebase diagram, capture the Git root, full HEAD, and dirty state; inspect the call path, gates, errors, and side effects that change the story. Mixed evidence is allowed and remains visibly separated.
@@ -92,6 +105,8 @@ python3 <skill-root>/scripts/render.py compare <previous.html> <current.html> --
 Comparison reports stable-ID `added`, `removed`, `changed`, `moved`, and `rerouted` records with receipt-bound rendered before/after SVG snapshots and the authored delta table. The snapshots retain the exact checked input models, source revision headers, and accessible titles/descriptions; the page remains static and uses one hashed local stylesheet. Moved records and inventories include authored layer and within-layer position. It does not infer impact, risk, compatibility, deployment state, or merge safety. Do not use it as a substitute for `patpat-impact`, tests, or review.
 
 Run `self-test` after renderer changes. Its layout and safety checks do not prove that source claims are semantically correct or that a picture is perceptually clear. Run the repository validator when changing the skill or its output contract.
+
+Run `python3 <skill-root>/scripts/import_graph.py --self-test` after analyzer changes. It checks bounded source reads, symlink/non-regular handling where supported, parser and unresolved-import contracts, cycle classification, and strict layout repair. The repository validator runs this check as part of its self-test.
 
 Before delivery, verify:
 

@@ -159,7 +159,7 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 | [`patpat`](skills/patpat/SKILL.md) | Slash alias for the loop. `/patpat` is the default entry. |
 | [`patpat-loop`](skills/patpat-loop/SKILL.md) | The work is non-trivial and needs the full loop. |
 | [`patpat-inspect`](skills/patpat-inspect/SKILL.md) | Explain, audit, or diagnose without editing. |
-| [`patpat-repository-diagram`](skills/patpat-repository-diagram/SKILL.md) | Turn an idea, plan, or codebase into a beautiful interactive diagram with editable JSON and standalone HTML/SVG. |
+| [`patpat-repository-diagram`](skills/patpat-repository-diagram/SKILL.md) | Turn an idea, plan, or codebase into an interactive diagram; optionally derive a source-evidenced Python import map. |
 | [`patpat-game-builder`](skills/patpat-game-builder/SKILL.md) | Build a playable game slice or gameplay feature, then verify the real player path. |
 | [`patpat-plan`](skills/patpat-plan/SKILL.md) | Sequence verifiable phases without implementing them. |
 | [`patpat-impact`](skills/patpat-impact/SKILL.md) | Prove blast radius and downstream invariants. |

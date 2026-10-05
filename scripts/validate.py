@@ -821,6 +821,9 @@ def validate_root(root: Path) -> list[str]:
     diagram_renderer = root / "skills" / "patpat-repository-diagram" / "scripts" / "render.py"
     if not diagram_renderer.is_file():
         errors.append(f"{diagram_renderer}: missing native repository-diagram renderer")
+    import_graph = root / "skills" / "patpat-repository-diagram" / "scripts" / "import_graph.py"
+    if not import_graph.is_file():
+        errors.append(f"{import_graph}: missing optional Python import graph analyzer")
     codex_smoke = root / "scripts" / "smoke_codex_plugin.py"
     if not codex_smoke.is_file():
         errors.append(f"{codex_smoke}: missing isolated Codex marketplace smoke test")
@@ -1024,6 +1027,9 @@ def run_self_test(root: Path) -> list[str]:
 
     def remove_dry_run(fixture: Path) -> None:
         (fixture / "scripts" / "dry_run_loop.py").unlink()
+
+    def remove_import_graph(fixture: Path) -> None:
+        (fixture / "skills" / "patpat-repository-diagram" / "scripts" / "import_graph.py").unlink()
 
     def remove_inspect_eval(fixture: Path) -> None:
         (fixture / "scripts" / "eval_inspect.py").unlink()
@@ -1410,6 +1416,7 @@ def run_self_test(root: Path) -> list[str]:
             ("missing stage script", remove_stage_script, "missing allowlisted plugin staging script"),
             ("missing portable updater", remove_update_script, "missing portable skill updater"),
             ("missing loop dry-run", remove_dry_run, "missing loop dry-run"),
+            ("missing Python import graph analyzer", remove_import_graph, "missing optional Python import graph analyzer"),
             ("missing inspect eval", remove_inspect_eval, "missing inspect contract eval"),
             ("missing why eval", remove_why_eval, "missing rationale contract eval"),
             ("missing representation eval", remove_representation_eval, "missing representation contract eval"),
@@ -1653,6 +1660,18 @@ def run_self_test(root: Path) -> list[str]:
     if diagram_result.returncode != 0:
         failures.append(
             f"self-test: repository-diagram renderer failed: {diagram_result.stdout}{diagram_result.stderr}"
+        )
+    import_graph = root / "skills" / "patpat-repository-diagram" / "scripts" / "import_graph.py"
+    import_graph_result = subprocess.run(
+        [sys.executable, str(import_graph), "--self-test"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if import_graph_result.returncode != 0:
+        failures.append(
+            "self-test: repository-diagram import graph failed: "
+            f"{import_graph_result.stdout}{import_graph_result.stderr}"
         )
     decisions_helper = root / "skills" / "patpat-run" / "scripts" / "decisions.py"
     decisions_result = subprocess.run(
