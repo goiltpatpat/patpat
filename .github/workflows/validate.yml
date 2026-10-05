@@ -124,4 +124,5 @@ jobs:
           python scripts/update_skills.py --self-test
           python scripts/stage_plugin.py --self-test
           python skills/patpat-repository-diagram/scripts/render.py self-test
+          python skills/patpat-repository-diagram/scripts/import_graph.py --self-test
           python skills/patpat-run/scripts/run_state.py --self-test

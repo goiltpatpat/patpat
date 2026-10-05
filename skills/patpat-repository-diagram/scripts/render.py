@@ -631,11 +631,48 @@ def _text_width(value: str) -> float:
     return width
 
 
+def _split_long_token(value: str, max_width: float) -> list[str]:
+    pieces: list[str] = []
+    while _text_width(value) > max_width:
+        fitting = [index for index in range(1, len(value) + 1) if _text_width(value[:index]) <= max_width]
+        if not fitting:
+            break
+        limit = max(fitting)
+        natural = [index + 1 for index, char in enumerate(value[:limit]) if char in "/_-"]
+        cut = max(natural) if natural else limit
+        pieces.append(value[:cut])
+        value = value[cut:]
+    if value:
+        pieces.append(value)
+    return pieces
+
+
 def _wrap(value: str, max_width: float) -> list[str]:
     words = value.split()
     lines: list[str] = []
     current = ""
     for word in words:
+        if _text_width(word) > max_width and any(char in word for char in "/_-"):
+            pieces = _split_long_token(word, max_width)
+            if current:
+                first = pieces.pop(0)
+                candidate = f"{current} {first}"
+                if _text_width(candidate) <= max_width:
+                    lines.append(candidate)
+                else:
+                    lines.append(current)
+                    pieces.insert(0, first)
+                current = ""
+            segment = ""
+            for piece in pieces:
+                if segment and _text_width(segment + piece) > max_width:
+                    lines.append(segment)
+                    segment = piece
+                else:
+                    segment += piece
+            if segment:
+                lines.append(segment)
+            continue
         pieces = []
         while _text_width(word) > max_width:
             cut = 1
@@ -1185,7 +1222,18 @@ def _graph_routes(
     for edge in normal:
         source_edges[edge["source"]].append(edge)
         target_edges[edge["target"]].append(edge)
-    if direction == "TB":
+    if direction == "LR":
+        for group in source_edges.values():
+            group.sort(key=lambda edge: (
+                positions[edge["target"]]["y"] + positions[edge["target"]]["h"] / 2,
+                positions[edge["target"]]["x"], edge["target"], edge["id"],
+            ))
+        for group in target_edges.values():
+            group.sort(key=lambda edge: (
+                positions[edge["source"]]["y"] + positions[edge["source"]]["h"] / 2,
+                positions[edge["source"]]["x"], edge["source"], edge["id"],
+            ))
+    else:
         for group in source_edges.values():
             group.sort(key=lambda edge: positions[edge["target"]]["x"] + positions[edge["target"]]["w"] / 2)
         for group in target_edges.values():
@@ -4241,6 +4289,9 @@ def _sample_spec(diagram_type: str, title: str) -> dict[str, Any]:
 
 def self_test() -> None:
     global _browser_check
+    path_lines = _wrap("tests/test_sanitize_logs.py", 176)
+    if path_lines != ["tests/test_sanitize_", "logs.py"] or "".join(path_lines) != "tests/test_sanitize_logs.py":
+        raise AssertionError(f"long source paths must wrap at path separators without losing characters: {path_lines}")
     viewer_source = _viewer_script()
     if (
         "patpat-browser-check" not in viewer_source
@@ -5513,15 +5564,15 @@ def self_test() -> None:
         )
         if abs((min(narrow_x) + max(narrow_x)) / 2.0 - narrow_layout["width"] / 2.0) > 0.5:
             raise AssertionError("TB graph content is not centered within its authored canvas")
-        fanout = _sample_spec("architecture", "Shared source crossing")
+        fanout = _sample_spec("architecture", "Shared source fan-out")
         fanout["body"]["relationships"] = [
             {"id": "E1", "source": "N1", "target": "N3", "label": "lower branch", "kind": "call", "certainty": "confirmed", "evidence_ids": ["S1"]},
             {"id": "E2", "source": "N1", "target": "N2", "label": "upper branch", "kind": "call", "certainty": "confirmed", "evidence_ids": ["S1"]},
         ]
         fanout["layout"] = {"direction": "LR", "layers": [["N1"], ["N2", "N3"]]}
         fanout_layout = _make_layout(validate_spec(fanout, root))
-        if not any(warning.startswith("edge crossing: E1/E2") for warning in fanout_layout["warnings"]):
-            raise AssertionError(f"crossing fan-out paths sharing N1 were not diagnosed: {fanout_layout['warnings']}")
+        if fanout_layout["warnings"]:
+            raise AssertionError(f"shared-source LR edges were not ordered by target: {fanout_layout['warnings']}")
         sequence_tb = _sample_spec("sequence", "Unsupported sequence direction")
         sequence_tb["layout"] = {"direction": "TB"}
         try:
