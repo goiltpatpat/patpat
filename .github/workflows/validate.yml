@@ -126,3 +126,5 @@ jobs:
           python skills/patpat-repository-diagram/scripts/render.py self-test
           python skills/patpat-repository-diagram/scripts/import_graph.py --self-test
           python skills/patpat-run/scripts/run_state.py --self-test
+          python hooks/scripts/patpat_loop_state.py --self-test
+          python tests/smoke_windows_codex_hooks.py

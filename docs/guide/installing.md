@@ -2,7 +2,7 @@
 
 Patpat keeps one canonical `skills/` tree and thin host adapters. Select one installation route; do not combine native and copied installations in the same host scope.
 
-Patpat's scripts and hooks require Python 3.11 or newer.
+Patpat's scripts and hooks require Python 3.11 or newer. Windows Codex hooks locate it with `py.exe -3`, then `python.exe` on `PATH`; the launcher reports an error if neither provides Python 3.11+.
 
 Agents should follow [`AGENTS.md`](../../AGENTS.md). The published source is `https://github.com/goiltpatpat/patpat`. The Codex plugin id is `patpat@patpat`.
 

@@ -84,12 +84,28 @@ def hook_command(plugin_root: Path) -> str:
     return command
 
 
-def execute_hook(command: str, environment: dict[str, str], payload: dict[str, Any]) -> str:
-    result = run(
+def invoke_hook(
+    command: str,
+    environment: dict[str, str],
+    payload: dict[str, Any],
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
         ["/bin/sh", "-c", command],
-        environment,
-        input_text=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        env=environment,
+        input=json.dumps(payload),
+        timeout=30,
+        check=False,
     )
+
+
+def execute_hook(command: str, environment: dict[str, str], payload: dict[str, Any]) -> str:
+    result = invoke_hook(command, environment, payload)
+    if result.returncode != 0:
+        raise SmokeError(
+            f"hook failed ({result.returncode})\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        )
     return result.stdout.strip()
 
 
@@ -111,10 +127,10 @@ def smoke_manifest_commands(source: Path) -> None:
         "cwd": str(source),
         "prompt": "/patpat verify this change",
     }
-    root_manifest = json.loads((source / "hooks.json").read_text(encoding="utf-8"))
-    root_command = root_manifest["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
+    codex_manifest = json.loads((source / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+    codex_command = codex_manifest["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
     commands = (
-        ("codex", root_command, "PLUGIN_ROOT", "PLUGIN_DATA"),
+        ("codex", codex_command, "PLUGIN_ROOT", "PLUGIN_DATA"),
         ("grok", hook_command(source), "GROK_PLUGIN_ROOT", "GROK_PLUGIN_DATA"),
         ("cursor", cursor_hook_command(source), "CURSOR_PLUGIN_ROOT", "PLUGIN_DATA"),
     )
@@ -137,13 +153,73 @@ def smoke_manifest_commands(source: Path) -> None:
             activated = execute_hook(command, environment, {**payload, "session_id": f"{host}-session"})
             if "sticky receipt" not in activated:
                 raise SmokeError(f"{host} manifest command did not activate Patpat")
+            session_id = f"{host}-session"
+            if host in {"codex", "grok"}:
+                startup = execute_hook(
+                    command,
+                    environment,
+                    {
+                        "hook_event_name": "SessionStart",
+                        "session_id": session_id,
+                        "cwd": str(source),
+                        "source": "startup",
+                    },
+                )
+                missing_resume = execute_hook(
+                    command,
+                    environment,
+                    {
+                        "hook_event_name": "SessionStart",
+                        "session_id": f"{host}-missing-resume",
+                        "cwd": str(source),
+                        "source": "resume",
+                    },
+                )
+                if startup or missing_resume:
+                    raise SmokeError(f"{host} healthy SessionStart no-op emitted context")
+                for source_name in ("resume", "compact"):
+                    resumed = execute_hook(
+                        command,
+                        environment,
+                        {
+                            "hook_event_name": "SessionStart",
+                            "session_id": session_id,
+                            "cwd": str(source),
+                            "source": source_name,
+                        },
+                    )
+                    if "Patpat Loop is active" not in resumed:
+                        raise SmokeError(f"{host} SessionStart {source_name} did not restore context")
+                ended = execute_hook(
+                    command,
+                    environment,
+                    {
+                        "hook_event_name": "SessionEnd",
+                        "session_id": session_id,
+                        "cwd": str(source),
+                    },
+                )
+                if ended:
+                    raise SmokeError(f"{host} SessionEnd unexpectedly emitted output")
             execute_hook(
                 command,
                 environment,
-                {**payload, "session_id": f"{host}-session", "prompt": "disable /patpat"},
+                {**payload, "session_id": session_id, "prompt": "disable /patpat"},
             )
             if list(data.rglob("*.json")):
                 raise SmokeError(f"{host} manifest command left state after disable")
+            if host in {"codex", "grok"}:
+                missing_data_environment = environment.copy()
+                missing_data_environment.pop(data_key, None)
+                missing_data = invoke_hook(command, missing_data_environment, payload)
+                if missing_data.returncode != 2 or "PLUGIN_DATA is missing" not in missing_data.stderr:
+                    raise SmokeError(f"{host} hook did not diagnose missing plugin data")
+
+                missing_root_environment = environment.copy()
+                missing_root_environment.pop(root_key, None)
+                missing_root = invoke_hook(command, missing_root_environment, payload)
+                if missing_root.returncode != 2 or "PLUGIN_ROOT is missing" not in missing_root.stderr:
+                    raise SmokeError(f"{host} hook did not diagnose missing plugin root")
 
 
 def main() -> int:
@@ -218,6 +294,31 @@ def main() -> int:
         if "Patpat Loop is active" not in continued:
             raise SmokeError("subsequent Grok turn did not retain Patpat Loop")
 
+        for source_name in ("resume", "compact"):
+            resumed = execute_hook(
+                command,
+                hook_environment,
+                {
+                    "hook_event_name": "SessionStart",
+                    "session_id": payload["session_id"],
+                    "cwd": payload["cwd"],
+                    "source": source_name,
+                },
+            )
+            if "Patpat Loop is active" not in resumed:
+                raise SmokeError(f"Grok SessionStart {source_name} did not restore Patpat Loop")
+        ended = execute_hook(
+            command,
+            hook_environment,
+            {
+                "hook_event_name": "SessionEnd",
+                "session_id": payload["session_id"],
+                "cwd": payload["cwd"],
+            },
+        )
+        if ended or len(list(plugin_data.rglob("*.json"))) != 2:
+            raise SmokeError("Grok SessionEnd failed or cleared resumable state")
+
         disabled = execute_hook(command, hook_environment, {**payload, "prompt": "disable /patpat"})
         if disabled:
             raise SmokeError("disable unexpectedly emitted sticky context")
@@ -241,17 +342,17 @@ def main() -> int:
 
         fail_closed_environment = hook_environment.copy()
         fail_closed_environment.pop("GROK_PLUGIN_DATA", None)
-        fail_closed = execute_hook(command, fail_closed_environment, payload)
-        if fail_closed:
-            raise SmokeError("missing plugin data did not fail closed")
+        fail_closed = invoke_hook(command, fail_closed_environment, payload)
+        if fail_closed.returncode != 2 or "PLUGIN_DATA is missing" not in fail_closed.stderr:
+            raise SmokeError("missing plugin data was not diagnosed")
         if list(plugin_data.rglob("*.json")):
-            raise SmokeError("fail-closed execution persisted state")
+            raise SmokeError("missing plugin data execution persisted state")
 
         rootless_environment = fail_closed_environment.copy()
         rootless_environment.pop("GROK_PLUGIN_ROOT", None)
-        rootless = execute_hook(command, rootless_environment, payload)
-        if rootless:
-            raise SmokeError("missing plugin root did not fail closed")
+        rootless = invoke_hook(command, rootless_environment, payload)
+        if rootless.returncode != 2 or "PLUGIN_ROOT is missing" not in rootless.stderr:
+            raise SmokeError("missing plugin root was not diagnosed")
 
         run([grok, "plugin", "uninstall", "patpat"], environment)
         remaining = plugin_entries(run_json([grok, "plugin", "list", "--json"], environment))
