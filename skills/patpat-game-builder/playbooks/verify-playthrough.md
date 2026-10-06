@@ -13,6 +13,8 @@ Bind every claim to the current project snapshot, target runtime, and an observa
 | Performance | A measured build meets the user's named target and workload. | Other workloads, hardware, platforms, or release readiness. |
 | Package or export | The exact target artifact starts and includes the resources required by the requested path. | Store readiness, other platforms, or untested runtime behavior. |
 
+For claims about difficulty, balance, feel, or fun, name the intended player group, relevant scenario, and observable question before evaluation. A balance claim needs a stated comparison or baseline. Use play from that group when authorized and available, and record only observations or feedback tied to the question. Agent-controlled play can prove that a path works, not how the intended player experiences it. Scope conclusions to the players and scenarios observed. If this evidence is unavailable, mark that claim unverified and name the gap.
+
 ## Run the declared path
 
 1. Confirm the exact project launcher and runtime version from repository evidence. Record the command, source revision, platform, viewport, and input device. For a dirty worktree, identify which changed source, asset, and configuration files were included in the run.
