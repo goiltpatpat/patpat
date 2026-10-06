@@ -236,6 +236,7 @@ EXPECTED_HOOK_FILES = {
     Path("hooks/hooks.json"),
     Path("hooks/cursor.json"),
     Path("hooks/scripts/patpat_loop_state.py"),
+    Path("hooks/scripts/patpat_loop_state.cmd"),
 }
 
 
@@ -494,15 +495,35 @@ def validate_hooks(root: Path, parsed: dict[str, dict[str, object]], errors: lis
     if parsed.get("cursor", {}).get("hooks") != "./hooks/cursor.json":
         errors.append("Cursor manifest hooks must point to ./hooks/cursor.json")
     if "hooks" in parsed.get("codex", {}):
-        errors.append("Codex manifest must use the conventional root hooks.json")
+        errors.append("Codex manifest must use default hooks/hooks.json discovery")
     if "hooks" in parsed.get("antigravity", {}):
         errors.append("Antigravity manifest must not claim packaged hooks")
-    codex_hooks = root / "hooks.json"
-    grok_hooks = root / "hooks" / "hooks.json"
+    codex_hooks = root / "hooks" / "hooks.json"
+    root_mirror = root / "hooks.json"
     if not codex_hooks.is_file():
-        errors.append(f"{codex_hooks}: missing conventional Codex hooks")
-    elif grok_hooks.is_file() and codex_hooks.read_bytes() != grok_hooks.read_bytes():
-        errors.append("Codex and Grok hook manifests must remain identical")
+        errors.append(f"{codex_hooks}: missing default Codex plugin hooks")
+    if not root_mirror.is_file():
+        errors.append(f"{root_mirror}: missing mirrored hook manifest")
+    elif codex_hooks.is_file() and root_mirror.read_bytes() != codex_hooks.read_bytes():
+        errors.append("Root and plugin hook manifests must remain identical")
+    if codex_hooks.is_file():
+        try:
+            hook_data = json.loads(codex_hooks.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            hook_data = {}
+        hook_events = hook_data.get("hooks") if isinstance(hook_data, dict) else None
+        for event in ("SessionStart", "UserPromptSubmit", "SessionEnd"):
+            groups = hook_events.get(event, []) if isinstance(hook_events, dict) else []
+            commands = [
+                entry.get("commandWindows")
+                for group in groups
+                if isinstance(group, dict)
+                and isinstance(group.get("hooks", []), list)
+                for entry in group.get("hooks", [])
+                if isinstance(entry, dict)
+            ]
+            if not commands or any(not isinstance(command, str) or not command for command in commands):
+                errors.append(f"{codex_hooks}: {event} must define Windows command hooks")
     script = root / "hooks" / "scripts" / "patpat_loop_state.py"
     if script.is_file() and "PLUGIN_DATA" not in script.read_text(encoding="utf-8"):
         errors.append(f"{script}: sticky hook must fail closed without PLUGIN_DATA")

@@ -642,6 +642,19 @@ def run_self_test() -> None:
             raise AssertionError("CLAUDE_PLUGIN_DATA compatibility alias was not recognized")
         if resolve_plugin_data({}) is not None:
             raise AssertionError("missing plugin data environment must fail closed")
+        expired_payload = {**payload, "session_id": "expired-session"}
+        expired = handle_hook(expired_payload, plugin_data=plugin_data, now_ms=80_000)
+        expired_targets = state_paths(plugin_data, "expired-session")
+        if not expired or not expired_targets:
+            raise AssertionError("expired-state fixture could not be activated")
+        if handle_hook(
+            {**expired_payload, "prompt": "continue"},
+            plugin_data=plugin_data,
+            now_ms=80_000 + DEFAULT_TTL_MS + 1,
+        ):
+            raise AssertionError("expired sticky state was trusted")
+        if expired_targets["state"].exists() or expired_targets["receipt"].exists():
+            raise AssertionError("expired sticky state was not cleared")
     print("Patpat loop sticky-hook self-test passed.")
 
 
@@ -661,7 +674,7 @@ def main() -> int:
         return 0
     payload = decode_payload(sys.stdin.buffer.read(MAX_STDIN_BYTES + 1))
     if payload is None:
-        return 0
+        raise ValueError("hook stdin must contain a UTF-8 JSON object within the size limit")
     output = handle_hook(payload)
     if output:
         json.dump(output, sys.stdout)
@@ -670,9 +683,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    if "--self-test" in sys.argv:
-        raise SystemExit(main())
     try:
         raise SystemExit(main())
-    except Exception:
-        raise SystemExit(0)
+    except Exception as error:
+        print(f"Patpat hook error: {type(error).__name__}: {error}", file=sys.stderr)
+        raise SystemExit(1)
