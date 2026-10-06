@@ -621,13 +621,28 @@ def validate_root(root: Path) -> list[str]:
     else:
         allowed_interface_keys = {
             "displayName", "shortDescription", "longDescription", "developerName",
-            "category", "capabilities", "defaultPrompt",
+            "category", "capabilities", "defaultPrompt", "logo", "composerIcon",
         }
         unknown = set(codex_interface) - allowed_interface_keys
         if unknown:
             errors.append(
                 f"{manifests['codex']}: unsupported interface fields {sorted(unknown)}"
             )
+        for field in ("logo", "composerIcon"):
+            if codex_interface.get(field) != "./assets/logo.png":
+                errors.append(
+                    f"{manifests['codex']}: interface.{field} must be ./assets/logo.png relative to the plugin root"
+                )
+            else:
+                logo_file = root / "assets" / "logo.png"
+                if (
+                    not logo_file.is_file()
+                    or logo_file.is_symlink()
+                    or logo_file.parent.is_symlink()
+                ):
+                    errors.append(
+                        f"{manifests['codex']}: interface.{field} asset file is missing: ./assets/logo.png"
+                    )
         for field in ("displayName", "shortDescription", "developerName"):
             if not codex_interface.get(field):
                 errors.append(
@@ -1382,6 +1397,15 @@ def run_self_test(root: Path) -> list[str]:
         data["logo"] = "assets/logo.png"
         manifest.write_text(json.dumps(data), encoding="utf-8")
 
+    def set_codex_interface_asset(fixture: Path, field: str, value: str) -> None:
+        manifest = fixture / ".codex-plugin" / "plugin.json"
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data["interface"][field] = value
+        manifest.write_text(json.dumps(data), encoding="utf-8")
+
+    def remove_codex_logo_asset(fixture: Path) -> None:
+        (fixture / "assets" / "logo.png").unlink()
+
     def cursor_logo_absolute(fixture: Path) -> None:
         manifest = fixture / ".cursor-plugin" / "plugin.json"
         data = json.loads(manifest.read_text(encoding="utf-8"))
@@ -1468,7 +1492,22 @@ def run_self_test(root: Path) -> list[str]:
             ("mutating proof closure", break_proof_closure, "missing canonical proof closure directive"),
             ("unclassified skill", remove_skill_policy_target, "Skill policy registry mismatch"),
             ("Antigravity logo field", add_logo_to_antigravity, "unsupported manifest fields"),
-            ("Codex logo field", add_logo_to_codex, "unsupported manifest fields"),
+            ("unsupported Codex root logo field", add_logo_to_codex, "unsupported manifest fields"),
+            (
+                "Codex interface logo path",
+                lambda fixture: set_codex_interface_asset(fixture, "logo", "assets/logo.png"),
+                "interface.logo must be ./assets/logo.png relative to the plugin root",
+            ),
+            (
+                "Codex composer icon path escape",
+                lambda fixture: set_codex_interface_asset(fixture, "composerIcon", "../assets/logo.png"),
+                "interface.composerIcon must be ./assets/logo.png relative to the plugin root",
+            ),
+            (
+                "Codex missing logo asset",
+                remove_codex_logo_asset,
+                "interface.logo asset file is missing",
+            ),
             ("Cursor logo absolute path", cursor_logo_absolute, "logo must not use an absolute path"),
             ("Cursor logo parent path", cursor_logo_parent, "logo must not use .."),
             ("Cursor logo wrong relative", cursor_logo_wrong_relative, "logo must be the relative path assets/logo.png"),

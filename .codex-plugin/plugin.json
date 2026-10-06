@@ -21,6 +21,8 @@
     "longDescription": "Route repository work through inspection, bounded implementation, real-artifact verification, safety review, and evidence-based reporting.",
     "developerName": "Patpat maintainers",
     "category": "Developer Tools",
+    "logo": "./assets/logo.png",
+    "composerIcon": "./assets/logo.png",
     "capabilities": [
       "Interactive",
       "Read",
