@@ -26,8 +26,6 @@ Read [gameplay contract](principles/gameplay-contract.md), [player feedback](pri
 - Keep playable, rule-correct, visual, performance, and release claims separate. Report only the gates the request and evidence cover.
 - Do not publish, upload, buy assets, create accounts, or enable online services without explicit authority.
 
-The [pstack “Prove It Works” principle](https://github.com/cursor/plugins/blob/main/pstack/skills/principle-prove-it-works/SKILL.md) informs direct artifact proof; [Matt Pocock's TDD workflow](https://github.com/mattpocock/skills/blob/main/skills/engineering/tdd/SKILL.md) informs small red-green behavior slices. Patpat adapts these methods in its own gates and playbooks; neither source is installed or copied as a dependency.
-
 ## Proof closure
 
 Define the five-field proof contract before any mutation. Close mutating work with:
