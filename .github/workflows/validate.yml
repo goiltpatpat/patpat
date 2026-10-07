@@ -118,13 +118,24 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
+          # Later native commands can overwrite LASTEXITCODE, so stop at each failed check.
           python scripts/sanitize_logs.py --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/eval_adversarial_controls.py --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/install_skills.py --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/update_skills.py --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/stage_plugin.py --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python skills/patpat-repository-diagram/scripts/render.py self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python skills/patpat-repository-diagram/scripts/import_graph.py --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python skills/patpat-run/scripts/run_state.py --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python hooks/scripts/patpat_loop_state.py --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/smoke_windows_codex_hooks.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

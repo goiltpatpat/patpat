@@ -113,19 +113,31 @@ def main() -> int:
             input_bytes = raw_input
             if input_bytes is None:
                 input_bytes = json.dumps(request, ensure_ascii=False).encode("utf-8")
+            label = (
+                f"{request.get('hook_event_name', 'unknown-event')}/"
+                f"{request.get('session_id', 'unknown-session')}"
+                if request is not None
+                else "malformed stdin"
+            )
             # Codex wraps the selected command when invoking COMSPEC /C on Windows.
             command_line = f'"{comspec}" /C "{command}"'
             started = time.perf_counter()
-            result = subprocess.run(
-                command_line,
-                input=input_bytes,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                cwd=project,
-                env=environment if env is None else env,
-                timeout=5,
-                check=False,
-            )
+            try:
+                result = subprocess.run(
+                    command_line,
+                    input=input_bytes,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    cwd=project,
+                    env=environment if env is None else env,
+                    timeout=5,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as error:
+                elapsed = time.perf_counter() - started
+                raise SmokeError(
+                    f"{label} exceeded the 5-second launcher timeout after {elapsed:.3f}s"
+                ) from error
             invocation_seconds.append(time.perf_counter() - started)
             return result
 
