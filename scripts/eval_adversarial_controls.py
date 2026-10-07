@@ -407,9 +407,9 @@ def main() -> int:
     print("======================================================================")
     all_passed = True
     for r in results:
-        status_symbol = "✓" if r["status"] == "PASS" else "✗"
-        classification = r.get("classification", "VERIFIED")
-        print(f"\n{status_symbol} {r['scenario']} [{classification}]")
+        status_label = "[PASS]" if r["status"] == "PASS" else "[FAIL]"
+        classification = str(r.get("classification", "VERIFIED")).replace("—", "-")
+        print(f"\n{status_label} {r['scenario']} [{classification}]")
         print(f"  Invariant:          {r['invariant']}")
         print(f"  Expected Decision:  {r['expected']}")
         print(f"  Observed Result:    {r['observable']}")

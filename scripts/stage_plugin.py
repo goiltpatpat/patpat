@@ -157,7 +157,7 @@ def stage(source: Path, target: Path) -> dict[str, str]:
 def run_self_test(source: Path) -> None:
     with tempfile.TemporaryDirectory(prefix="patpat-stage-filter-test-") as directory:
         root = Path(directory)
-        package_root = root / "source"
+        package_root = (root / "source").resolve()
         docs = package_root / "docs"
         (docs / "guide").mkdir(parents=True)
         (docs / "Diagrams").mkdir()
