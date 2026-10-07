@@ -35,7 +35,7 @@ codex plugin marketplace add goiltpatpat/patpat --ref <release-tag-or-commit>
 codex plugin add patpat@patpat
 ```
 
-The Codex and Cursor manifests share Patpat's SemVer package version; the portable Agent Plugins manifest inherits it from the Codex manifest. Its `$schema` version identifies the Agent Plugins format and changes independently. Patpat is pre-1.0, so compatibility is not guaranteed; use patch versions for compatible fixes and minor versions for new or incompatible plugin behavior. Use GitHub Releases for curated user-facing notes and publish matching `v<version>` tags from reviewed, merged commits; CI checks only tag-name/version equality.
+The Codex and Cursor manifests share Patpat's package version; the portable Agent Plugins manifest inherits it from the Codex manifest. Its `$schema` version tracks the Agent Plugins format independently. Treat the package version as a release identifier, not a push or PR counter: ordinary merges do not bump it, and internal-only docs, tests, or refactors do not justify a package release. At release preparation, assess the user-facing changes accumulated since the previous release and bump both manifests together: use a patch for compatible fixes and a minor version for new capabilities; while Patpat remains pre-1.0, use a minor version for incompatible changes too. After 1.0, reserve major versions for breaking changes; use `1.0.0` when maintainers commit to a stable public contract. Publish curated notes as a GitHub Release with a matching `v<version>` tag from a reviewed, merged commit; CI checks tag/version equality, not release quality.
 
 From a local working tree:
 
