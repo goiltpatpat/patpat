@@ -22,7 +22,6 @@ PACKAGE_ENTRIES = (
     ".cursor-plugin",
     ".gitignore",
     "AGENTS.md",
-    "CHANGELOG.md",
     "LICENSE",
     "README.md",
     "adapters",

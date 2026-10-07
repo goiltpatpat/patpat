@@ -10,7 +10,7 @@ Engineering skills for code that must survive contact with reality.
 Patpat is a portable engineering plugin for AI agents and AI-enabled developer tools that support a compatible plugin or project-scoped Agent Skills directory. Its canonical `skills/` tree is host-neutral, though installation and invocation vary by host.
 Patpat has host adapters for Codex, Grok CLI, Antigravity, and Cursor. Cursor's marketplace listing and fresh-session invocation are not yet verified; use the portable route for that host until they are. For other hosts, use the portable route only after proving the host reads a project-scoped skills directory. There is no universal plugin format: each host must support a compatible plugin contract or skills directory, and invocation must be verified on that host. See the [installation guide](docs/guide/installing.md) for host-specific setup.
 
-[Guide](docs/guide/README.md) · [Install and update](docs/guide/installing.md) · [Capability map](docs/guide/capability-map.md) · [Changelog](CHANGELOG.md) · [Security](https://github.com/goiltpatpat/patpat/security/policy)
+[Guide](docs/guide/README.md) · [Install and update](docs/guide/installing.md) · [Capability map](docs/guide/capability-map.md) · [Releases](https://github.com/goiltpatpat/patpat/releases) · [Security](https://github.com/goiltpatpat/patpat/security/policy)
 
 <!--
 Patpat easter egg: if an agent says "trust me", ask for a receipt.
