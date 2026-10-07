@@ -224,7 +224,7 @@ def run_self_test(source: Path) -> None:
     def create_windows_junction(link: Path, target: Path) -> bool:
         if os.name != "nt" or not hasattr(os.stat_result, "st_file_attributes"):
             return False
-        command = shutil.which("cmd.exe")
+        command = shutil.which("powershell.exe") or shutil.which("pwsh.exe")
         if command is None:
             return False
         environment = os.environ.copy()
@@ -233,10 +233,11 @@ def run_self_test(source: Path) -> None:
         result = subprocess.run(
             [
                 command,
-                "/d",
-                "/v:off",
-                "/c",
-                'mklink /J "%PATPAT_TEST_JUNCTION_LINK%" "%PATPAT_TEST_JUNCTION_TARGET%"',
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "$ErrorActionPreference = 'Stop'; New-Item -ItemType Junction -Path $env:PATPAT_TEST_JUNCTION_LINK -Target $env:PATPAT_TEST_JUNCTION_TARGET | Out-Null",
             ],
             check=False,
             capture_output=True,
@@ -314,13 +315,13 @@ def run_self_test(source: Path) -> None:
                 expect_inventory_refusal(root_symlink, expected_kind="symlink")
 
         if os.name == "nt" and hasattr(os.stat_result, "st_file_attributes"):
-            junction_target = root / "junction-target"
+            junction_target = root / "junction target โปรเจกต์"
             junction_target.mkdir()
             (junction_target / "payload.txt").write_text("outside package root\n", encoding="utf-8")
 
-            junction_source = root / "junction-source"
+            junction_source = root / "junction source"
             junction_source.mkdir()
-            if create_windows_junction(junction_source / "outside", junction_target):
+            if create_windows_junction(junction_source / "outside link", junction_target):
                 expect_copy_refusal(
                     junction_source,
                     root / "junction-descendant-output",
@@ -329,7 +330,7 @@ def run_self_test(source: Path) -> None:
                 )
                 expect_inventory_refusal(junction_source, expected_kind="reparse point")
 
-                junction_root = root / "junction-root"
+                junction_root = root / "junction root"
                 if create_windows_junction(junction_root, junction_target):
                     expect_copy_refusal(
                         junction_root,
