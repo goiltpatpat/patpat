@@ -24,6 +24,14 @@ SEMVER_PATTERN = re.compile(
 )
 LINK_PATTERN = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 ALLOWED_FRONTMATTER = {"name", "description", "disable-model-invocation"}
+AGENT_SKILL_FRONTMATTER_FIELDS = {
+    "name",
+    "description",
+    "license",
+    "compatibility",
+    "metadata",
+    "allowed-tools",
+}
 MODE_SKILLS = {"patpat", "patpat-loop"}
 PUBLISHED_SOURCE = "https://github.com/goiltpatpat/patpat"
 ANTIGRAVITY_PLUGIN_SCHEMA = "https://antigravity.google/schemas/v1/plugin.json"
@@ -322,7 +330,6 @@ def validate_agent_plugin_manifest(
     for field in ("version", "description", "homepage", "repository", "license"):
         if field in manifest and not isinstance(manifest[field], str):
             errors.append(f"{path}: {field} must be a string")
-
     if "author" in manifest:
         author = manifest["author"]
         if not isinstance(author, dict):
@@ -694,21 +701,33 @@ def validate_agent_plugin_package(root: Path) -> list[str]:
             continue
         name = frontmatter.get("name", "")
         description = frontmatter.get("description", "")
-        unknown = set(frontmatter) - ALLOWED_FRONTMATTER
+        unknown = set(frontmatter) - AGENT_SKILL_FRONTMATTER_FIELDS
         if unknown:
-            errors.append(f"{skill_file}: non-portable frontmatter: {sorted(unknown)}")
+            errors.append(
+                f"{skill_file}: frontmatter is not Agent Skills compatible; "
+                f"unsupported fields {sorted(unknown)}"
+            )
         if name != skill_name:
             errors.append(f"{skill_file}: name must match folder {skill_name}")
         if not NAME_PATTERN.fullmatch(name):
             errors.append(f"{skill_file}: invalid skill name {name!r}")
         if not description:
             errors.append(f"{skill_file}: description is required")
+        elif len(description) > 1024:
+            errors.append(f"{skill_file}: description exceeds the Agent Skills 1024-character limit")
         elif description in descriptions:
             errors.append(
                 f"{skill_file}: duplicate description also used by {descriptions[description]}"
             )
         else:
             descriptions[description] = skill_file
+        if len(name) > 64:
+            errors.append(f"{skill_file}: name exceeds the Agent Skills 64-character limit")
+        compatibility = frontmatter.get("compatibility")
+        if compatibility is not None and len(compatibility) > 500:
+            errors.append(
+                f"{skill_file}: compatibility exceeds the Agent Skills 500-character limit"
+            )
         if not body:
             errors.append(f"{skill_file}: body is required")
 
@@ -1645,6 +1664,14 @@ def run_self_test(root: Path) -> list[str]:
         fixture.mkdir()
         shutil.copy2(root / "LICENSE", fixture / "LICENSE")
         shutil.copytree(root / "skills", fixture / "skills")
+        for skill_file in (fixture / "skills").glob("*/SKILL.md"):
+            text = skill_file.read_text(encoding="utf-8")
+            projected = re.sub(
+                r"(?m)^disable-model-invocation: true\r?\n",
+                "",
+                text,
+            )
+            skill_file.write_text(projected, encoding="utf-8")
         use_agent_plugins_manifest(fixture)
 
     def add_agent_plugin_unknown_field(fixture: Path) -> None:
@@ -1666,6 +1693,14 @@ def run_self_test(root: Path) -> list[str]:
         manifest = use_agent_plugins_manifest(fixture)
         manifest["name"] = "patpat--portable"
         (fixture / "plugin.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    def add_codex_only_agent_skill_field(fixture: Path) -> None:
+        skill_file = fixture / "skills" / "patpat-inspect" / "SKILL.md"
+        text = skill_file.read_text(encoding="utf-8")
+        skill_file.write_text(
+            text.replace("description:", "disable-model-invocation: true\ndescription:", 1),
+            encoding="utf-8",
+        )
 
     def remove_codex_logo_asset(fixture: Path) -> None:
         (fixture / "assets" / "logo.png").unlink()
@@ -1785,6 +1820,7 @@ def run_self_test(root: Path) -> list[str]:
             ("Agent Plugins invalid author field", invalidate_agent_plugin_author, "unsupported author fields"),
             ("Agent Plugins invalid extension value", invalidate_agent_plugin_extension, "extensions.com.patpat must be an object"),
             ("Agent Plugins invalid name", invalidate_agent_plugin_name, "Agent Plugins 1.0 name constraints"),
+            ("Agent Plugins Codex-only skill field", add_codex_only_agent_skill_field, "frontmatter is not Agent Skills compatible"),
         ]
     )
 
@@ -2193,7 +2229,7 @@ def main() -> int:
     parser.add_argument(
         "--agent-plugin",
         action="store_true",
-        help="validate a generated Agent Plugins 1.0 package",
+        help="validate a staged Patpat Agent Plugins 1.0 package (not a general schema validator)",
     )
     args = parser.parse_args()
     if args.self_test and args.agent_plugin:
