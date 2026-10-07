@@ -203,6 +203,16 @@ PINNED_BOUNDARY_SENTENCES = (
         "project-verifier isolation contract",
     ),
     (
+        Path("skills/patpat-loop/playbooks/project-verifier.md"),
+        (
+            "Before each driving session, pass the verifier's Doctor/readiness check; rerun it after any failed or unexpected drive.",
+            "If it reports unhealthy or wedged, do not continue.",
+            "Apply only the verifier's documented safe reset to isolated verifier-owned state, or restart the verifier-owned instance, then require readiness to pass before resuming.",
+            "If neither recovery is safe, stop as inconclusive.",
+        ),
+        "project-verifier readiness and recovery contract",
+    ),
+    (
         Path("skills/patpat-loop/references/operating-protocol.md"),
         (
             "Inspect, execute, or measure before asking.",
@@ -1371,6 +1381,18 @@ def run_self_test(root: Path) -> list[str]:
             encoding="utf-8",
         )
 
+    def strip_project_verifier_readiness(fixture: Path) -> None:
+        playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "project-verifier.md"
+        text = playbook.read_text(encoding="utf-8")
+        playbook.write_text(
+            text.replace(
+                "Before each driving session, pass the verifier's Doctor/readiness check; rerun it after any failed or unexpected drive.",
+                "Skip readiness checks during drive sessions.",
+                1,
+            ),
+            encoding="utf-8",
+        )
+
     def strip_risk_scaled_judgment(fixture: Path) -> None:
         protocol = fixture / "skills" / "patpat-loop" / "references" / "operating-protocol.md"
         text = protocol.read_text(encoding="utf-8")
@@ -1755,6 +1777,7 @@ def run_self_test(root: Path) -> list[str]:
             ("regression-first fail-before drift", strip_regression_fail_before, "missing regression-first fail-before contract"),
             ("session-takeover live-verify drift", strip_session_takeover_live_verify, "missing session-takeover live-verify contract"),
             ("project-verifier isolation drift", strip_project_verifier_isolation, "missing project-verifier isolation contract"),
+            ("project-verifier readiness drift", strip_project_verifier_readiness, "missing project-verifier readiness and recovery contract"),
             ("risk-scaled judgment drift", strip_risk_scaled_judgment, "missing risk-scaled judgment contract"),
             ("delivery-intent default-delivery drift", strip_delivery_intent_default_delivery, "missing delivery-intent default-delivery contract"),
             ("capability-map delivery-intent drift", strip_capability_map_delivery_intent, "missing capability-map delivery-intent contract"),
