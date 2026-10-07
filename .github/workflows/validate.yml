@@ -42,6 +42,7 @@ jobs:
           python3 scripts/install_skills.py --self-test
           python3 scripts/update_skills.py --self-test
           python3 scripts/stage_plugin.py --self-test
+          python3 scripts/stage_agent_plugin.py --self-test
           python3 scripts/smoke_grok_plugin.py --commands-only
           python3 skills/patpat-run/scripts/run_state.py --self-test
           python3 skills/patpat-run/scripts/decisions.py --self-test
@@ -128,6 +129,8 @@ jobs:
           python scripts/update_skills.py --self-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/stage_plugin.py --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/stage_agent_plugin.py --self-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python skills/patpat-repository-diagram/scripts/render.py self-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

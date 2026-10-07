@@ -74,7 +74,20 @@ From a dirty working tree, stage first, then validate and install that staged pa
 
 ## Cursor
 
-Native marketplace publish is [cursor.com/marketplace/publish](https://cursor.com/marketplace/publish). After listing, install from Customize the same way as pstack. Until SearchPlugins returns patpat, do not claim the Grok Bot Installed tab. Keep the portable route below as the proven fallback. Do not claim `/add-plugin patpat`.
+Patpat includes a Cursor adapter at `.cursor-plugin/plugin.json`. Cursor supports local plugins under `~/.cursor/plugins/local/<plugin>` and reviews submissions through its [plugin publishing flow](https://cursor.com/marketplace/publish). To test the portable Agent Plugins package, generate it with `scripts/stage_agent_plugin.py`, copy its contents into a fresh local directory, reload Cursor, and check Customize if local plugin imports are enabled. A same-name marketplace plugin takes precedence over the local copy. Patpat's fresh-session invocation and marketplace listing remain unverified; do not claim support until its skill is observed in a fresh session. A generic `/add-plugin` command does not prove Patpat is listed or installable by name.
+
+The direct repository contains manifests for multiple hosts, so do not copy the source tree straight into Cursor's local plugin directory as a verified install.
+
+## Portable Agent Plugins
+
+The source root `plugin.json` belongs to Antigravity. Generate a separate package for hosts that implement [Agent Plugins 1.0](https://agent-plugins.org/specification):
+
+```bash
+python3 scripts/stage_agent_plugin.py --target /absolute/path/to/patpat-agent-plugin
+python3 scripts/validate.py --agent-plugin /absolute/path/to/patpat-agent-plugin
+```
+
+The generated package contains only the portable root `plugin.json`, `LICENSE`, and fixed `skills/` directory. Git-backed staging excludes Git-ignored local files from skills; without Git metadata, inspect the artifact before installing. Use the host's own documented plugin install path; this format does not standardize lifecycle hooks or other host-specific components. Do not install this artifact in Antigravity.
 
 ## Portable Agent Skills
 
@@ -138,6 +151,7 @@ python3 scripts/validate.py --self-test
 python3 scripts/install_skills.py --self-test
 python3 scripts/update_skills.py --self-test
 python3 scripts/stage_plugin.py --self-test
+python3 scripts/stage_agent_plugin.py --self-test
 python3 scripts/smoke_codex_plugin.py
 python3 scripts/smoke_antigravity_plugin.py
 python3 scripts/smoke_grok_plugin.py

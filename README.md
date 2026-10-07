@@ -8,7 +8,7 @@
 Engineering skills for code that must survive contact with reality.
 
 Patpat is a portable engineering plugin for AI agents and AI-enabled developer tools that support a compatible plugin or project-scoped Agent Skills directory. Its canonical `skills/` tree is host-neutral, though installation and invocation vary by host.
-Native routes are documented for Codex, Grok CLI, and Antigravity. For other hosts, use the portable route only after proving the host reads a project-scoped skills directory; Cursor native loading remains experimental. See the [installation guide](docs/guide/installing.md) for host-specific setup.
+Patpat has host adapters for Codex, Grok CLI, Antigravity, and Cursor. Cursor's marketplace listing and fresh-session invocation are not yet verified; use the portable route for that host until they are. For other hosts, use the portable route only after proving the host reads a project-scoped skills directory. There is no universal plugin format: each host must support a compatible plugin contract or skills directory, and invocation must be verified on that host. See the [installation guide](docs/guide/installing.md) for host-specific setup.
 
 [Guide](docs/guide/README.md) · [Install and update](docs/guide/installing.md) · [Capability map](docs/guide/capability-map.md) · [Security](https://github.com/goiltpatpat/patpat/security/policy)
 
@@ -61,7 +61,16 @@ agy plugin validate /absolute/path/to/patpat
 agy plugin install /absolute/path/to/patpat
 ```
 
-Cursor native loading is experimental. Until a live project load is proven, install into a proven project skill directory and reload:
+For hosts that support the portable [Agent Plugins 1.0 format](https://agent-plugins.org/specification), generate a separate package from the canonical skills tree:
+
+```bash
+python3 scripts/stage_agent_plugin.py --target /absolute/path/to/patpat-agent-plugin
+python3 scripts/validate.py --agent-plugin /absolute/path/to/patpat-agent-plugin
+```
+
+This output uses the standard root `plugin.json`; it is for compatible Agent Plugins clients, not Antigravity. Git-backed staging excludes Git-ignored local files from skills; without Git metadata, inspect the artifact before installing. Follow each host's documented install path and verify fresh-session discovery there. Hooks and other host-specific behavior still depend on the selected adapter.
+
+Patpat's Cursor marketplace listing and fresh-session invocation have not been proven in a live project. Cursor documents local plugin testing under `~/.cursor/plugins/local/<plugin>`; generate the portable package above, copy it into a fresh directory there, reload Cursor, and inspect Customize if local plugin imports are enabled. A same-name marketplace plugin takes precedence over the local copy. Treat Patpat as unverified until its skills are observed in a fresh session. If that host route is unavailable, use a proven project skills directory:
 
 ```bash
 python3 scripts/install_skills.py \

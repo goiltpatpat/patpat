@@ -7,6 +7,6 @@ Read [repository truth](../principles/repository-truth.md), [smallest safe chang
 3. Define the proof contract for structure, triggering, behavior, and safety.
 4. Make the smallest change to `SKILL.md` and only the references or scripts it needs now. When the request came from learn, wait for approval, edit existing files only, and do not create a new SKILL.md or a `*-mode` skill (no new SKILL.md, no *-mode mint).
 5. Run repository validation and resolve every introduced error.
-6. Apply `patpat-eval` to changed behavior, routing, or descriptions.
+6. Apply `patpat-eval` to changed behavior, routing, or descriptions. When claiming a behavioral improvement, run the same frozen, non-mutating scenario against the pre-change behavior and candidate in an already-approved isolated surface. If either variant cannot be loaded or run safely, evaluate the candidate normally, mark the incremental effect `INCONCLUSIVE`, and do not claim the edit improved behavior.
 7. Inspect the final diff for duplicated advice, vague verbs, placeholders, and unused files.
 8. Report structural and behavioral evidence separately.
