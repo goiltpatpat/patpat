@@ -23,6 +23,7 @@ from stage_plugin import (
 from validate import (
     AGENT_PLUGIN_FIELDS,
     AGENT_PLUGIN_SCHEMA,
+    parse_frontmatter,
     validate_agent_plugin_package,
     validate_root,
 )
@@ -39,6 +40,7 @@ AGENT_METADATA_FIELDS = (
     "keywords",
 )
 IGNORED_SKILL_PATH_PARTS = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
+PORTABLE_INVOCATION_NOTE = "Only use when the user explicitly requests it."
 
 
 def build_manifest(source: Path) -> dict[str, object]:
@@ -122,6 +124,62 @@ def copy_skills(source: Path, destination: Path) -> None:
         copy_entry(original, target, package_root=source)
 
 
+def project_skill_frontmatter(skills_root: Path) -> None:
+    """Project Codex-only invocation metadata into portable skill descriptions."""
+    for skill_file in sorted(skills_root.glob("*/SKILL.md")):
+        try:
+            frontmatter, _ = parse_frontmatter(skill_file)
+            text = skill_file.read_text(encoding="utf-8")
+        except (OSError, ValueError) as error:
+            raise StageError(f"cannot project skill frontmatter in {skill_file}: {error}") from error
+
+        invocation_policy = frontmatter.get("disable-model-invocation")
+        if invocation_policy is None:
+            continue
+        if invocation_policy not in {"true", "false"}:
+            raise StageError(
+                f"unsupported disable-model-invocation value in {skill_file}: {invocation_policy!r}"
+            )
+
+        lines = text.splitlines()
+        try:
+            closing_delimiter = next(
+                index for index, line in enumerate(lines[1:], 1) if line.strip() == "---"
+            )
+        except StopIteration as error:
+            raise StageError(f"missing closing frontmatter delimiter in {skill_file}") from error
+
+        projected_lines = [lines[0]]
+        description_seen = invocation_policy == "false"
+        for line in lines[1:closing_delimiter]:
+            key, separator, _ = line.partition(":")
+            if separator and key.strip() == "disable-model-invocation":
+                continue
+            if (
+                invocation_policy == "true"
+                and separator
+                and key.strip() == "description"
+            ):
+                description = frontmatter.get("description")
+                if not description or description.endswith(PORTABLE_INVOCATION_NOTE):
+                    raise StageError(f"invalid description for portable invocation policy in {skill_file}")
+                projected_lines.append(
+                    f"description: {description} {PORTABLE_INVOCATION_NOTE}"
+                )
+                description_seen = True
+            else:
+                projected_lines.append(line)
+
+        if not description_seen:
+            raise StageError(f"missing description for portable invocation policy in {skill_file}")
+
+        projected_lines.extend(lines[closing_delimiter:])
+        projected_text = "\n".join(projected_lines)
+        if text.endswith("\n"):
+            projected_text += "\n"
+        skill_file.write_text(projected_text, encoding="utf-8")
+
+
 def stage(source: Path, target: Path) -> dict[str, str]:
     requested_target = target.expanduser()
     if requested_target.exists() or requested_target.is_symlink():
@@ -145,6 +203,7 @@ def stage(source: Path, target: Path) -> dict[str, str]:
     try:
         copy_entry(source / "LICENSE", temporary / "LICENSE", package_root=source)
         copy_skills(source, temporary / "skills")
+        project_skill_frontmatter(temporary / "skills")
 
         (temporary / "plugin.json").write_text(
             json.dumps(build_manifest(source), indent=2) + "\n",
@@ -181,6 +240,15 @@ def run_self_test(source: Path) -> None:
         package_source = root / "source"
         package_target = root / "agent-plugin"
         stage_native_plugin(source, package_source)
+
+        false_policy_skill = package_source / "skills" / "patpat-inspect" / "SKILL.md"
+        false_policy_text = false_policy_skill.read_text(encoding="utf-8")
+        false_policy_skill.write_text(
+            false_policy_text.replace(
+                "description:", "disable-model-invocation: false\ndescription:", 1
+            ),
+            encoding="utf-8",
+        )
 
         (package_source / "memory-bank").mkdir()
         (package_source / "memory-bank" / "local.md").write_text(
@@ -262,8 +330,63 @@ def run_self_test(source: Path) -> None:
             raise StageError("self-test output contains host-specific or unsupported root fields")
         if inventory != file_inventory(package_target):
             raise StageError("self-test package changed after atomic promotion")
-        if skill_files(package_target) != expected_skill_files:
-            raise StageError("self-test package did not preserve skill files and resources")
+        actual_skill_files = skill_files(package_target)
+        if set(actual_skill_files) != set(expected_skill_files):
+            raise StageError("self-test package changed skill files and resources")
+        expected_manual_invocation_skills = {
+            "patpat-arena",
+            "patpat-engineer",
+            "patpat-eval",
+            "patpat-interrogate",
+            "patpat-setup",
+            "patpat-swarm",
+            "patpat-unslop",
+            "patpat-verifier",
+        }
+        source_manual_invocation_skills = set()
+        for skill in sorted((package_source / "skills").iterdir()):
+            source_skill_file = skill / "SKILL.md"
+            staged_skill_file = package_target / "skills" / skill.name / "SKILL.md"
+            source_frontmatter, _ = parse_frontmatter(source_skill_file)
+            source_text = source_skill_file.read_text(encoding="utf-8")
+            staged_text = staged_skill_file.read_text(encoding="utf-8")
+            invocation_policy = source_frontmatter.get("disable-model-invocation")
+            if invocation_policy in {"true", "false"}:
+                if invocation_policy == "true":
+                    source_manual_invocation_skills.add(skill.name)
+                    expected_description = (
+                        source_frontmatter["description"] + " " + PORTABLE_INVOCATION_NOTE
+                    )
+                else:
+                    expected_description = source_frontmatter["description"]
+                staged_frontmatter, staged_body = parse_frontmatter(staged_skill_file)
+                _, source_body = parse_frontmatter(source_skill_file)
+                if (
+                    "disable-model-invocation" in staged_frontmatter
+                    or staged_frontmatter.get("description") != expected_description
+                    or source_body != staged_body
+                ):
+                    raise StageError(
+                        f"self-test did not preserve the portable invocation intent for {skill.name}"
+                    )
+            else:
+                if source_text != staged_text:
+                    raise StageError(f"self-test changed an ungated skill: {skill.name}")
+
+            relative = f"skills/{skill.name}/SKILL.md"
+            if (
+                invocation_policy is None
+                and actual_skill_files[relative] != expected_skill_files[relative]
+            ):
+                raise StageError(f"self-test changed an ungated skill file: {skill.name}")
+
+        if source_manual_invocation_skills != expected_manual_invocation_skills:
+            raise StageError("self-test source invocation gates differ from the reviewed set")
+        for relative, digest in expected_skill_files.items():
+            if relative.endswith("/SKILL.md"):
+                continue
+            if actual_skill_files[relative] != digest:
+                raise StageError(f"self-test package changed a skill resource: {relative}")
         if (package_target / "skills" / "patpat-setup" / "local.jsonl").exists():
             raise StageError("self-test package included a Git-ignored local skill artifact")
         actual_skill_names = {
@@ -341,7 +464,7 @@ def run_self_test(source: Path) -> None:
 
         print(
             "Patpat Agent Plugins staging self-test passed: "
-            f"{len(actual_skill_names)} skills, links/resources, package boundary, and refusal cases."
+            f"{len(actual_skill_names)} skills, portable invocation metadata, links/resources, and package boundaries."
         )
 
 

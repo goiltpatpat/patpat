@@ -35,6 +35,8 @@ codex plugin marketplace add goiltpatpat/patpat --ref <release-tag-or-commit>
 codex plugin add patpat@patpat
 ```
 
+The Codex and Cursor manifests share Patpat's SemVer package version; the portable Agent Plugins manifest inherits it from the Codex manifest. Its `$schema` version identifies the Agent Plugins format and changes separately. Keep the current package version's entry in [`CHANGELOG.md`](../../CHANGELOG.md), bump the patch version for fixes, the minor version for backward-compatible features, and the major version for breaking changes. Create a `v<version>` release tag from a reviewed, merged head; CI checks that its name matches the Codex manifest version.
+
 From a local working tree:
 
 ```bash
@@ -87,7 +89,7 @@ python3 scripts/stage_agent_plugin.py --target /absolute/path/to/patpat-agent-pl
 python3 scripts/validate.py --agent-plugin /absolute/path/to/patpat-agent-plugin
 ```
 
-The generated package contains only the portable root `plugin.json`, `LICENSE`, and fixed `skills/` directory. Git-backed staging excludes Git-ignored local files from skills; without Git metadata, inspect the artifact before installing. Use the host's own documented plugin install path; this format does not standardize lifecycle hooks or other host-specific components. Do not install this artifact in Antigravity.
+The generated package contains only the portable root `plugin.json`, `LICENSE`, and fixed `skills/` directory. Git-backed staging excludes Git-ignored local files from skills; without Git metadata, inspect the artifact before installing. The stager projects Codex-only `disable-model-invocation` metadata into an explicit-user-request note in the [Agent Skills description](https://agentskills.io/specification); that note is advisory because Agent Skills 1.0 does not define a portable host-enforced invocation gate. Use the native adapter when enforced invocation policy matters. This format also does not standardize lifecycle hooks or other host-specific components. Do not install this artifact in Antigravity.
 
 ## Portable Agent Skills
 
