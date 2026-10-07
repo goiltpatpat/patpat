@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -25,6 +26,23 @@ LINK_PATTERN = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 ALLOWED_FRONTMATTER = {"name", "description", "disable-model-invocation"}
 MODE_SKILLS = {"patpat", "patpat-loop"}
 PUBLISHED_SOURCE = "https://github.com/goiltpatpat/patpat"
+ANTIGRAVITY_PLUGIN_SCHEMA = "https://antigravity.google/schemas/v1/plugin.json"
+AGENT_PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
+AGENT_PLUGIN_FIELDS = {
+    "$schema",
+    "name",
+    "version",
+    "description",
+    "author",
+    "homepage",
+    "repository",
+    "license",
+    "keywords",
+    "extensions",
+}
+AGENT_PLUGIN_NAME_PATTERN = re.compile(
+    r"^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$"
+)
 ALLOWED_SKILL_POLICIES = {"mutating", "read-only", "support", "router"}
 SKILL_POLICIES = {
     "patpat": "router",
@@ -281,6 +299,61 @@ def validate_json(path: Path, errors: list[str]) -> dict[str, object]:
     return value
 
 
+def validate_agent_plugin_manifest(
+    manifest: dict[str, object], path: Path, errors: list[str]
+) -> None:
+    """Validate the closed Agent Plugins 1.0 root manifest contract."""
+    unknown = set(manifest) - AGENT_PLUGIN_FIELDS
+    if unknown:
+        errors.append(f"{path}: unsupported manifest fields {sorted(unknown)}")
+    if manifest.get("$schema") != AGENT_PLUGIN_SCHEMA:
+        errors.append(f"{path}: unexpected Agent Plugins 1.0 schema")
+
+    for field in ("$schema", "name"):
+        value = manifest.get(field)
+        if not isinstance(value, str) or not value:
+            errors.append(f"{path}: required field {field} must be a non-empty string")
+    name = manifest.get("name")
+    if isinstance(name, str) and (
+        not 1 <= len(name) <= 64 or not AGENT_PLUGIN_NAME_PATTERN.fullmatch(name)
+    ):
+        errors.append(f"{path}: name must satisfy Agent Plugins 1.0 name constraints")
+
+    for field in ("version", "description", "homepage", "repository", "license"):
+        if field in manifest and not isinstance(manifest[field], str):
+            errors.append(f"{path}: {field} must be a string")
+
+    if "author" in manifest:
+        author = manifest["author"]
+        if not isinstance(author, dict):
+            errors.append(f"{path}: author must be an object")
+        else:
+            unknown_author_fields = set(author) - {"name", "email", "url"}
+            if unknown_author_fields:
+                errors.append(
+                    f"{path}: unsupported author fields {sorted(unknown_author_fields)}"
+                )
+            for field, value in author.items():
+                if not isinstance(value, str):
+                    errors.append(f"{path}: author.{field} must be a string")
+
+    if "keywords" in manifest:
+        keywords = manifest["keywords"]
+        if not isinstance(keywords, list) or any(
+            not isinstance(keyword, str) for keyword in keywords
+        ):
+            errors.append(f"{path}: keywords must be an array of strings")
+
+    if "extensions" in manifest:
+        extensions = manifest["extensions"]
+        if not isinstance(extensions, dict):
+            errors.append(f"{path}: extensions must be an object")
+        else:
+            for namespace, value in extensions.items():
+                if not isinstance(value, dict):
+                    errors.append(f"{path}: extensions.{namespace} must be an object")
+
+
 def validate_links(path: Path, root: Path, errors: list[str]) -> None:
     text = path.read_text(encoding="utf-8")
     for raw_target in LINK_PATTERN.findall(text):
@@ -529,6 +602,121 @@ def validate_hooks(root: Path, parsed: dict[str, dict[str, object]], errors: lis
         errors.append(f"{script}: sticky hook must fail closed without PLUGIN_DATA")
 
 
+def validate_agent_plugin_package(root: Path) -> list[str]:
+    """Validate the minimal portable Agent Plugins package produced by Patpat."""
+    errors: list[str] = []
+    root = root.resolve()
+    expected_entries = {"plugin.json", "LICENSE", "skills"}
+    try:
+        actual_entries = {entry.name for entry in root.iterdir()}
+    except OSError as error:
+        return [f"{root}: cannot inspect Agent Plugins package: {error}"]
+    if actual_entries != expected_entries:
+        errors.append(
+            f"{root}: Agent Plugins package must contain exactly {sorted(expected_entries)}; "
+            f"found {sorted(actual_entries)}"
+        )
+
+    def is_link_or_reparse_point(path: Path) -> bool:
+        try:
+            metadata = path.lstat()
+        except OSError:
+            return False
+        if stat.S_ISLNK(metadata.st_mode):
+            return True
+        reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x0400)
+        return os.name == "nt" and bool(
+            getattr(metadata, "st_file_attributes", 0) & reparse_flag
+        )
+
+    for entry in root.iterdir():
+        if is_link_or_reparse_point(entry):
+            errors.append(f"{entry}: links and reparse points are not allowed in Agent Plugins packages")
+
+    manifest_path = root / "plugin.json"
+    manifest_is_file = manifest_path.is_file() and not is_link_or_reparse_point(manifest_path)
+    manifest = validate_json(manifest_path, errors) if manifest_is_file else {}
+    if not manifest_is_file:
+        errors.append(f"{manifest_path}: missing Agent Plugins manifest")
+    validate_agent_plugin_manifest(manifest, manifest_path, errors)
+    if manifest.get("name") != "patpat":
+        errors.append(f"{manifest_path}: name must be patpat")
+
+    license_path = root / "LICENSE"
+    if not license_path.is_file() or is_link_or_reparse_point(license_path):
+        errors.append(f"{license_path}: missing regular package license")
+    skills_root = root / "skills"
+    if not skills_root.is_dir() or is_link_or_reparse_point(skills_root):
+        errors.append(f"{skills_root}: missing regular skills directory")
+        return errors
+
+    children = list(skills_root.iterdir())
+    actual_skill_names = {child.name for child in children if child.is_dir()}
+    expected_skill_names = set(SKILL_POLICIES)
+    if actual_skill_names != expected_skill_names or len(children) != len(actual_skill_names):
+        errors.append(
+            f"{skills_root}: skill directories differ from the canonical set; "
+            f"missing={sorted(expected_skill_names - actual_skill_names)}, "
+            f"extra={sorted(actual_skill_names - expected_skill_names)}"
+        )
+
+    markdown_files: list[Path] = []
+    for directory, directory_names, file_names in os.walk(skills_root, followlinks=False):
+        current = Path(directory)
+        safe_directory_names: list[str] = []
+        for name in directory_names:
+            path = current / name
+            if is_link_or_reparse_point(path):
+                errors.append(f"{path}: symlinks are not allowed in Agent Plugins packages")
+            else:
+                safe_directory_names.append(name)
+        directory_names[:] = safe_directory_names
+        for name in file_names:
+            path = current / name
+            if is_link_or_reparse_point(path):
+                errors.append(f"{path}: symlinks are not allowed in Agent Plugins packages")
+        for name in file_names:
+            path = current / name
+            if path.suffix.lower() == ".md" and path.is_file():
+                markdown_files.append(path)
+
+    descriptions: dict[str, Path] = {}
+    for skill_name in sorted(expected_skill_names & actual_skill_names):
+        skill = skills_root / skill_name
+        skill_file = skill / "SKILL.md"
+        if not skill_file.is_file() or is_link_or_reparse_point(skill_file):
+            errors.append(f"{skill}: immediate skill directory is missing SKILL.md")
+            continue
+        try:
+            frontmatter, body = parse_frontmatter(skill_file)
+        except (OSError, ValueError) as error:
+            errors.append(f"{skill_file}: {error}")
+            continue
+        name = frontmatter.get("name", "")
+        description = frontmatter.get("description", "")
+        unknown = set(frontmatter) - ALLOWED_FRONTMATTER
+        if unknown:
+            errors.append(f"{skill_file}: non-portable frontmatter: {sorted(unknown)}")
+        if name != skill_name:
+            errors.append(f"{skill_file}: name must match folder {skill_name}")
+        if not NAME_PATTERN.fullmatch(name):
+            errors.append(f"{skill_file}: invalid skill name {name!r}")
+        if not description:
+            errors.append(f"{skill_file}: description is required")
+        elif description in descriptions:
+            errors.append(
+                f"{skill_file}: duplicate description also used by {descriptions[description]}"
+            )
+        else:
+            descriptions[description] = skill_file
+        if not body:
+            errors.append(f"{skill_file}: body is required")
+
+    for path in sorted(markdown_files):
+        validate_links(path, root, errors)
+    return errors
+
+
 def validate_root(root: Path) -> list[str]:
     errors: list[str] = []
     for relative in sorted(UNADMITTED_COMPONENT_PATHS):
@@ -607,8 +795,8 @@ def validate_root(root: Path) -> list[str]:
                 logo_file = root / cursor_logo
                 if not logo_file.is_file() or logo_file.is_symlink():
                     errors.append(f"{cursor_manifest_path}: logo file is missing: {cursor_logo}")
-    if parsed.get("antigravity", {}).get("$schema") != "https://antigravity.google/schemas/v1/plugin.json":
-        errors.append(f"{manifests['antigravity']}: unexpected schema")
+    if parsed.get("antigravity", {}).get("$schema") != ANTIGRAVITY_PLUGIN_SCHEMA:
+        errors.append(f"{manifests['antigravity']}: unexpected Antigravity schema")
     for host in ("cursor", "codex"):
         if parsed.get(host, {}).get("skills") != "./skills/":
             errors.append(f"{manifests[host]}: skills must point to ./skills/")
@@ -872,6 +1060,9 @@ def validate_root(root: Path) -> list[str]:
     stage_script = root / "scripts" / "stage_plugin.py"
     if not stage_script.is_file():
         errors.append(f"{stage_script}: missing allowlisted plugin staging script")
+    agent_stage_script = root / "scripts" / "stage_agent_plugin.py"
+    if not agent_stage_script.is_file():
+        errors.append(f"{agent_stage_script}: missing Agent Plugins package staging script")
     update_script = root / "scripts" / "update_skills.py"
     if not update_script.is_file():
         errors.append(f"{update_script}: missing portable skill updater")
@@ -1037,6 +1228,7 @@ def copy_self_test_source(source_root: Path, destination: Path) -> None:
 def run_self_test(root: Path) -> list[str]:
     root = root.resolve()
     cases: list[tuple[str, Callable[[Path], None], str]] = []
+    agent_plugin_cases: list[tuple[str, Callable[[Path], None], str]] = []
 
     def break_name(fixture: Path) -> None:
         skill = fixture / "skills" / "patpat-inspect" / "SKILL.md"
@@ -1057,6 +1249,9 @@ def run_self_test(root: Path) -> list[str]:
 
     def remove_stage_script(fixture: Path) -> None:
         (fixture / "scripts" / "stage_plugin.py").unlink()
+
+    def remove_agent_stage_script(fixture: Path) -> None:
+        (fixture / "scripts" / "stage_agent_plugin.py").unlink()
 
     def remove_update_script(fixture: Path) -> None:
         (fixture / "scripts" / "update_skills.py").unlink()
@@ -1424,6 +1619,54 @@ def run_self_test(root: Path) -> list[str]:
         data["interface"][field] = value
         manifest.write_text(json.dumps(data), encoding="utf-8")
 
+    def use_agent_plugins_manifest(fixture: Path) -> dict[str, object]:
+        codex_manifest = json.loads(
+            (root / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8")
+        )
+        portable_manifest: dict[str, object] = {"$schema": AGENT_PLUGIN_SCHEMA}
+        for field in (
+            "name",
+            "version",
+            "description",
+            "author",
+            "homepage",
+            "repository",
+            "license",
+            "keywords",
+        ):
+            if field in codex_manifest:
+                portable_manifest[field] = codex_manifest[field]
+        (fixture / "plugin.json").write_text(
+            json.dumps(portable_manifest, indent=2) + "\n", encoding="utf-8"
+        )
+        return portable_manifest
+
+    def create_agent_plugin_fixture(fixture: Path) -> None:
+        fixture.mkdir()
+        shutil.copy2(root / "LICENSE", fixture / "LICENSE")
+        shutil.copytree(root / "skills", fixture / "skills")
+        use_agent_plugins_manifest(fixture)
+
+    def add_agent_plugin_unknown_field(fixture: Path) -> None:
+        manifest = use_agent_plugins_manifest(fixture)
+        manifest["hooks"] = "./hooks/hooks.json"
+        (fixture / "plugin.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    def invalidate_agent_plugin_author(fixture: Path) -> None:
+        manifest = use_agent_plugins_manifest(fixture)
+        manifest["author"] = {"name": "Patpat maintainers", "team": "engineering"}
+        (fixture / "plugin.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    def invalidate_agent_plugin_extension(fixture: Path) -> None:
+        manifest = use_agent_plugins_manifest(fixture)
+        manifest["extensions"] = {"com.patpat": "hooks are portable"}
+        (fixture / "plugin.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    def invalidate_agent_plugin_name(fixture: Path) -> None:
+        manifest = use_agent_plugins_manifest(fixture)
+        manifest["name"] = "patpat--portable"
+        (fixture / "plugin.json").write_text(json.dumps(manifest), encoding="utf-8")
+
     def remove_codex_logo_asset(fixture: Path) -> None:
         (fixture / "assets" / "logo.png").unlink()
 
@@ -1459,6 +1702,7 @@ def run_self_test(root: Path) -> list[str]:
             ("missing Antigravity smoke", remove_antigravity_smoke, "missing isolated Antigravity plugin smoke test"),
             ("missing Grok smoke", remove_grok_smoke, "missing isolated Grok plugin and hook smoke test"),
             ("missing stage script", remove_stage_script, "missing allowlisted plugin staging script"),
+            ("missing Agent Plugins stage script", remove_agent_stage_script, "missing Agent Plugins package staging script"),
             ("missing portable updater", remove_update_script, "missing portable skill updater"),
             ("missing loop dry-run", remove_dry_run, "missing loop dry-run"),
             ("missing Python import graph analyzer", remove_import_graph, "missing optional Python import graph analyzer"),
@@ -1533,6 +1777,14 @@ def run_self_test(root: Path) -> list[str]:
             ("Cursor logo parent path", cursor_logo_parent, "logo must not use .."),
             ("Cursor logo wrong relative", cursor_logo_wrong_relative, "logo must be the relative path assets/logo.png"),
             ("Cursor logo missing file", cursor_logo_missing_file, "logo file is missing"),
+        ]
+    )
+    agent_plugin_cases.extend(
+        [
+            ("Agent Plugins unknown root field", add_agent_plugin_unknown_field, "unsupported manifest fields"),
+            ("Agent Plugins invalid author field", invalidate_agent_plugin_author, "unsupported author fields"),
+            ("Agent Plugins invalid extension value", invalidate_agent_plugin_extension, "extensions.com.patpat must be an object"),
+            ("Agent Plugins invalid name", invalidate_agent_plugin_name, "Agent Plugins 1.0 name constraints"),
         ]
     )
 
@@ -1694,6 +1946,38 @@ def run_self_test(root: Path) -> list[str]:
 
     with tempfile.TemporaryDirectory(prefix="patpat-validator-") as temp_directory:
         temp_root = Path(temp_directory)
+        portable_fixture = temp_root / "valid-agent-plugin-package"
+        create_agent_plugin_fixture(portable_fixture)
+        portable_errors = validate_agent_plugin_package(portable_fixture)
+        if portable_errors:
+            failures.append(
+                "self-test: valid minimal Agent Plugins package was rejected: "
+                + "; ".join(portable_errors)
+            )
+        default_profile_errors = validate_root(portable_fixture)
+        if not default_profile_errors:
+            failures.append("self-test: source validation accepted an unselected Agent Plugins profile")
+        portable_cli = subprocess.run(
+            [sys.executable, str(root / "scripts" / "validate.py"), "--agent-plugin", str(portable_fixture)],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if portable_cli.returncode != 0:
+            failures.append(
+                "self-test: explicit Agent Plugins CLI validation failed: "
+                f"{portable_cli.stdout}{portable_cli.stderr}"
+            )
+        default_cli = subprocess.run(
+            [sys.executable, str(root / "scripts" / "validate.py"), str(portable_fixture)],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if default_cli.returncode == 0:
+            failures.append("self-test: default source CLI accepted an Agent Plugins package")
         for index, (name, mutate, expected) in enumerate(cases):
             fixture = temp_root / f"fixture-{index}"
             shutil.copytree(root, fixture, ignore=self_test_fixture_ignore(root))
@@ -1701,6 +1985,13 @@ def run_self_test(root: Path) -> list[str]:
             fixture_errors = validate_root(fixture)
             if not any(expected in error for error in fixture_errors):
                 failures.append(f"self-test: validator accepted deliberate {name}")
+        for index, (name, mutate, expected) in enumerate(agent_plugin_cases):
+            fixture = temp_root / f"agent-plugin-fixture-{index}"
+            create_agent_plugin_fixture(fixture)
+            mutate(fixture)
+            fixture_errors = validate_agent_plugin_package(fixture)
+            if not any(expected in error for error in fixture_errors):
+                failures.append(f"self-test: Agent Plugins validator accepted deliberate {name}")
     run_script = root / "skills" / "patpat-run" / "scripts" / "run_state.py"
     result = subprocess.run(
         [sys.executable, str(run_script), "--self-test"],
@@ -1899,10 +2190,21 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", nargs="?", type=Path)
     parser.add_argument("--self-test", action="store_true")
+    parser.add_argument(
+        "--agent-plugin",
+        action="store_true",
+        help="validate a generated Agent Plugins 1.0 package",
+    )
     args = parser.parse_args()
+    if args.self_test and args.agent_plugin:
+        parser.error("--self-test cannot be combined with --agent-plugin")
 
     root = (args.root or Path(__file__).resolve().parents[1]).resolve()
-    errors = validate_root(root)
+    errors = (
+        validate_agent_plugin_package(root)
+        if args.agent_plugin
+        else validate_root(root)
+    )
     if not errors and args.self_test:
         try:
             # Copy once, then run repeated mutation fixtures from local temporary storage.

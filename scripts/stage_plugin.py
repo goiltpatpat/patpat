@@ -7,6 +7,8 @@ import argparse
 import hashlib
 import os
 import shutil
+import stat
+import subprocess
 import tempfile
 import uuid
 from pathlib import Path
@@ -58,9 +60,26 @@ def is_ignored_package_path(path: Path, package_root: Path) -> bool:
     )
 
 
-def reject_symlinks(path: Path, *, package_root: Path) -> None:
-    if path.is_symlink():
-        raise StageError(f"package source contains a symlink: {path}")
+def link_entry_kind(path: Path) -> str | None:
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        raise StageError(f"unable to inspect package source: {error}") from error
+
+    if stat.S_ISLNK(metadata.st_mode):
+        return "symlink"
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x0400)
+    if os.name == "nt" and getattr(metadata, "st_file_attributes", 0) & reparse_flag:
+        return "Windows reparse point"
+    return None
+
+
+def reject_link_entries(path: Path, *, package_root: Path) -> None:
+    kind = link_entry_kind(path)
+    if kind:
+        raise StageError(f"package source contains a {kind}: {path}")
     if not path.is_dir():
         return
 
@@ -85,13 +104,14 @@ def reject_symlinks(path: Path, *, package_root: Path) -> None:
         )
         for name in (*dirnames, *filenames):
             candidate = current / name
-            if candidate.is_symlink():
-                raise StageError(f"package source contains a symlink: {candidate}")
+            kind = link_entry_kind(candidate)
+            if kind:
+                raise StageError(f"package source contains a {kind}: {candidate}")
 
 
 def copy_entry(source: Path, destination: Path, *, package_root: Path) -> None:
     package_root = package_root.resolve()
-    reject_symlinks(source, package_root=package_root)
+    reject_link_entries(source, package_root=package_root)
     if source.is_dir():
         pattern_ignore = shutil.ignore_patterns(*IGNORED_NAMES, "*.pyc", "*.pyo")
 
@@ -112,13 +132,29 @@ def copy_entry(source: Path, destination: Path, *, package_root: Path) -> None:
 
 def file_inventory(root: Path) -> dict[str, str]:
     inventory: dict[str, str] = {}
-    for path in sorted(root.rglob("*")):
-        if path.is_symlink():
-            raise StageError(f"staged artifact contains a symlink: {path}")
-        if not path.is_file():
-            continue
-        relative = path.relative_to(root).as_posix()
-        inventory[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
+
+    kind = link_entry_kind(root)
+    if kind:
+        raise StageError(f"staged artifact contains a {kind}: {root}")
+
+    def raise_walk_error(error: OSError) -> None:
+        raise StageError(f"unable to inspect staged artifact: {error}") from error
+
+    for directory, dirnames, filenames in os.walk(
+        root,
+        topdown=True,
+        onerror=raise_walk_error,
+    ):
+        current = Path(directory)
+        dirnames[:] = sorted(dirnames)
+        for name in (*dirnames, *sorted(filenames)):
+            path = current / name
+            kind = link_entry_kind(path)
+            if kind:
+                raise StageError(f"staged artifact contains a {kind}: {path}")
+            if path.is_file():
+                relative = path.relative_to(root).as_posix()
+                inventory[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
     return inventory
 
 
@@ -155,6 +191,67 @@ def stage(source: Path, target: Path) -> dict[str, str]:
 
 
 def run_self_test(source: Path) -> None:
+    def expect_copy_refusal(
+        candidate: Path,
+        destination: Path,
+        *,
+        package_root: Path,
+        expected_kind: str,
+    ) -> None:
+        try:
+            copy_entry(candidate, destination, package_root=package_root)
+        except StageError as error:
+            if expected_kind not in str(error).lower():
+                raise StageError(
+                    f"stage self-test refused {expected_kind} for the wrong reason: {error}"
+                ) from error
+        else:
+            raise StageError(f"stage self-test copied a {expected_kind} package source")
+        if destination.exists():
+            raise StageError(f"stage self-test created output after refusing a {expected_kind}")
+
+    def expect_inventory_refusal(candidate: Path, *, expected_kind: str) -> None:
+        try:
+            file_inventory(candidate)
+        except StageError as error:
+            if expected_kind not in str(error).lower():
+                raise StageError(
+                    f"stage self-test inventory refused {expected_kind} for the wrong reason: {error}"
+                ) from error
+        else:
+            raise StageError(f"stage self-test inventory accepted a {expected_kind}")
+
+    def create_windows_junction(link: Path, target: Path) -> bool:
+        if os.name != "nt" or not hasattr(os.stat_result, "st_file_attributes"):
+            return False
+        command = shutil.which("cmd.exe")
+        if command is None:
+            return False
+        environment = os.environ.copy()
+        environment["PATPAT_TEST_JUNCTION_LINK"] = str(link)
+        environment["PATPAT_TEST_JUNCTION_TARGET"] = str(target)
+        result = subprocess.run(
+            [
+                command,
+                "/d",
+                "/v:off",
+                "/c",
+                'mklink /J "%PATPAT_TEST_JUNCTION_LINK%" "%PATPAT_TEST_JUNCTION_TARGET%"',
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+        if result.returncode != 0 or not link.exists():
+            raise StageError(
+                "stage self-test could not create a Windows junction fixture: "
+                f"{result.stdout}{result.stderr}"
+            )
+        if link_entry_kind(link) != "Windows reparse point":
+            raise StageError("stage self-test junction fixture is not reported as a reparse point")
+        return True
+
     with tempfile.TemporaryDirectory(prefix="patpat-stage-filter-test-") as directory:
         root = Path(directory)
         package_root = (root / "source").resolve()
@@ -173,6 +270,74 @@ def run_self_test(source: Path) -> None:
             or not (copied_docs / "diagrams-reference" / "guide.md").is_file()
         ):
             raise StageError("stage self-test did not exclude diagram artifacts while preserving package docs")
+
+    with tempfile.TemporaryDirectory(prefix="patpat-stage-links-test-") as directory:
+        root = Path(directory)
+        package_root = root / "source"
+        nested = package_root / "nested"
+        nested.mkdir(parents=True)
+        outside = root / "outside"
+        outside.mkdir()
+        outside_file = outside / "payload.txt"
+        outside_file.write_text("outside package root\n", encoding="utf-8")
+
+        symlink = nested / "outside-link.txt"
+        try:
+            symlink.symlink_to(outside_file)
+        except (NotImplementedError, OSError) as error:
+            if os.name != "nt":
+                raise StageError(f"stage self-test cannot create a symlink fixture: {error}") from error
+        else:
+            expect_copy_refusal(
+                package_root,
+                root / "symlink-descendant-output",
+                package_root=package_root,
+                expected_kind="symlink",
+            )
+            expect_inventory_refusal(package_root, expected_kind="symlink")
+
+            root_symlink = root / "source-link"
+            try:
+                root_symlink.symlink_to(package_root, target_is_directory=True)
+            except (NotImplementedError, OSError) as error:
+                if os.name != "nt":
+                    raise StageError(
+                        f"stage self-test cannot create a root symlink fixture: {error}"
+                    ) from error
+            else:
+                expect_copy_refusal(
+                    root_symlink,
+                    root / "symlink-root-output",
+                    package_root=package_root,
+                    expected_kind="symlink",
+                )
+                expect_inventory_refusal(root_symlink, expected_kind="symlink")
+
+        if os.name == "nt" and hasattr(os.stat_result, "st_file_attributes"):
+            junction_target = root / "junction-target"
+            junction_target.mkdir()
+            (junction_target / "payload.txt").write_text("outside package root\n", encoding="utf-8")
+
+            junction_source = root / "junction-source"
+            junction_source.mkdir()
+            if create_windows_junction(junction_source / "outside", junction_target):
+                expect_copy_refusal(
+                    junction_source,
+                    root / "junction-descendant-output",
+                    package_root=junction_source,
+                    expected_kind="reparse point",
+                )
+                expect_inventory_refusal(junction_source, expected_kind="reparse point")
+
+                junction_root = root / "junction-root"
+                if create_windows_junction(junction_root, junction_target):
+                    expect_copy_refusal(
+                        junction_root,
+                        root / "junction-root-output",
+                        package_root=root,
+                        expected_kind="reparse point",
+                    )
+                    expect_inventory_refusal(junction_root, expected_kind="reparse point")
 
     with tempfile.TemporaryDirectory(prefix="patpat-stage-test-") as directory:
         root = Path(directory)

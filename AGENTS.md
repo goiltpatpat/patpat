@@ -9,6 +9,7 @@ Canonical skill tree: [`skills/`](skills/). Host adapters are thin manifests ove
 1. Identify the host, available CLI, requested scope, and source.
 2. Select one route. Do not combine native plugin installation with copied skills in the same host scope.
 3. Stage a working tree that contains Memory Bank or local artifacts before any native Codex or Antigravity install. The stager excludes local Memory Bank and `docs/diagrams/` but does not apply every `.gitignore` rule; inspect the staged package for other machine-local files inside allowed paths.
+4. For hosts that support Agent Plugins 1.0, build a separate portable artifact with `python3 scripts/stage_agent_plugin.py --target /absolute/path/to/patpat-agent-plugin`. The artifact contains only the standard root manifest, license, and canonical `skills/` tree; keep the source root manifest and host adapters for native installs. Git-backed staging omits ignored local files inside skills; when staging without Git metadata, inspect the output before installing.
 
 Published source: `https://github.com/goiltpatpat/patpat`. Plugin id: `patpat@patpat`.
 
@@ -19,7 +20,8 @@ Published source: `https://github.com/goiltpatpat/patpat`. Plugin id: `patpat@pa
 | Codex from a dirty local tree | `python3 scripts/stage_plugin.py --target /absolute/path/to/patpat-dist` then marketplace-add that staged path |
 | Antigravity from a clean clone | `agy plugin validate /absolute/path/to/patpat` then `agy plugin install /absolute/path/to/patpat` |
 | Antigravity from a dirty local tree | stage first, then validate and install the staged path |
-| Cursor | Native load is experimental. Use the portable route until a live project load is proven. |
+| Agent Plugins 1.0 hosts | `python3 scripts/stage_agent_plugin.py --target /absolute/path/to/patpat-agent-plugin`, validate the artifact, then use the host's documented plugin install path |
+| Cursor | Cursor supports Agent Plugins and native Cursor plugins. Generate the portable artifact for a local test; Patpat's fresh-session invocation and marketplace listing remain unverified. Use a proven project skills directory if the plugin route is unavailable. |
 | Other Agent Skills hosts | Prove the project skill directory, then `python3 scripts/install_skills.py --target /absolute/proven/skills-dir --dry-run` |
 
 ## After install
