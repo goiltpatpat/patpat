@@ -21,6 +21,7 @@ MAX_SESSION_ID_LENGTH = 512
 MAX_STATE_BYTES = 16 * 1024
 MAX_STDIN_BYTES = 256 * 1024
 ACTIVATION_ID = re.compile(r"^[0-9a-f]{64}$")
+STATE_FILENAME = re.compile(r"^[0-9a-f]{64}\.json$")
 DIRECT_ACTIVATION = re.compile(
     r"^\s*(?:/|\$)patpat(?:-loop)?(?:$|\s+(?!(?:do\s+not|don't|dont|never|not|without)\b)\S)",
     re.IGNORECASE,
@@ -82,7 +83,10 @@ def state_paths(plugin_data: object, session_id: object) -> dict[str, Path] | No
     key = session_key(session_id)
     if not key or not isinstance(plugin_data, str) or not plugin_data:
         return None
-    root = Path(plugin_data) / "patpat-loop"
+    try:
+        root = Path(plugin_data).resolve() / "patpat-loop"
+    except (OSError, RuntimeError, ValueError):
+        return None
     return {
         "root": root,
         "state": root / "sessions" / f"{key}.json",
@@ -90,23 +94,98 @@ def state_paths(plugin_data: object, session_id: object) -> dict[str, Path] | No
     }
 
 
+def _is_link_or_reparse_point(metadata: os.stat_result) -> bool:
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x0400)
+    return stat.S_ISLNK(metadata.st_mode) or bool(
+        getattr(metadata, "st_file_attributes", 0) & reparse_flag
+    )
+
+
+def _real_directory_identity(path: Path) -> tuple[int, int] | None:
+    try:
+        metadata = path.lstat()
+        resolved = path.resolve(strict=True)
+    except (FileNotFoundError, OSError, RuntimeError):
+        return None
+    if (
+        not stat.S_ISDIR(metadata.st_mode)
+        or _is_link_or_reparse_point(metadata)
+        or os.path.normcase(str(path)) != os.path.normcase(str(resolved))
+    ):
+        return None
+    return metadata.st_dev, metadata.st_ino
+
+
+def _state_directory_binding(directory: Path) -> tuple[tuple[int, int], ...] | None:
+    """Reject static redirects and bind path identities.
+
+    This does not provide a race-free directory handle.
+    """
+    if (
+        directory.name not in {"sessions", "receipts"}
+        or directory.parent.name != "patpat-loop"
+    ):
+        return None
+    binding: list[tuple[int, int]] = []
+    for path in (directory.parent.parent, directory.parent, directory):
+        identity = _real_directory_identity(path)
+        if identity is None:
+            return None
+        binding.append(identity)
+    return tuple(binding)
+
+
+def ensure_state_directories(plugin_data: str) -> bool:
+    """Create the state layout only beneath the host's canonical data root."""
+    try:
+        base = Path(plugin_data)
+        base.mkdir(parents=True, exist_ok=True)
+        if _real_directory_identity(base) is None:
+            return False
+        root = base / "patpat-loop"
+        for directory in (root, root / "sessions", root / "receipts"):
+            try:
+                directory.mkdir()
+            except FileExistsError:
+                pass
+            if _real_directory_identity(directory) is None:
+                return False
+        return True
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
 def atomic_write(target: Path, value: dict[str, Any]) -> None:
-    target.parent.mkdir(parents=True, exist_ok=True)
+    binding = _state_directory_binding(target.parent)
+    if binding is None or STATE_FILENAME.fullmatch(target.name) is None:
+        raise OSError("state path is outside a safe Patpat state directory")
     fd, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=str(target.parent))
     path = Path(temporary)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        if _state_directory_binding(target.parent) != binding:
+            raise OSError("state directory changed while creating a temporary file")
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
+        handle = os.fdopen(fd, "w", encoding="utf-8")
+        fd = -1
+        with handle:
             json.dump(value, handle)
             handle.write("\n")
+        if _state_directory_binding(target.parent) != binding:
+            raise OSError("state directory changed before publishing state")
         os.replace(path, target)
-        os.chmod(target, 0o600)
     except Exception:
-        if path.exists():
+        if fd >= 0:
+            os.close(fd)
+        if _state_directory_binding(target.parent) == binding and path.exists():
             path.unlink()
         raise
 
 
 def read_json(target: Path, maximum: int = MAX_STATE_BYTES) -> dict[str, Any] | None:
+    binding = _state_directory_binding(target.parent)
+    if binding is None or STATE_FILENAME.fullmatch(target.name) is None:
+        return None
     flags = (
         os.O_RDONLY
         | getattr(os, "O_CLOEXEC", 0)
@@ -116,6 +195,8 @@ def read_json(target: Path, maximum: int = MAX_STATE_BYTES) -> dict[str, Any] | 
     try:
         before = target.lstat()
     except (FileNotFoundError, OSError):
+        return None
+    if _state_directory_binding(target.parent) != binding:
         return None
     if (
         not stat.S_ISREG(before.st_mode)
@@ -131,7 +212,8 @@ def read_json(target: Path, maximum: int = MAX_STATE_BYTES) -> dict[str, Any] | 
     try:
         metadata = os.fstat(descriptor)
         if (
-            not stat.S_ISREG(metadata.st_mode)
+            _state_directory_binding(target.parent) != binding
+            or not stat.S_ISREG(metadata.st_mode)
             or metadata.st_nlink != 1
             or metadata.st_size > maximum
             or (metadata.st_dev, metadata.st_ino) != (before.st_dev, before.st_ino)
@@ -158,9 +240,14 @@ def read_json(target: Path, maximum: int = MAX_STATE_BYTES) -> dict[str, Any] | 
 
 def remove_state_path(target: Path) -> None:
     """Remove only the state entry itself; never follow a replacement link."""
+    binding = _state_directory_binding(target.parent)
+    if binding is None or STATE_FILENAME.fullmatch(target.name) is None:
+        return
     try:
         metadata = target.lstat()
     except (FileNotFoundError, OSError):
+        return
+    if _state_directory_binding(target.parent) != binding:
         return
     if stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
         try:
@@ -325,9 +412,21 @@ def collect_expired(plugin_data: str, now_ms: int, ttl_ms: int) -> None:
     root = Path(plugin_data) / "patpat-loop"
     for folder in ("sessions", "receipts"):
         directory = root / folder
-        if not directory.is_dir():
+        binding = _state_directory_binding(directory)
+        if binding is None:
             continue
-        for path in directory.glob("*.json"):
+        try:
+            paths = tuple(directory.iterdir())
+        except OSError:
+            continue
+        if _state_directory_binding(directory) != binding:
+            continue
+        for path in paths:
+            if (
+                STATE_FILENAME.fullmatch(path.name) is None
+                or _state_directory_binding(directory) != binding
+            ):
+                continue
             value = read_json(path)
             parsed = timestamp_ms(
                 (value or {}).get("updatedAt") or (value or {}).get("lastHookAt")
@@ -382,6 +481,7 @@ def handle_hook(payload: dict[str, Any], plugin_data: str | None = None, now_ms:
     binding = session_key(session_id)
     if not targets or not fingerprint or not binding:
         return None
+    plugin_data = str(targets["root"].parent)
     event = normalize_event(payload)
     ttl_ms = DEFAULT_TTL_MS
     if event == "SessionEnd":
@@ -429,6 +529,8 @@ def handle_hook(payload: dict[str, Any], plugin_data: str | None = None, now_ms:
         remove_state_path(targets["receipt"])
         return None
     if action == "activate":
+        if not ensure_state_directories(plugin_data):
+            return None
         collect_expired(plugin_data, now_ms, ttl_ms)
         current = read_active_state(plugin_data, session_id, cwd, now_ms, ttl_ms)
         activation_id = secrets.token_hex(32)
@@ -518,6 +620,8 @@ def run_self_test() -> None:
         receipt = read_json(targets["receipt"])
         if not state or not receipt or state.get("schema") != STATE_SCHEMA:
             raise AssertionError("activation did not persist schema-v2 state and receipt")
+        if os.name != "nt" and stat.S_IMODE(targets["state"].stat().st_mode) != 0o600:
+            raise AssertionError("state file mode is not restricted before publication")
         if state.get("activationId") != receipt.get("activationId"):
             raise AssertionError("activation receipt is not bound to state")
         continued = handle_hook(
@@ -608,6 +712,133 @@ def run_self_test() -> None:
             raise AssertionError("symlinked state was trusted")
         if external.read_text(encoding="utf-8") != '{"protected": true}\n':
             raise AssertionError("symlink rejection modified its target")
+
+        unowned = targets["state"].parent / "unowned.json"
+        unowned.write_text("{}\n", encoding="utf-8")
+        handle_hook(
+            {**payload, "session_id": "cleanup-owner-check", "prompt": "/patpat"},
+            plugin_data=plugin_data,
+            now_ms=52_000,
+        )
+        if unowned.read_text(encoding="utf-8") != "{}\n":
+            raise AssertionError("expired-state cleanup removed a file outside its owned filename namespace")
+
+        if os.name != "nt":
+            protected_mode = Path(directory) / "chmod-race-target.json"
+            protected_mode.write_text("protected\n", encoding="utf-8")
+            protected_mode.chmod(0o644)
+            original_replace = os.replace
+            original_chmod = os.chmod
+
+            def replace_then_redirect(
+                source: str | os.PathLike[str], destination: str | os.PathLike[str]
+            ) -> None:
+                original_replace(source, destination)
+                Path(destination).unlink()
+                Path(destination).symlink_to(protected_mode)
+
+            def reject_path_chmod(*args: Any, **kwargs: Any) -> None:
+                raise AssertionError("atomic state publication must not chmod the destination path")
+
+            os.replace = replace_then_redirect  # type: ignore[assignment]
+            os.chmod = reject_path_chmod  # type: ignore[assignment]
+            try:
+                atomic_write(targets["state"], {"race": True})
+            finally:
+                os.replace = original_replace  # type: ignore[assignment]
+                os.chmod = original_chmod  # type: ignore[assignment]
+            if stat.S_IMODE(protected_mode.stat().st_mode) != 0o644:
+                raise AssertionError("atomic state publication changed a redirected target's permissions")
+            remove_state_path(targets["state"])
+
+        def create_directory_redirect(link: Path, destination: Path) -> None:
+            if os.name == "nt":
+                import shutil
+                import subprocess
+
+                command = shutil.which("powershell.exe") or shutil.which("pwsh.exe")
+                if command is None:
+                    raise AssertionError("Windows junction regression requires PowerShell")
+                environment = os.environ.copy()
+                environment["PATPAT_TEST_JUNCTION_LINK"] = str(link)
+                environment["PATPAT_TEST_JUNCTION_TARGET"] = str(destination)
+                result = subprocess.run(
+                    [
+                        command,
+                        "-NoLogo",
+                        "-NoProfile",
+                        "-NonInteractive",
+                        "-Command",
+                        "$ErrorActionPreference = 'Stop'; New-Item -ItemType Junction -Path $env:PATPAT_TEST_JUNCTION_LINK -Target $env:PATPAT_TEST_JUNCTION_TARGET | Out-Null",
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    env=environment,
+                )
+                if result.returncode != 0:
+                    raise AssertionError(
+                        f"Windows junction fixture could not be created: {result.stderr}"
+                    )
+            else:
+                link.symlink_to(destination, target_is_directory=True)
+            try:
+                metadata = link.lstat()
+            except OSError as error:
+                raise AssertionError(f"directory redirect fixture is missing: {link}") from error
+            if not _is_link_or_reparse_point(metadata):
+                raise AssertionError(f"directory redirect fixture was not recognized: {link}")
+
+        for redirected_directory in ("patpat-loop", "sessions", "receipts"):
+            with tempfile.TemporaryDirectory(prefix="patpat-hook-redirect-") as redirect_root:
+                redirect_base = Path(redirect_root) / "plugin-data"
+                redirect_base.mkdir()
+                state_root = redirect_base / "patpat-loop"
+                outside = Path(redirect_root) / "outside"
+                outside.mkdir()
+                redirect_session = f"redirect-{redirected_directory}"
+                redirect_key = session_key(redirect_session)
+                if not redirect_key:
+                    raise AssertionError("redirect regression session id did not hash")
+
+                if redirected_directory == "patpat-loop":
+                    (outside / "sessions").mkdir()
+                    (outside / "receipts").mkdir()
+                    redirected_path = state_root
+                    victim = outside / "sessions" / f"{redirect_key}.json"
+                elif redirected_directory == "sessions":
+                    state_root.mkdir()
+                    (state_root / "receipts").mkdir()
+                    redirected_path = state_root / "sessions"
+                    victim = outside / f"{redirect_key}.json"
+                else:
+                    state_root.mkdir()
+                    (state_root / "sessions").mkdir()
+                    redirected_path = state_root / "receipts"
+                    victim = outside / f"{redirect_key}.json"
+
+                victim.write_text("{}\n", encoding="utf-8")
+                create_directory_redirect(redirected_path, outside)
+                collect_expired(str(redirect_base), 100_000, DEFAULT_TTL_MS)
+                if victim.read_text(encoding="utf-8") != "{}\n":
+                    raise AssertionError(f"cleanup followed redirected {redirected_directory} directory")
+                redirect_result = handle_hook(
+                    {
+                        "hook_event_name": "UserPromptSubmit",
+                        "session_id": redirect_session,
+                        "cwd": str(redirect_root),
+                        "prompt": "/patpat verify redirect handling",
+                    },
+                    plugin_data=str(redirect_base),
+                    now_ms=100_000,
+                )
+                if redirect_result is not None:
+                    raise AssertionError(f"activation accepted redirected {redirected_directory} directory")
+                if victim.read_text(encoding="utf-8") != "{}\n":
+                    raise AssertionError(
+                        "activation modified a file through redirected "
+                        f"{redirected_directory} directory"
+                    )
 
         wrong_project = activate(60_000)
         if not wrong_project["state"].exists():
