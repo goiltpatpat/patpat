@@ -99,7 +99,7 @@ That is enough. Explicit activation authorizes the Patpat loop, proof, and verif
 
 ## Usage
 
-[`/patpat`](skills/patpat/SKILL.md) is the default entry point. It reads the request, tracks the matched playbook, and routes through inspection, proof, implementation, verification, and review. Trusted host hooks persist the mode across resume. Without a hook receipt the mode still applies for the rest of the current session.
+[`/patpat`](skills/patpat/SKILL.md) is the default entry point. It reads the request, tracks the matched playbook, and routes through inspection, proof, implementation, verification, and review. Codex and Grok hooks persist the mode across resume. The Cursor adapter does not currently persist the mode across resumes because a compatible state-storage path has not been verified; without a hook receipt the mode still applies for the rest of the current session.
 
 ```text
 FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY

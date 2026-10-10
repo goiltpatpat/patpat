@@ -24,5 +24,8 @@
   ],
   "skills": "./skills/",
   "agents": "./adapters/cursor/agents/",
-  "hooks": "./hooks/cursor.json"
+  "hooks": {
+    "version": 1,
+    "hooks": {}
+  }
 }

@@ -270,7 +270,6 @@ UNADMITTED_COMPONENT_PATHS = {
 }
 EXPECTED_HOOK_FILES = {
     Path("hooks/hooks.json"),
-    Path("hooks/cursor.json"),
     Path("hooks/scripts/patpat_loop_state.py"),
     Path("hooks/scripts/patpat_loop_state.cmd"),
 }
@@ -582,8 +581,8 @@ def validate_hooks(root: Path, parsed: dict[str, dict[str, object]], errors: lis
     }
     if actual != EXPECTED_HOOK_FILES:
         errors.append(f"{hooks_root}: expected hook files {sorted(EXPECTED_HOOK_FILES)}")
-    if parsed.get("cursor", {}).get("hooks") != "./hooks/cursor.json":
-        errors.append("Cursor manifest hooks must point to ./hooks/cursor.json")
+    if parsed.get("cursor", {}).get("hooks") != {"version": 1, "hooks": {}}:
+        errors.append("Cursor manifest hooks must remain disabled until sticky-state integration is verified")
     if "hooks" in parsed.get("codex", {}):
         errors.append("Codex manifest must use default hooks/hooks.json discovery")
     if "hooks" in parsed.get("antigravity", {}):
@@ -1592,7 +1591,9 @@ def run_self_test(root: Path) -> list[str]:
     def add_cursor_hooks(fixture: Path) -> None:
         manifest = fixture / ".cursor-plugin" / "plugin.json"
         data = json.loads(manifest.read_text(encoding="utf-8"))
-        data["hooks"] = "./missing-hooks.json"
+        data["hooks"]["hooks"] = {
+            "sessionStart": [{"command": "./hooks/scripts/patpat_loop_state.py"}]
+        }
         manifest.write_text(json.dumps(data), encoding="utf-8")
 
     def add_conventional_command(fixture: Path) -> None:
@@ -1808,7 +1809,7 @@ def run_self_test(root: Path) -> list[str]:
             ("adapter description drift", drift_adapter_description, "description must remain canonical"),
             ("nested agent adapter", add_nested_agent, "expected agent adapters"),
             ("unsupported Codex agents", add_codex_agents, "must not claim packaged agents"),
-            ("unsupported Cursor hooks", add_cursor_hooks, "hooks/cursor.json"),
+            ("unverified Cursor sticky hooks", add_cursor_hooks, "must remain disabled until sticky-state integration is verified"),
             ("auto-discovered command", add_conventional_command, "unadmitted plugin component path"),
             ("commented proof closure", comment_out_proof_closure, "canonical proof closure directive"),
             ("read-only boundary drift", remove_read_only_boundary, "canonical read-only mutation boundary"),
