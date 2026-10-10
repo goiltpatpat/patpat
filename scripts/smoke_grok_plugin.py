@@ -109,17 +109,6 @@ def execute_hook(command: str, environment: dict[str, str], payload: dict[str, A
     return result.stdout.strip()
 
 
-def cursor_hook_command(plugin_root: Path) -> str:
-    try:
-        manifest = json.loads((plugin_root / "hooks" / "cursor.json").read_text(encoding="utf-8"))
-        command = manifest["hooks"]["beforeSubmitPrompt"][0]["command"]
-    except (FileNotFoundError, json.JSONDecodeError, KeyError, IndexError, TypeError) as error:
-        raise SmokeError("Cursor hook manifest is not executable") from error
-    if not isinstance(command, str) or not command:
-        raise SmokeError("Cursor hook command is empty")
-    return command
-
-
 def smoke_manifest_commands(source: Path) -> None:
     payload = {
         "hook_event_name": "UserPromptSubmit",
@@ -132,7 +121,6 @@ def smoke_manifest_commands(source: Path) -> None:
     commands = (
         ("codex", codex_command, "PLUGIN_ROOT", "PLUGIN_DATA"),
         ("grok", hook_command(source), "GROK_PLUGIN_ROOT", "GROK_PLUGIN_DATA"),
-        ("cursor", cursor_hook_command(source), "CURSOR_PLUGIN_ROOT", "PLUGIN_DATA"),
     )
     with tempfile.TemporaryDirectory(prefix="patpat-hook-command-smoke-") as directory:
         root = Path(directory)
@@ -146,7 +134,6 @@ def smoke_manifest_commands(source: Path) -> None:
                 "GROK_PLUGIN_DATA",
                 "CLAUDE_PLUGIN_ROOT",
                 "CLAUDE_PLUGIN_DATA",
-                "CURSOR_PLUGIN_ROOT",
             ):
                 environment.pop(key, None)
             environment.update({root_key: str(source), data_key: str(data)})
