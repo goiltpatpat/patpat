@@ -242,6 +242,39 @@ PINNED_BOUNDARY_SENTENCES = (
         "judgment-failure instruction-contract",
     ),
     (
+        Path("skills/patpat-eval/SKILL.md"),
+        (
+            "When the user requests evidence-feasibility preflight only, use that request to define the preflight scope. Report each criterion's preflight status and stop before routing, repeat-rate, or target-behavior trials. If the user also explicitly requests those trials, treat the request as a full evaluation: finish preflight first, then follow the trial requirements below.",
+            "A correct preflight reports evidence feasibility only; it never proves the underlying behavior.",
+            "For a live preflight, reuse existing host/session metadata and record the host and relevant version once.",
+            "Report planned but unexecuted prompts, events, and actions as `not run` or `not observed`, never as observed evidence.",
+            "When routing is part of the target claim, score routing as behavior. Report test-method feasibility separately; feasibility alone is never a behavioral `PASS`.",
+        ),
+        "preflight-only stop contract",
+    ),
+    (
+        Path("skills/patpat-loop/playbooks/behavioral-eval.md"),
+        (
+            "Map every material user requirement and safety constraint to a mandatory criterion.",
+            "For event-triggered or asynchronous criteria, distinguish a product deadline from the evaluator's observation window.",
+            "For local-only criteria, inspect path and artifact access.",
+            "Record the grant or policy and its scope when authority is required.",
+            "If operation/schema metadata is not inspectable, mark only the dependent criterion `INCONCLUSIVE`.",
+            "If live provider access is required and no approved read-only evidence establishes connection, record connection as `UNKNOWN` and the dependent criterion as `INCONCLUSIVE`; never probe a provider during preflight.",
+            "Distinguish model-host transport from calls to the provider under test; report only what receipts prove and do not claim zero network activity without transport evidence.",
+            "`UNKNOWN` describes a fact, not a status.",
+            "Verify with inspectable evidence that the current session is bound to that exact isolated target.",
+            "If approval, its scope, or the current target binding is missing or ambiguous, do not run the dependent criterion; do not create a canary or disposable provider state to make it feasible.",
+            "For claims about a candidate skill, verify with inspectable path and hash receipts that the actual loaded skill and relevant guidance bytes match the candidate; a hash of the repository copy alone does not prove the loaded bytes.",
+            "If source identity is missing, mismatched, or uninspectable, mark candidate attribution `INCONCLUSIVE` and skip only that candidate-specific trial.",
+            "Use only `READY` or `INCONCLUSIVE` at preflight.",
+            "When a required fact is missing, mark only its dependent criterion `INCONCLUSIVE`, record the gap once, skip it for this run, and continue independent safe checks.",
+            "Treat `INCONCLUSIVE` as terminal for that criterion in this run: do not repeat the same check, broaden the search, poll, probe, or ask the same question again.",
+            "A request for another report alone does not reopen an `INCONCLUSIVE` criterion: reuse its prior receipt/status if available; otherwise report that it is unavailable and keep the criterion `INCONCLUSIVE` without repeating the same check.",
+        ),
+        "evidence-feasibility preflight contract",
+    ),
+    (
         Path("docs/guide/capability-map.md"),
         (
             "Default commit and ready PR require delivery intent.",
@@ -1453,6 +1486,87 @@ def run_self_test(root: Path) -> list[str]:
             encoding="utf-8",
         )
 
+    def strip_evidence_preflight_boundary(fixture: Path) -> None:
+        playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "behavioral-eval.md"
+        text = playbook.read_text(encoding="utf-8")
+        contract = "Use only `READY` or `INCONCLUSIVE` at preflight."
+        playbook.write_text(
+            text.replace(contract, f"<!--{contract}-->", 1),
+            encoding="utf-8",
+        )
+
+    def strip_preflight_only_stop(fixture: Path) -> None:
+        skill = fixture / "skills" / "patpat-eval" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        contract = "When the user requests evidence-feasibility preflight only, use that request to define the preflight scope. Report each criterion's preflight status and stop before routing, repeat-rate, or target-behavior trials. If the user also explicitly requests those trials, treat the request as a full evaluation: finish preflight first, then follow the trial requirements below."
+        skill.write_text(
+            text.replace(contract, f"<!--{contract}-->", 1),
+            encoding="utf-8",
+        )
+
+    def strip_preflight_method_scope(fixture: Path) -> None:
+        skill = fixture / "skills" / "patpat-eval" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        contract = "When routing is part of the target claim, score routing as behavior. Report test-method feasibility separately; feasibility alone is never a behavioral `PASS`."
+        skill.write_text(
+            text.replace(contract, f"<!--{contract}-->", 1),
+            encoding="utf-8",
+        )
+
+    def strip_preflight_version_receipt(fixture: Path) -> None:
+        skill = fixture / "skills" / "patpat-eval" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        contract = "For a live preflight, reuse existing host/session metadata and record the host and relevant version once."
+        skill.write_text(
+            text.replace(contract, f"<!--{contract}-->", 1),
+            encoding="utf-8",
+        )
+
+    def strip_preflight_timing_window(fixture: Path) -> None:
+        playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "behavioral-eval.md"
+        text = playbook.read_text(encoding="utf-8")
+        contract = "For event-triggered or asynchronous criteria, distinguish a product deadline from the evaluator's observation window."
+        playbook.write_text(
+            text.replace(contract, f"<!--{contract}-->", 1),
+            encoding="utf-8",
+        )
+
+    def strip_preflight_isolation_guard(fixture: Path) -> None:
+        playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "behavioral-eval.md"
+        text = playbook.read_text(encoding="utf-8")
+        contract = "If approval, its scope, or the current target binding is missing or ambiguous, do not run the dependent criterion; do not create a canary or disposable provider state to make it feasible."
+        playbook.write_text(
+            text.replace(contract, f"<!--{contract}-->", 1),
+            encoding="utf-8",
+        )
+
+    def strip_preflight_candidate_identity(fixture: Path) -> None:
+        playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "behavioral-eval.md"
+        text = playbook.read_text(encoding="utf-8")
+        contract = "If source identity is missing, mismatched, or uninspectable, mark candidate attribution `INCONCLUSIVE` and skip only that candidate-specific trial."
+        playbook.write_text(
+            text.replace(contract, f"<!--{contract}-->", 1),
+            encoding="utf-8",
+        )
+
+    def strip_preflight_no_retry(fixture: Path) -> None:
+        playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "behavioral-eval.md"
+        text = playbook.read_text(encoding="utf-8")
+        contract = "Treat `INCONCLUSIVE` as terminal for that criterion in this run: do not repeat the same check, broaden the search, poll, probe, or ask the same question again."
+        playbook.write_text(
+            text.replace(contract, f"<!--{contract}-->", 1),
+            encoding="utf-8",
+        )
+
+    def strip_preflight_repeat_report_guard(fixture: Path) -> None:
+        playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "behavioral-eval.md"
+        text = playbook.read_text(encoding="utf-8")
+        contract = "A request for another report alone does not reopen an `INCONCLUSIVE` criterion: reuse its prior receipt/status if available; otherwise report that it is unavailable and keep the criterion `INCONCLUSIVE` without repeating the same check."
+        playbook.write_text(
+            text.replace(contract, f"<!--{contract}-->", 1),
+            encoding="utf-8",
+        )
+
     def remove_agents_guide(fixture: Path) -> None:
         (fixture / "AGENTS.md").unlink()
 
@@ -1784,6 +1898,15 @@ def run_self_test(root: Path) -> list[str]:
             ("capability-map delivery-intent drift", strip_capability_map_delivery_intent, "missing capability-map delivery-intent contract"),
             ("risk-scaled start ceremony drift", strip_risk_scaled_start, "missing risk-scaled start ceremony contract"),
             ("judgment-failure instruction-contract drift", strip_judgment_failure_contract, "missing judgment-failure instruction-contract"),
+            ("evidence-feasibility preflight drift", strip_evidence_preflight_boundary, "missing evidence-feasibility preflight contract"),
+            ("preflight-only stop drift", strip_preflight_only_stop, "missing preflight-only stop contract"),
+            ("preflight method scope drift", strip_preflight_method_scope, "missing preflight-only stop contract"),
+            ("preflight version receipt drift", strip_preflight_version_receipt, "missing preflight-only stop contract"),
+            ("preflight timing window drift", strip_preflight_timing_window, "missing evidence-feasibility preflight contract"),
+            ("preflight isolation guard drift", strip_preflight_isolation_guard, "missing evidence-feasibility preflight contract"),
+            ("preflight candidate identity drift", strip_preflight_candidate_identity, "missing evidence-feasibility preflight contract"),
+            ("preflight no-retry drift", strip_preflight_no_retry, "missing evidence-feasibility preflight contract"),
+            ("preflight repeat-report drift", strip_preflight_repeat_report_guard, "missing evidence-feasibility preflight contract"),
             ("missing agent install contract", remove_agents_guide, "missing agent install contract"),
             ("Codex defaultPrompt drift", drop_codex_default_prompt, "defaultPrompt must include $patpat"),
             ("missing published source", drop_published_source, "homepage and repository must point at the published source"),
