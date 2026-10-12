@@ -18,6 +18,7 @@ from validate import validate_root
 
 PACKAGE_ENTRIES = (
     ".agents/plugins",
+    ".claude-plugin",
     ".codex-plugin",
     ".cursor-plugin",
     ".gitignore",
@@ -354,6 +355,13 @@ def run_self_test(source: Path) -> None:
         if staged_agent_entries != {".agents/plugins/marketplace.json"}:
             raise StageError(
                 f"stage self-test found unexpected .agents entries: {sorted(staged_agent_entries)}"
+            )
+        staged_claude_entries = {
+            path for path in inventory if path.startswith(".claude-plugin/")
+        }
+        if staged_claude_entries != {".claude-plugin/marketplace.json"}:
+            raise StageError(
+                f"stage self-test found unexpected Claude entries: {sorted(staged_claude_entries)}"
             )
         try:
             stage(source, target)

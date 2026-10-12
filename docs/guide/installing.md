@@ -4,9 +4,9 @@ Patpat keeps one canonical `skills/` tree and thin host adapters. Select one ins
 
 Patpat's scripts and hooks require Python 3.11 or newer. Windows Codex hooks locate it with `py.exe -3`, then `python.exe` on `PATH`; the launcher reports an error if neither provides Python 3.11+.
 
-Agents should follow [`AGENTS.md`](../../AGENTS.md). The published source is `https://github.com/goiltpatpat/patpat`. The Codex plugin id is `patpat@patpat`.
+Agents should follow [`AGENTS.md`](../../AGENTS.md). The published source is `https://github.com/goiltpatpat/patpat`. The Codex plugin id and Claude Code marketplace/plugin id are both `patpat@patpat`.
 
-Stage a working tree that contains Memory Bank or local artifacts before native Codex or Antigravity install. The stager excludes local Memory Bank and `docs/diagrams/`, but does not apply every `.gitignore` rule; inspect the staged package when other machine-local files sit inside allowed paths. A clean clone of the published repository does not need staging.
+Stage a working tree that contains Memory Bank or local artifacts before native Codex, Claude Code, or Antigravity install. The stager excludes local Memory Bank and `docs/diagrams/`, but does not apply every `.gitignore` rule; inspect the staged package when other machine-local files sit inside allowed paths. A clean clone of the published repository does not need staging.
 
 ## Grok CLI
 
@@ -35,7 +35,7 @@ codex plugin marketplace add goiltpatpat/patpat --ref <release-tag-or-commit>
 codex plugin add patpat@patpat
 ```
 
-The Codex and Cursor manifests share Patpat's package version; the portable Agent Plugins manifest inherits it from the Codex manifest. Its `$schema` version tracks the Agent Plugins format independently. Treat the package version as a release identifier, not a push or PR counter: ordinary merges do not bump it, and internal-only docs, tests, or refactors do not justify a package release. At release preparation, assess the user-facing changes accumulated since the previous release and bump both manifests together: use a patch for compatible fixes and a minor version for new capabilities; while Patpat remains pre-1.0, use a minor version for incompatible changes too. After 1.0, reserve major versions for breaking changes; use `1.0.0` when maintainers commit to a stable public contract. Publish curated notes as a GitHub Release with a matching `v<version>` tag from a reviewed, merged commit; CI checks tag/version equality, not release quality.
+The Codex and Cursor manifests share Patpat's package version; the portable Agent Plugins manifest inherits it from the Codex manifest. The Claude Code marketplace entry uses the same package version because Claude keeps installed copies until that version changes. The portable Agent Plugins `$schema` version tracks that format independently. Treat the package version as a release identifier, not a push or PR counter: ordinary merges do not bump it, and internal-only docs, tests, or refactors do not justify a package release. At release preparation, assess the user-facing changes accumulated since the previous release and bump the Codex, Cursor, and Claude versions together: use a patch for compatible fixes and a minor version for new capabilities; while Patpat remains pre-1.0, use a minor version for incompatible changes too. After 1.0, reserve major versions for breaking changes; use `1.0.0` when maintainers commit to a stable public contract. Publish curated notes as a GitHub Release with a matching `v<version>` tag from a reviewed, merged commit; CI checks tag/version equality, not release quality.
 
 From a local working tree:
 
@@ -61,6 +61,30 @@ Remove the plugin and marketplace separately:
 codex plugin remove patpat@patpat
 codex plugin marketplace remove patpat
 ```
+
+## Claude Code
+
+From GitHub:
+
+```bash
+claude plugin marketplace add goiltpatpat/patpat
+claude plugin install patpat@patpat
+claude plugin list
+claude plugin details patpat
+```
+
+The marketplace points to the repository root with `source: "."`; Claude loads the standard root `skills/` directory. The marketplace entry is the plugin manifest, so the Antigravity root `plugin.json` is not reused. Validate a checkout or staged package with `claude plugin validate /absolute/path/to/patpat --strict`. To validate the skill files themselves, run `claude plugin validate /absolute/path/to/patpat/skills --strict` with Claude Code v2.1.233 or later.
+
+From a local working tree, stage first:
+
+```bash
+python3 scripts/stage_plugin.py --target /absolute/path/to/patpat-dist
+claude plugin validate /absolute/path/to/patpat-dist --strict
+claude plugin marketplace add /absolute/path/to/patpat-dist
+claude plugin install patpat@patpat
+```
+
+Start a new Claude Code session and invoke `/patpat:patpat`. The entry uses the current package release version, so installed copies update when a later release changes that version. Claude marketplace auto-update is off by default; update manually with `claude plugin marketplace update patpat` followed by `claude plugin update patpat@patpat`. Remove with `claude plugin uninstall patpat@patpat`, then `claude plugin marketplace remove patpat`.
 
 ## Antigravity
 
@@ -113,6 +137,7 @@ Use the owner of the installed state. After every update, inspect the installed 
 | Installation | Update path |
 | --- | --- |
 | Codex marketplace | Run `codex plugin marketplace upgrade patpat`, then `codex plugin remove patpat@patpat` and `codex plugin add patpat@patpat`. Start a fresh task. |
+| Claude Code marketplace | Run `claude plugin marketplace update patpat`, then `claude plugin update patpat@patpat` after a package version bump. Start a fresh session. |
 | Grok CLI | Run `grok plugin update patpat`. Start a fresh session. |
 | Antigravity clean clone | Run `git -C /absolute/path/to/patpat pull --ff-only`, `agy plugin validate /absolute/path/to/patpat`, then `agy plugin install /absolute/path/to/patpat`. Reuse the same path and start a fresh session. |
 | Portable copy | Pull the trusted source checkout, run `scripts/update_skills.py` with explicit `--target`, new `--backup`, and `--dry-run`, then repeat without `--dry-run`. The updater refuses modified recorded files, backs up the previous catalog, and rolls back a failed promotion. |
@@ -143,6 +168,7 @@ Explicit invocation authorizes the Patpat loop, proof, and verify. Default commi
 | Grok CLI | `/patpat` or `/patpat-loop` |
 | Cursor | `/patpat` or `/patpat-loop` |
 | Codex | `$patpat` or `$patpat-loop` |
+| Claude Code | `/patpat:patpat` |
 | Portable / generic Agent Skills | `Use patpat to ...` |
 | Antigravity | host UI or `Use patpat to ...` |
 
@@ -159,6 +185,7 @@ python3 scripts/smoke_antigravity_plugin.py
 python3 scripts/smoke_grok_plugin.py
 python3 skills/patpat-run/scripts/validate_plan.py --self-test
 agy plugin validate .
+claude plugin validate . --strict
 ```
 
 For each selected host, inspect the installed catalog, start a fresh task or session, invoke `patpat-loop`, and verify that it loads only the workflow and references required by the request.

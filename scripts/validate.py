@@ -818,6 +818,28 @@ def validate_root(root: Path) -> list[str]:
     if marketplace.get("plugins") != [expected_marketplace_plugin]:
         errors.append(f"{marketplace_path}: plugin entry must remain canonical and root-contained")
 
+    claude_marketplace_path = root / ".claude-plugin" / "marketplace.json"
+    claude_marketplace = (
+        validate_json(claude_marketplace_path, errors)
+        if claude_marketplace_path.is_file()
+        else {}
+    )
+    if not claude_marketplace_path.is_file():
+        errors.append(f"{claude_marketplace_path}: missing Claude marketplace manifest")
+    if set(claude_marketplace) != {"name", "description", "owner", "plugins"}:
+        errors.append(
+            f"{claude_marketplace_path}: fields do not match the Claude marketplace contract"
+        )
+    if claude_marketplace.get("name") != "patpat":
+        errors.append(f"{claude_marketplace_path}: marketplace name must be patpat")
+    if claude_marketplace.get("description") != "Patpat plugins for Claude Code.":
+        errors.append(f"{claude_marketplace_path}: marketplace description must remain canonical")
+    if claude_marketplace.get("owner") != {
+        "name": "Patpat maintainers",
+        "url": PUBLISHED_SOURCE,
+    }:
+        errors.append(f"{claude_marketplace_path}: marketplace owner must remain canonical")
+
     for host, manifest in parsed.items():
         if manifest.get("name") != "patpat":
             errors.append(f"{manifests[host]}: name must be patpat")
@@ -867,6 +889,26 @@ def validate_root(root: Path) -> list[str]:
         errors.append("Cursor and Codex manifest versions must match")
     if not isinstance(cursor_version, str) or not SEMVER_PATTERN.fullmatch(cursor_version):
         errors.append("Cursor and Codex manifest version must be valid semantic versioning")
+
+    expected_claude_plugin = {
+        "name": "patpat",
+        "source": ".",
+        "version": cursor_version,
+        "displayName": "Patpat",
+        "description": "Engineering skills for code that must survive contact with reality.",
+        "author": {"name": "Patpat maintainers"},
+        "homepage": PUBLISHED_SOURCE,
+        "repository": PUBLISHED_SOURCE,
+        "license": "MIT",
+        "keywords": ["agentic-engineering", "verification", "debugging", "architecture"],
+        "category": "Developer Tools",
+        "tags": ["workflow", "verification", "review"],
+    }
+    if claude_marketplace.get("plugins") != [expected_claude_plugin]:
+        errors.append(
+            f"{claude_marketplace_path}: plugin entry must remain canonical, root-contained, "
+            "and version-aligned"
+        )
 
     manifest_descriptions = [
         parsed.get(host, {}).get("description")
@@ -1308,6 +1350,9 @@ def run_self_test(root: Path) -> list[str]:
     def remove_grok_smoke(fixture: Path) -> None:
         (fixture / "scripts" / "smoke_grok_plugin.py").unlink()
 
+    def remove_claude_marketplace(fixture: Path) -> None:
+        (fixture / ".claude-plugin" / "marketplace.json").unlink()
+
     def remove_stage_script(fixture: Path) -> None:
         (fixture / "scripts" / "stage_plugin.py").unlink()
 
@@ -1601,6 +1646,18 @@ def run_self_test(root: Path) -> list[str]:
         data["plugins"][0]["source"]["path"] = "../outside"
         marketplace.write_text(json.dumps(data), encoding="utf-8")
 
+    def escape_claude_marketplace_source(fixture: Path) -> None:
+        marketplace = fixture / ".claude-plugin" / "marketplace.json"
+        data = json.loads(marketplace.read_text(encoding="utf-8"))
+        data["plugins"][0]["source"] = "../outside"
+        marketplace.write_text(json.dumps(data), encoding="utf-8")
+
+    def drift_claude_marketplace_version(fixture: Path) -> None:
+        marketplace = fixture / ".claude-plugin" / "marketplace.json"
+        data = json.loads(marketplace.read_text(encoding="utf-8"))
+        data["plugins"][0]["version"] = "9.9.9"
+        marketplace.write_text(json.dumps(data), encoding="utf-8")
+
     def drift_marketplace_policy(fixture: Path) -> None:
         marketplace = fixture / ".agents" / "plugins" / "marketplace.json"
         data = json.loads(marketplace.read_text(encoding="utf-8"))
@@ -1873,6 +1930,7 @@ def run_self_test(root: Path) -> list[str]:
             ("missing Codex smoke", remove_codex_smoke, "missing isolated Codex marketplace smoke test"),
             ("missing Antigravity smoke", remove_antigravity_smoke, "missing isolated Antigravity plugin smoke test"),
             ("missing Grok smoke", remove_grok_smoke, "missing isolated Grok plugin and hook smoke test"),
+            ("missing Claude marketplace", remove_claude_marketplace, "missing Claude marketplace manifest"),
             ("missing stage script", remove_stage_script, "missing allowlisted plugin staging script"),
             ("missing Agent Plugins stage script", remove_agent_stage_script, "missing Agent Plugins package staging script"),
             ("missing portable updater", remove_update_script, "missing portable skill updater"),
@@ -1913,6 +1971,8 @@ def run_self_test(root: Path) -> list[str]:
             ("manifest version drift", drift_version, "manifest versions must match"),
             ("invalid manifest versions", invalid_versions, "valid semantic versioning"),
             ("marketplace path escape", escape_marketplace_source, "root-contained"),
+            ("Claude marketplace path escape", escape_claude_marketplace_source, "root-contained"),
+            ("Claude marketplace version drift", drift_claude_marketplace_version, "version-aligned"),
             ("marketplace policy drift", drift_marketplace_policy, "root-contained"),
             ("extra marketplace plugin", add_marketplace_plugin, "root-contained"),
             ("manifest description drift", drift_description, "manifest descriptions must match"),
