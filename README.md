@@ -8,7 +8,7 @@
 Engineering skills for code that must survive contact with reality.
 
 Patpat is a portable engineering plugin for AI agents and AI-enabled developer tools that support a compatible plugin or project-scoped Agent Skills directory. Its canonical `skills/` tree is host-neutral, though installation and invocation vary by host.
-Patpat has host adapters for Codex, Grok CLI, Antigravity, and Cursor. Cursor's marketplace listing and fresh-session invocation are not yet verified; use the portable route for that host until they are. For other hosts, use the portable route only after proving the host reads a project-scoped skills directory. There is no universal plugin format: each host must support a compatible plugin contract or skills directory, and invocation must be verified on that host. See the [installation guide](docs/guide/installing.md) for host-specific setup.
+Patpat has host adapters for Codex, Claude Code, Grok CLI, Antigravity, and Cursor. Claude Code's marketplace contract is now defined, but its CLI validation and fresh-session invocation have not been run in this environment. Cursor's marketplace listing and fresh-session invocation are not yet verified; use the portable route for that host until they are. For other hosts, use the portable route only after proving the host reads a project-scoped skills directory. There is no universal plugin format: each host must support a compatible plugin contract or skills directory, and invocation must be verified on that host. See the [installation guide](docs/guide/installing.md) for host-specific setup.
 
 [Guide](docs/guide/README.md) · [Install and update](docs/guide/installing.md) · [Capability map](docs/guide/capability-map.md) · [Releases](https://github.com/goiltpatpat/patpat/releases) · [Security](https://github.com/goiltpatpat/patpat/security/policy)
 
@@ -45,6 +45,15 @@ Start a new task, then invoke `$patpat`. Package installation and prompt-time di
 <details>
 <summary>Other hosts and portable installation</summary>
 
+Claude Code, from this repository:
+
+```bash
+claude plugin marketplace add goiltpatpat/patpat
+claude plugin install patpat@patpat
+```
+
+Start a new session, then invoke `/patpat:patpat`. The marketplace entry follows Patpat's package release version; see the [Claude Code install and update steps](docs/guide/installing.md#claude-code).
+
 Grok CLI, from this repository:
 
 ```bash
@@ -80,7 +89,7 @@ python3 scripts/install_skills.py \
 
 A working tree that still contains Memory Bank or other ignored files must be staged first. Agents should follow [`AGENTS.md`](AGENTS.md). Host commands, updates, and removal live in the [installation guide](docs/guide/installing.md).
 
-Update through the owner of the installed state: Codex marketplace upgrade plus remove/add, `grok plugin update patpat`, pull/validate/install on the same Antigravity clone, or the transactional portable updater. Development symlinks follow source content and use the updater when the skill catalog changes. Cursor native update remains unverified. See the [update matrix](docs/guide/installing.md#update).
+Update through the owner of the installed state: Codex marketplace upgrade plus remove/add, Claude marketplace and plugin update after a package version bump, `grok plugin update patpat`, pull/validate/install on the same Antigravity clone, or the transactional portable updater. Development symlinks follow source content and use the updater when the skill catalog changes. Cursor native update remains unverified. See the [update matrix](docs/guide/installing.md#update).
 
 </details>
 
@@ -89,7 +98,7 @@ Update through the owner of the installed state: Codex marketplace upgrade plus 
 Two steps:
 
 1. Install Patpat on the active host.
-2. Invoke `/patpat` (Cursor), `$patpat` (Codex), or `Use patpat to ...` on other hosts.
+2. Invoke `/patpat` (Cursor), `$patpat` (Codex), `/patpat:patpat` (Claude Code), or `Use patpat to ...` on other hosts.
 
 ```text
 /patpat reproduce this timeout, fix the root cause, and land the PR
@@ -110,7 +119,7 @@ REVIEW -> LEARN? -> REPORT
 
 A proof contract names the claim, authoritative surface, action, expected observation, and cleanup. A build supports a claim. It does not prove user-visible behavior. Green is a signal, not an alibi.
 
-Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`. Portable hosts use `Use patpat to ...`.
+Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`. Claude Code uses `/patpat:patpat`. Portable hosts use `Use patpat to ...`.
 
 ### Playbooks
 

@@ -1,0 +1,35 @@
+{
+  "name": "patpat",
+  "description": "Patpat plugins for Claude Code.",
+  "owner": {
+    "name": "Patpat maintainers",
+    "url": "https://github.com/goiltpatpat/patpat"
+  },
+  "plugins": [
+    {
+      "name": "patpat",
+      "source": ".",
+      "version": "0.7.2",
+      "displayName": "Patpat",
+      "description": "Engineering skills for code that must survive contact with reality.",
+      "author": {
+        "name": "Patpat maintainers"
+      },
+      "homepage": "https://github.com/goiltpatpat/patpat",
+      "repository": "https://github.com/goiltpatpat/patpat",
+      "license": "MIT",
+      "keywords": [
+        "agentic-engineering",
+        "verification",
+        "debugging",
+        "architecture"
+      ],
+      "category": "Developer Tools",
+      "tags": [
+        "workflow",
+        "verification",
+        "review"
+      ]
+    }
+  ]
+}
