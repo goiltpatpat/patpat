@@ -8,8 +8,15 @@ Patpat turns an outcome into a closed engineering loop:
 FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY
 VERIFY -> REPORT when local reversible without delivery intent
 VERIFY -> REVIEW before delivery / high-risk / durable-run LEARN|REPORT
-REVIEW -> LEARN? -> REPORT
+REVIEW -> changes required -> INSPECT / PROOF CONTRACT / ACT -> VERIFY
+REVIEW -> LEARN? -> propose and wait for approval -> approved edit -> VERIFY -> REVIEW -> REPORT
+LEARN approval pending -> hold; approval declined -> REPORT without editing
+REVIEW -> REPORT when no lesson needs encoding
+REPORT -> patpat-ship only with delivery intent and fresh verify + review
+LAND? -> MERGE a green reviewed PR only with explicit land or merge
 ```
+
+`REPORT` is terminal for a durable run. Shipping is a separate, conditional workflow; it does not reopen the completed run.
 
 ## State the outcome
 

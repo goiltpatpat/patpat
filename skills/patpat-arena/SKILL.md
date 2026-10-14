@@ -2,9 +2,13 @@
 name: patpat-arena
 description: Run isolated competing attempts at the same brief, pick a base, graft the strongest parts, and verify the synthesis. Use for /patpat-arena, competing designs, or when one attempt would lock the wrong shape.
 disable-model-invocation: true
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"GitRepository","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Arena
+
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) and [execution graph](../patpat-loop/references/execution-graph.md) in full. Do not load the router.
 

@@ -1,9 +1,13 @@
 ---
 name: patpat-ship
 description: Commit and open or update a ready pull request after verified work when delivery intent exists, and merge only with explicit land or merge language. Use at the end of an active Patpat implementation and for explicit ship, land, merge, publish, or deploy requests.
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"DESTRUCTIVE","target_entity":"PullRequest","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Ship
+
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) and [execution graph](../patpat-loop/references/execution-graph.md) in full. Do not load the router.
 

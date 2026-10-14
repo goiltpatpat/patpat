@@ -24,6 +24,8 @@ Define:
 - stop and approval conditions;
 - the output contract.
 
+Include the namespaced `metadata.patpat.ontology` contract from [`patpat-skill`](../../skills/patpat-skill/SKILL.md). Use only hard prerequisites and uniquely produced, verifiable states; keep project-specific verification commands out of the metadata.
+
 Add the route to `patpat-loop` only when the new intent cannot route safely through an existing workflow.
 
 ## Evaluate the extension

@@ -1,9 +1,13 @@
 ---
 name: patpat-review
 description: Independently challenge an implementation, diff, or verification claim without editing. Use after meaningful changes, for explicit code review, or when high-risk evidence needs a separate skeptical pass.
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Codebase","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Review
+
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 

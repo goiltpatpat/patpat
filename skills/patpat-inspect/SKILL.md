@@ -1,9 +1,13 @@
 ---
 name: patpat-inspect
 description: Explain repository behavior, ownership, placement, or historical design decisions without editing. Use for how, why, and diagnosis-only questions; not implementation or delivery.
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Codebase","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Inspect
+
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 For a bounded read-only question, use this skill and its relevant references. Read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full for uncertainty, sensitive data, or cross-cutting investigation. Do not load the router or reread unchanged instructions already loaded in this session.
 

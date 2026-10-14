@@ -1,9 +1,13 @@
 ---
 name: patpat-change
 description: Implement one bounded repository change with a small diff and explicit proof. Use for clear features, localized refactors, and requested fixes after the root cause or design is known.
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Codebase","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Change
+
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 For clear, bounded, reversible local work without delivery intent, use this skill and its relevant references. Otherwise read the [operating protocol](../patpat-loop/references/operating-protocol.md) and [execution graph](../patpat-loop/references/execution-graph.md) in full before acting. Escalate on uncertainty, security, auth, billing, secrets, architecture, cross-cutting work, or delivery intent. Do not load the router or reread unchanged instructions already loaded in this session.
 

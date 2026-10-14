@@ -249,7 +249,12 @@ def validate_plan(value: Any) -> list[str]:
     errors: list[str] = []
     if not isinstance(value, dict) or set(value) != PLAN_KEYS:
         return [f"plan must contain exactly {sorted(PLAN_KEYS)}"]
-    if value.get("schema_version") != SCHEMA_VERSION:
+    schema_version = value.get("schema_version")
+    if (
+        isinstance(schema_version, bool)
+        or not isinstance(schema_version, int)
+        or schema_version != SCHEMA_VERSION
+    ):
         errors.append(f"schema_version must be {SCHEMA_VERSION}")
     if not nonempty(value.get("objective"), MAX_OBJECTIVE_LENGTH):
         errors.append(
@@ -270,7 +275,7 @@ def example_plan() -> dict[str, Any]:
         "schema_version": 1,
         "objective": "Deliver two independently provable pull requests.",
         "delivery": {
-            "authority": "patpat-activation",
+            "authority": "explicit-delivery",
             "actions": ["commit", "non-force-push", "create-or-update-ready-pr"],
         },
         "units": [

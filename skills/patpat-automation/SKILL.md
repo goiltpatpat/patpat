@@ -1,9 +1,13 @@
 ---
 name: patpat-automation
 description: Design or scaffold a safe external automation for a concrete provider, trigger, and verification surface. Use when an integration is named and write authority, idempotency, compensation, secrets, and kill-switch behavior must be settled.
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Automation","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Automation
+
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) and [execution graph](../patpat-loop/references/execution-graph.md) in full. Do not load the router.
 

@@ -6,6 +6,7 @@ When one request requires outputs from more than one specialized row, keep `patp
 
 | Intent | Workflow | Playbook |
 | --- | --- | --- |
+| Map an unfamiliar workspace into a compact, evidence-backed context graph | [`00-workspace-mapper`](../../00-workspace-mapper/SKILL.md) | Use only when explicitly requested; no current skill declares the map as a hard prerequisite |
 | Why the code reached this shape | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [Rationale forensics](../playbooks/rationale-forensics.md) |
 | Build or extend a playable game from a concrete brief | [`patpat-game-builder`](../../patpat-game-builder/SKILL.md) | [Build slice](../../patpat-game-builder/playbooks/build-playable-slice.md); [diagnose](../../patpat-game-builder/playbooks/diagnose-gameplay.md), [verify playthrough](../../patpat-game-builder/playbooks/verify-playthrough.md), and [visual iteration](../../patpat-game-builder/playbooks/visual-iteration.md) when applicable |
 | Turn an idea, plan, or codebase into an interactive visual | [`patpat-repository-diagram`](../../patpat-repository-diagram/SKILL.md) | Use only for an explicit diagram or visual request; brief-only and repository-backed evidence are both supported |

@@ -1,9 +1,13 @@
 ---
 name: patpat-debug
 description: Diagnose and fix a reproducible defect through root-cause evidence. Use for broken behavior, regressions, failing runtime paths, and unexplained mismatches when implementation is requested.
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Codebase","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Debug
+
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 For clear, bounded, reversible local work without delivery intent, use this skill and its relevant references. Otherwise read the [operating protocol](../patpat-loop/references/operating-protocol.md) and [execution graph](../patpat-loop/references/execution-graph.md) in full before acting. Escalate on uncertainty, security, auth, billing, secrets, architecture, cross-cutting work, or delivery intent. Define Claim, Surface, Action, Expect, and Cleanup before editing. Do not load the router or reread unchanged instructions already loaded in this session.
 

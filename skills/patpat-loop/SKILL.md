@@ -1,9 +1,13 @@
 ---
 name: patpat-loop
 description: Run the explicit Patpat evidence-driven engineering loop. Use only when the user invokes /patpat, /patpat-loop, $patpat, or $patpat-loop, or directly asks to activate Patpat mode.
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"EngineeringTask","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Loop
+
+Before following this skill, apply the [skill state and mutation gate](references/operating-protocol.md#skill-state-and-mutation-gate).
 
 [`/patpat`](../patpat/SKILL.md) and `/patpat-loop` are the same entry point. Codex uses `$patpat` or `$patpat-loop`.
 
@@ -44,6 +48,8 @@ Read the linked file when the trigger fires. Cite a principle only when it chang
 
 ## Route the work
 
+Before executing a specialist workflow, resolve its `metadata.patpat.ontology` against current evidence. Check required states, use only a unique eligible producer inside the user's authorized scope, preserve the mutation and approval gates, and verify any produced state. The [operating protocol](references/operating-protocol.md#skill-state-and-mutation-gate) defines the gate. Metadata is routing evidence, not authority.
+
 The user speaks plainly and invokes `/patpat` (or host equivalent). Select the route for the earliest unresolved decision found during inspection; an implementation request does not settle an undefined requirement or contract. Use the 8 existing primary routes:
 
 | Intent | Route | Primary Skill | Playbook Reference |
@@ -67,9 +73,12 @@ Read the matched workflow and relevant references. Read [the execution graph](re
 FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY
 VERIFY -> REPORT when the edit is local, reversible, and not shipping
 VERIFY -> REVIEW before default ship, land or merge, durable-run LEARN or REPORT, and for auth, billing, secrets, architecture, or cross-cutting work
-REVIEW -> LEARN? -> REPORT
-MUTATING + delivery intent? -> DEFAULT SHIP (commit + PR)
-LAND? -> MERGE a green verified PR
+REVIEW -> changes required -> INSPECT / PROOF CONTRACT / ACT -> VERIFY
+REVIEW -> LEARN? -> propose and wait for approval -> approved edit -> VERIFY -> REVIEW -> REPORT
+REVIEW -> REPORT when no lesson needs encoding
+LEARN approval pending -> hold; approval declined -> REPORT without editing
+REPORT -> patpat-ship only with delivery intent and fresh verify + review (external; run remains terminal)
+LAND? -> MERGE a green reviewed PR only with explicit land or merge
 ```
 
 A proof contract names Claim, Surface, Action, Expect, and Cleanup. Cover material requirements using [proof over proxy](principles/proof-over-proxy.md). Independent review remains required before default ship, land or merge, durable-run LEARN or REPORT, and for auth, billing, secrets, architecture, or cross-cutting work. Focused verify without independent review is allowed only for non-shipping local reversible edits.

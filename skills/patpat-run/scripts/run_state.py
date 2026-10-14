@@ -359,7 +359,8 @@ def recover_stale_lock(root: Path, run_id: str) -> Path:
         if host != socket.gethostname():
             raise RunStateError("lock belongs to another host and cannot be recovered automatically")
         if (
-            not isinstance(pid, int)
+            isinstance(pid, bool)
+            or not isinstance(pid, int)
             or pid <= 0
             or not isinstance(token, str)
             or LOCK_TOKEN_PATTERN.fullmatch(token) is None
@@ -539,9 +540,11 @@ def schema_errors(state: dict[str, Any], root: Path, run_id: str) -> list[str]:
         conflict = set(state["authorities"]) & set(state["prohibitions"])
         if conflict:
             errors.append(f"authority conflicts with prohibition: {sorted(conflict)}")
-    if not isinstance(state.get("epoch"), int) or state.get("epoch", -1) < 0:
+    epoch = state.get("epoch")
+    if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 0:
         errors.append("epoch must be a non-negative integer")
-    if not isinstance(state.get("sequence"), int) or state.get("sequence", -1) < 1:
+    sequence = state.get("sequence")
+    if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 1:
         errors.append("sequence must be a positive integer")
     events = state.get("events")
     if isinstance(events, list):
@@ -552,7 +555,14 @@ def schema_errors(state: dict[str, Any], root: Path, run_id: str) -> list[str]:
         else:
             expected = list(range(1, len(events) + 1))
             observed = [event.get("sequence") for event in events]
-            if observed != expected or state.get("sequence") != expected[-1]:
+            if (
+                not all(
+                    isinstance(value, int) and not isinstance(value, bool)
+                    for value in observed
+                )
+                or observed != expected
+                or sequence != expected[-1]
+            ):
                 errors.append("event sequence is invalid")
             if events[-1].get("node") != state.get("node"):
                 errors.append("last event node does not match state")
@@ -663,7 +673,6 @@ def transition(root: Path, run_id: str, destination: str) -> dict[str, Any]:
             state["verification"] = None
             state["review"] = None
         state["node"] = destination
-        state["last_failure"] = None
         append_state_event(state, "transition", f"{source} -> {destination}", snapshot=snapshot)
         save_state(root, run_id, state)
         return state
@@ -698,8 +707,14 @@ def record_proof_contract(root: Path, run_id: str, fields: dict[str, str]) -> di
         if state["node"] not in {"INSPECT", "PROOF_CONTRACT"}:
             raise RunStateError("proof contract must be recorded during INSPECT or PROOF_CONTRACT")
         normalized = normalize_proof_contract(fields)
+        previous_contract = state["proof_contract"]
+        contract_changed = not isinstance(previous_contract, dict) or any(
+            previous_contract.get(key) != normalized[key]
+            for key in PROOF_CONTRACT_CANONICAL_KEYS
+        )
         state["proof_contract"] = {**normalized, "recorded_at": now()}
-        state["last_failure"] = None
+        if contract_changed:
+            state["last_failure"] = None
         append_state_event(state, "proof-contract", normalized["claim"], snapshot=current_snapshot(root))
         save_state(root, run_id, state)
         return state
@@ -749,7 +764,8 @@ def record_receipt(
         }
         if kind == "verification":
             state["review"] = None
-        state["last_failure"] = None
+        if verdict in {"verified", "pass"}:
+            state["last_failure"] = None
         append_state_event(
             state,
             kind,
@@ -794,7 +810,6 @@ def record_experiment(
         if state["node"] != "VERIFY":
             raise RunStateError("experiment record requires VERIFY state")
         snapshot = current_snapshot(root)
-        state["last_failure"] = None
         append_state_event(
             state,
             "experiment",
@@ -819,7 +834,6 @@ def record_decision(root: Path, run_id: str, summary: str) -> dict[str, Any]:
         state = load_state(root, run_id)
         if state["node"] in {"REPORT", "BLOCKED"}:
             raise RunStateError(f"cannot record into terminal node {state['node']}")
-        state["last_failure"] = None
         append_state_event(state, "decision", summary, snapshot=current_snapshot(root))
         save_state(root, run_id, state)
         return state
@@ -1374,6 +1388,25 @@ def run_self_test() -> None:
         ship_pass, _ = check_gate(root, "main-run", "ship")
         if not ship_pass:
             raise AssertionError("ship gate failed with fresh verification and review")
+        integer_state = load_state(root, "main-run")
+        malformed_epoch = json.loads(json.dumps(integer_state))
+        malformed_epoch["epoch"] = True
+        if "epoch must be a non-negative integer" not in schema_errors(
+            malformed_epoch, root, "main-run"
+        ):
+            raise AssertionError("boolean run epoch was accepted as an integer")
+        malformed_sequence = json.loads(json.dumps(integer_state))
+        malformed_sequence["sequence"] = True
+        if "sequence must be a positive integer" not in schema_errors(
+            malformed_sequence, root, "main-run"
+        ):
+            raise AssertionError("boolean run sequence was accepted as an integer")
+        malformed_event_sequence = json.loads(json.dumps(integer_state))
+        malformed_event_sequence["events"][0]["sequence"] = True
+        if "event sequence is invalid" not in schema_errors(
+            malformed_event_sequence, root, "main-run"
+        ):
+            raise AssertionError("boolean event sequence was accepted as an integer")
         merge_pass, _ = check_gate(root, "main-run", "merge")
         if merge_pass:
             raise AssertionError("merge gate passed without explicit-merge authority")
@@ -1698,6 +1731,17 @@ def run_self_test() -> None:
                 pass
             else:
                 raise AssertionError("live run lock was recovered")
+            lock_path.write_text(
+                json.dumps({"pid": True, "host": socket.gethostname(), "created_at": now(), "token": "a" * 32}),
+                encoding="utf-8",
+            )
+            try:
+                recover_stale_lock(root, "atomic-run")
+            except RunStateError as error:
+                if "lock identity is invalid" not in str(error):
+                    raise
+            else:
+                raise AssertionError("boolean lock pid was accepted as an integer")
         finally:
             lock_path.write_text(
                 json.dumps({"pid": 99999999, "host": socket.gethostname(), "created_at": now(), "token": "b" * 32}),

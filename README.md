@@ -114,7 +114,8 @@ That is enough. Explicit activation authorizes the Patpat loop, proof, and verif
 FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY
 VERIFY -> REPORT when local reversible without delivery intent
 VERIFY -> REVIEW before delivery / high-risk / durable-run LEARN|REPORT
-REVIEW -> LEARN? -> REPORT
+REVIEW -> LEARN? -> propose and wait for approval -> approved edit -> VERIFY -> REVIEW -> REPORT
+LEARN approval pending -> hold; approval declined -> REPORT without editing
 ```
 
 A proof contract names the claim, authoritative surface, action, expected observation, and cleanup. A build supports a claim. It does not prove user-visible behavior. Green is a signal, not an alibi.
@@ -177,6 +178,7 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 
 | Skill | Use it when |
 | --- | --- |
+| [`00-workspace-mapper`](skills/00-workspace-mapper/SKILL.md) | Explicitly map an unfamiliar workspace; the current catalog has no hard consumer of its map state. |
 | [`patpat`](skills/patpat/SKILL.md) | Slash alias for the loop. `/patpat` is the default entry. |
 | [`patpat-loop`](skills/patpat-loop/SKILL.md) | The work is non-trivial and needs the full loop. |
 | [`patpat-inspect`](skills/patpat-inspect/SKILL.md) | Explain, audit, or diagnose without editing. |

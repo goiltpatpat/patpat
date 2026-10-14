@@ -1,9 +1,13 @@
 ---
 name: patpat-verify
 description: Prove an implementation or repository claim against its authoritative artifact or user surface. Use after code changes, during acceptance checks, or whenever tests and builds are insufficient evidence of real behavior.
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Codebase","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Verify
+
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 For a bounded local proof, use this skill and its relevant references. Read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full for uncertainty, security, auth, billing, secrets, architecture, cross-cutting work, or delivery intent. Do not load the router or reread unchanged instructions already loaded in this session.
 
@@ -12,16 +16,16 @@ Read [proof over proxy](../patpat-loop/principles/proof-over-proxy.md) and [pres
 ## The Iron Law of Verification
 
 ```text
-NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE
+NO COMPLETION CLAIMS WITHOUT FRESH, CANDIDATE-BOUND EVIDENCE
 ```
 
-If the verification command was not executed in the current turn, you are strictly forbidden from declaring that tests pass, the issue is fixed, or the change is verified.
+For work outside a durable `patpat-run`, execute the authoritative check in the current turn. Within a durable run, prior evidence may be reused only when `patpat-run validate` accepts its receipt as fresh for the current candidate, proof contract, evidence epoch, and repository snapshot, and the bound evidence content still matches. Never describe reused evidence as executed in the current turn. The run snapshot does not cover ignored files, external inputs, or the process and dependency environment; bind task-relevant non-secret inputs separately or rerun the check.
 
 ### The 5-Step Gate Function
 
 1. **IDENTIFY**: Specify the authoritative command or check that proves the claim.
-2. **RUN**: Execute the full command freshly on the authoritative surface.
-3. **READ**: Inspect raw stdout, stderr, and exit code directly (sanitizing tokens and secrets via available sanitizers or inline credential masking).
+2. **RUN**: Execute the full command freshly on the authoritative surface, or validate a durable-run receipt against the current candidate and all material bindings.
+3. **READ**: Inspect raw stdout, stderr, and exit code directly when executing; for a reused receipt, inspect its bound evidence and validator result (sanitizing tokens and secrets via available sanitizers or inline credential masking).
 4. **VERIFY**: Confirm the observed output strictly satisfies the expected criteria.
 5. **ONLY THEN**: Make the claim and attach the raw evidence.
 
