@@ -2,9 +2,13 @@
 name: patpat-eval
 description: Evaluate whether an agent skill triggers and performs correctly using scoped, evidence-based trials. Use after non-trivial skill changes or when routing quality is uncertain.
 disable-model-invocation: true
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"AgentSkill","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Eval
+
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 

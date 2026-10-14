@@ -2,9 +2,13 @@
 name: patpat-setup
 description: Inspect the active agent host and install or validate Patpat through its supported native plugin manager or an explicit Agent Skills directory. Use for Patpat installation, discovery, update, removal, or host compatibility questions.
 disable-model-invocation: true
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"DESTRUCTIVE","target_entity":"AgentHost","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Setup
+
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 

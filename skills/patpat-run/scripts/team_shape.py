@@ -14,14 +14,23 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
+from state_lock import bounded_file_binding
+
 
 LEVELS = ("low", "medium", "high")
 WORK_KINDS = ("read-only", "writable")
 MAX_RECEIPT_BYTES = 64 * 1024
 MAX_IDENTITY_LENGTH = 512
+MAX_EVIDENCE_FILE_BYTES = 64 * 1024 * 1024
+MAX_EVIDENCE_TOTAL_BYTES = 64 * 1024 * 1024
+MAX_EVIDENCE_REFERENCES = 24
+MAX_EVIDENCE_REFERENCES_PER_CHECK = 8
+MAX_EVIDENCE_PATH_LENGTH = 4096
 PLAN_DIGEST = re.compile(r"^[0-9a-f]{64}$")
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
 PROGRAM_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 PARALLEL_GATE_KIND = "patpat.parallel_gate_receipt"
+PARALLEL_GATE_SCHEMA_VERSION = 2
 PARALLEL_GATE_CHECKS = (
     "representative_single_owner_run",
     "stable_verifier",
@@ -30,7 +39,7 @@ PARALLEL_GATE_CHECKS = (
     "isolated_resources",
     "whole_system_verification",
 )
-PARALLEL_GATE_KEYS = {
+PARALLEL_GATE_V1_KEYS = {
     "schema_version",
     "kind",
     "program_id",
@@ -39,6 +48,8 @@ PARALLEL_GATE_KEYS = {
     "checks",
     "isolation_identities",
 }
+PARALLEL_GATE_KEYS = PARALLEL_GATE_V1_KEYS | {"supporting_evidence"}
+EVIDENCE_BINDING_KEYS = {"path", "sha256", "size"}
 HANDOFF_FIELDS = (
     "candidate_id",
     "objective",
@@ -78,6 +89,106 @@ def canonical_receipt_digest(value: Any) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def bind_parallel_gate_evidence(path: Path) -> dict[str, Any]:
+    path_text = str(path)
+    if (
+        not path.is_absolute()
+        or len(path_text) > MAX_EVIDENCE_PATH_LENGTH
+        or any(unicodedata.category(character).startswith("C") for character in path_text)
+    ):
+        raise TeamShapeError("parallel gate evidence path must be absolute and bounded")
+    binding = bounded_file_binding(
+        path,
+        max_bytes=MAX_EVIDENCE_FILE_BYTES,
+        error_type=TeamShapeError,
+        label="parallel gate evidence",
+    )
+    if binding["size"] < 1:
+        raise TeamShapeError("parallel gate evidence must not be empty")
+    return binding
+
+
+def validate_parallel_gate_evidence(
+    value: Any,
+    *,
+    verify_files: bool,
+) -> dict[str, list[dict[str, Any]]]:
+    if not isinstance(value, dict) or set(value) != set(PARALLEL_GATE_CHECKS):
+        raise TeamShapeError("parallel gate supporting evidence must cover every check exactly once")
+
+    normalized: dict[str, list[dict[str, Any]]] = {}
+    expected_by_path: dict[str, dict[str, Any]] = {}
+    verified_by_path: dict[str, dict[str, Any]] = {}
+    total_bytes = 0
+    reference_count = 0
+    for check in PARALLEL_GATE_CHECKS:
+        references = value[check]
+        if (
+            not isinstance(references, list)
+            or not references
+            or len(references) > MAX_EVIDENCE_REFERENCES_PER_CHECK
+        ):
+            raise TeamShapeError(
+                f"parallel gate evidence for {check} must contain 1 to "
+                f"{MAX_EVIDENCE_REFERENCES_PER_CHECK} file bindings"
+            )
+        normalized_references: list[dict[str, Any]] = []
+        check_paths: set[str] = set()
+        for reference in references:
+            reference_count += 1
+            if reference_count > MAX_EVIDENCE_REFERENCES:
+                raise TeamShapeError("parallel gate receipt exceeds the evidence reference limit")
+            if not isinstance(reference, dict) or set(reference) != EVIDENCE_BINDING_KEYS:
+                raise TeamShapeError(f"parallel gate evidence binding for {check} is malformed")
+            path_text = reference.get("path")
+            digest = reference.get("sha256")
+            size = reference.get("size")
+            if (
+                not isinstance(path_text, str)
+                or not path_text
+                or path_text != path_text.strip()
+                or len(path_text) > MAX_EVIDENCE_PATH_LENGTH
+                or any(unicodedata.category(character).startswith("C") for character in path_text)
+                or not Path(path_text).is_absolute()
+            ):
+                raise TeamShapeError(f"parallel gate evidence path for {check} must be absolute and bounded")
+            if not isinstance(digest, str) or SHA256.fullmatch(digest) is None:
+                raise TeamShapeError(f"parallel gate evidence digest for {check} is invalid")
+            if (
+                isinstance(size, bool)
+                or not isinstance(size, int)
+                or size < 1
+                or size > MAX_EVIDENCE_FILE_BYTES
+            ):
+                raise TeamShapeError(f"parallel gate evidence size for {check} is invalid")
+
+            expected = {"path": path_text, "sha256": digest, "size": size}
+            if path_text in check_paths:
+                raise TeamShapeError(f"parallel gate evidence for {check} repeats a file binding")
+            check_paths.add(path_text)
+            previous = expected_by_path.get(path_text)
+            if previous is not None and previous != expected:
+                raise TeamShapeError("parallel gate evidence binds one path to conflicting content")
+            if previous is None:
+                expected_by_path[path_text] = expected
+                total_bytes += size
+                if total_bytes > MAX_EVIDENCE_TOTAL_BYTES:
+                    raise TeamShapeError("parallel gate evidence exceeds the total byte limit")
+            if verify_files:
+                actual = verified_by_path.get(path_text)
+                if actual is None:
+                    actual = bind_parallel_gate_evidence(Path(path_text))
+                    verified_by_path[path_text] = actual
+                if actual != expected:
+                    raise TeamShapeError(
+                        f"parallel gate evidence for {check} no longer matches its file binding"
+                    )
+                expected = actual
+            normalized_references.append(expected)
+        normalized[check] = normalized_references
+    return normalized
+
+
 def validate_parallel_gate_receipt(
     value: Any,
     *,
@@ -85,12 +196,23 @@ def validate_parallel_gate_receipt(
     expected_plan_digest: str | None = None,
     expected_integration_owner: str | None = None,
     expected_units: set[str] | None = None,
+    require_evidence: bool = False,
 ) -> dict[str, Any]:
     """Validate a content-bound earned-parallelism receipt."""
-    if not isinstance(value, dict) or set(value) != PARALLEL_GATE_KEYS:
+    schema_version = value.get("schema_version") if isinstance(value, dict) else None
+    if (
+        isinstance(schema_version, bool)
+        or not isinstance(schema_version, int)
+        or schema_version not in {1, PARALLEL_GATE_SCHEMA_VERSION}
+    ):
+        raise TeamShapeError("parallel gate receipt schema version is invalid")
+    expected_keys = PARALLEL_GATE_V1_KEYS if schema_version == 1 else PARALLEL_GATE_KEYS
+    if not isinstance(value, dict) or set(value) != expected_keys:
         raise TeamShapeError("parallel gate receipt fields do not match the contract")
-    if value.get("schema_version") != 1 or value.get("kind") != PARALLEL_GATE_KIND:
+    if value.get("kind") != PARALLEL_GATE_KIND:
         raise TeamShapeError("parallel gate receipt schema or kind is invalid")
+    if require_evidence and schema_version != PARALLEL_GATE_SCHEMA_VERSION:
+        raise TeamShapeError("writable dispatch requires a schema-v2 receipt with supporting evidence")
     program_id = value.get("program_id")
     if (
         not isinstance(program_id, str)
@@ -109,6 +231,11 @@ def validate_parallel_gate_receipt(
         or any(checks[name] is not True for name in PARALLEL_GATE_CHECKS)
     ):
         raise TeamShapeError("parallel gate receipt requires every earned-parallelism check to pass")
+    supporting_evidence = None
+    if schema_version == PARALLEL_GATE_SCHEMA_VERSION:
+        supporting_evidence = validate_parallel_gate_evidence(
+            value.get("supporting_evidence"), verify_files=True
+        )
     identities = value.get("isolation_identities")
     if not isinstance(identities, dict) or not identities:
         raise TeamShapeError("parallel gate receipt requires isolation identities")
@@ -137,10 +264,12 @@ def validate_parallel_gate_receipt(
     if expected_units is not None and set(normalized) != expected_units:
         raise TeamShapeError("parallel gate receipt must bind every program unit exactly once")
     return {
+        "schema_version": schema_version,
         "program_id": program_id,
         "plan_digest": plan_digest,
         "integration_owner": value["integration_owner"],
         "isolation_count": len(normalized),
+        "supporting_evidence": supporting_evidence,
         "sha256": canonical_receipt_digest(value),
     }
 
@@ -254,6 +383,11 @@ def select_team_shape(
 
     if work_kind == "writable" and (not writable_gates_passed or receipt_summary is None):
         reasons.append("serial fallback: writable earned-parallelism gates lack a valid content-bound receipt")
+    elif (
+        work_kind == "writable"
+        and receipt_summary["schema_version"] != PARALLEL_GATE_SCHEMA_VERSION
+    ):
+        reasons.append("serial fallback: legacy receipt lacks content-bound supporting evidence")
     elif work_kind == "writable" and receipt_summary["isolation_count"] < bounded_limit:
         reasons.append("serial fallback: receipt does not bind every budgeted worker to a unique isolation identity")
     elif not stable_verifier:
@@ -299,13 +433,20 @@ def parse_boolean(value: str) -> bool:
 
 
 def self_test() -> None:
+    evidence_directory = tempfile.TemporaryDirectory(prefix="patpat-team-shape-evidence-")
+    evidence_path = Path(evidence_directory.name).resolve() / "supporting-evidence.txt"
+    evidence_path.write_text("bounded evidence for the parallel gate\n", encoding="utf-8")
+    evidence_binding = bind_parallel_gate_evidence(evidence_path)
     receipt = {
-        "schema_version": 1,
+        "schema_version": PARALLEL_GATE_SCHEMA_VERSION,
         "kind": PARALLEL_GATE_KIND,
         "program_id": "release-train",
         "plan_digest": "a" * 64,
         "integration_owner": "integration-owner",
         "checks": {name: True for name in PARALLEL_GATE_CHECKS},
+        "supporting_evidence": {
+            name: [evidence_binding] for name in PARALLEL_GATE_CHECKS
+        },
         "isolation_identities": {
             "contract": "worktree-contract",
             "consumer": "worktree-consumer",
@@ -424,6 +565,7 @@ def self_test() -> None:
             assert "unique regular file" in str(error)
         else:
             raise AssertionError("hard-linked parallel gate receipt was accepted")
+    evidence_directory.cleanup()
     print("Patpat team-shape self-test passed.")
 
 
@@ -437,6 +579,11 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--worker-budget", type=int)
     command.add_argument("--writable-gates-passed", type=parse_boolean)
     command.add_argument("--parallel-gate-receipt", type=Path)
+    command.add_argument(
+        "--bind-evidence",
+        type=Path,
+        help="Print a safe content binding for one parallel-gate evidence file",
+    )
     command.add_argument("--program-id")
     command.add_argument("--plan-digest")
     command.add_argument("--integration-owner")
@@ -453,6 +600,12 @@ def main() -> int:
     if args.self_test:
         self_test()
         return 0
+    if args.bind_evidence is not None:
+        try:
+            print(json.dumps(bind_parallel_gate_evidence(args.bind_evidence), indent=2, sort_keys=True))
+            return 0
+        except TeamShapeError as error:
+            command.error(str(error))
 
     required = {
         "work_kind": args.work_kind,

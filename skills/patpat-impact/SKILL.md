@@ -1,9 +1,13 @@
 ---
 name: patpat-impact
 description: Trace and prove the blast radius of an existing or proposed repository change. Use for downstream-regression questions, risky diffs, contract consumers, or claims that a small change is safe; remain read-only.
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Codebase","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Impact
+
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 

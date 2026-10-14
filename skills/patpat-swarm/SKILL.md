@@ -2,9 +2,13 @@
 name: patpat-swarm
 description: Fan out isolated workers across slices or races and return one aggregated report. Use for /patpat-swarm, coverage matrices, parallel checks, or races with a declared selection rule.
 disable-model-invocation: true
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"GitRepository","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Swarm
+
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) and [execution graph](../patpat-loop/references/execution-graph.md) in full. Do not load the router.
 

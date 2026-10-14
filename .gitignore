@@ -15,12 +15,14 @@ htmlcov/
 /docs/diagrams/
 /.playwright-cli/
 .patpat-diagram.lock
+.patpat/context-graph.json
 
 # Operating system metadata
 .DS_Store
 Thumbs.db
 
-# Private agent-evaluation artifacts (never Git)
+# Private evaluation receipts and raw output. Keep global: the publish gate rejects them at every depth.
+# Sanitized attestation output belongs outside the worktree; leave misplaced copies visible.
 receipt.json
 *.jsonl
 *.stderr.txt

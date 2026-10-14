@@ -1,5 +1,7 @@
 # Diagram source contract
 
+## Schema, evidence, and layout fields
+
 The renderer accepts UTF-8 JSON with this shared envelope:
 
 ```json
@@ -52,6 +54,8 @@ Every entity, relationship, boundary, and lane has a unique short `id`, a concis
 
 GitHub source permalinks are opt-in through `finalize --public-source-links`. Before creating them, the renderer checks repository visibility and commit availability through direct unauthenticated GitHub API requests with no configured proxy or Git credentials. Only evidence whose file digest matches the exact committed snapshot can become a link; briefs and working-tree evidence remain text. Network, visibility, or commit failures fail closed by omitting links while allowing the diagram to finalize. The receipt records the verification time because repository visibility may change after generation.
 
+## Typed graph contract
+
 Use exactly one body shape:
 
 | `type` | Required body arrays | Entity kinds | Relationship kinds |
@@ -64,11 +68,17 @@ Use exactly one body shape:
 
 A relationship or transition has `id`, `source`, `target`, `label`, `kind`, `certainty`, `evidence_ids`, and optional boolean `feedback`. A sequence message also has a unique positive integer `order`; its direction is the message sender to receiver, including for returns. A workflow needs at least one `start` and one `terminal` step. Every `gate` or `decision` needs at least two outgoing transitions, terminal steps have no outgoing transitions, every step must be reachable from a start, and every step must be able to reach a terminal. These checks validate the authored graph shape; they do not prove that branch labels or source claims are semantically complete. A lifecycle needs exactly one `initial` state and at least one `terminal` state. Architecture boundaries have `id`, `label`, `component_ids`; workflow lanes use `step_ids`. Both use the same certainty and evidence fields as entities.
 
+## Output and receipt bounds
+
 The renderer limits each diagram to 80 entities, 160 relationships, 240 evidence entries, and a 1 MB source file. It checks projected node-label readability at a conservative 960 px desktop reader width and fails below 6 px. The SVG canvas is at least 1200 units wide so the shared header and legend fit even when the graph is small. It produces `<name>.diagram.json`, `<name>.svg`, `<name>.html`, and `<name>.receipt.json`. HTML embeds the SVG and a text outline, has no remote assets, and works offline. Schema 2 HTML embeds only the exact viewer source shipped with this skill and pins it through a restrictive CSP hash; author JSON cannot supply executable code. The viewer contacts no external service. Only Patpat's explicit loopback preview URL enables same-origin live status checks. The receipt binds the exact spec, source mode, repository identity/revision when present, repository and brief evidence digests, layout diagnostics, readability budget, and output digests.
+
+## Layout diagnostics
 
 Graph layouts reserve separate ports, route lanes, and label space for repeated self-loops. In LR layouts, loops on the top peer route above its layer and loops on the bottom peer route below it; a middle peer with a loop is rejected with guidance to use TB or explicitly change the authored layer order. The renderer never silently reorders authored layers. Node size and layer spacing grow with the loop count and label height; finalization stops when geometry diagnostics still find a collision.
 
 TB feedback routes from many entities in one shared layer can cross peer nodes before reaching their outer lanes. The geometry gate blocks finalization; assign the returning sources to separate explicit ordered layers, then rerun validation and inspect the diagram. A regression fixture verifies both the blocked same-layer case and the clear separated-layer result.
+
+## Renderer commands
 
 Replace `<skill-root>` with the absolute directory containing this skill's `SKILL.md`; it is a path placeholder, not literal shell syntax. Run the local renderer with Python 3.11 or later:
 
@@ -82,13 +92,23 @@ python3 <skill-root>/scripts/render.py preview <spec.json> [--repo-root <reposit
 python3 <skill-root>/scripts/render.py compare <previous.html> <current.html> --repo-root <repository-root> --out-dir <output-directory> --name <slug>
 ```
 
+## Finalization and browser checks
+
 `finalize` refuses to overwrite existing files unless explicitly given `--overwrite`; prefer a new name. It builds in private temporary storage, verifies the artifact and evidence, runs the selected browser gate, then promotes only the passing output set through a journaled, recoverable transaction. Promotion replaces files one at a time, so readers may observe a mixed set during that brief window; interruption triggers rollback or recovery, and uncertain ownership fails closed for manual review. A hidden `.patpat-diagram.lock` file remains in the output directory for cross-process coordination; leave it in place while renderer operations may run. The default `standard` profile retains its 1440×1100 light-theme screenshot and HTML-bound browser receipt with the editable JSON, HTML, SVG, and artifact receipt. `showcase` requires schema 2 and captures desktop (1440×1100), tablet (1024×768), and mobile (390×844) in both themes, then emits a contact sheet; all captures and receipts join the same recoverable finalization transaction. `--no-browser` explicitly skips this runtime gate. Automatic recovery accepts only a user-owned POSIX staging directory with mode `0700` and a journal with mode `0600`; if the platform cannot prove those permissions, the renderer leaves files untouched and requires manual review. Run `check` afterward as a separate post-promotion proof. Both profiles verify their rendered theme, embedded SVG, exact CSS viewport width and height, fully decoded PNG output, and absence of horizontal page overflow; schema 2 must also initialize its trusted viewer. Neither profile judges semantic accuracy, viewer interaction behavior, or visual clarity. Inspect screenshots separately and exercise requested interactions in a real browser.
+
+## Interactive viewer
 
 The schema 2 viewer provides an accessible keyboard-selectable finder for components and relationships, camera-revealing focus, automatic zoom-based MAP/READ/FULL depth (MAP below 100%, READ from 100% through 174%, FULL at 175% and above), semantic-kind and certainty lenses, intent preview, an evidence-linked semantic passport with direct and reachable counts, directed upstream/downstream reach, exact authored routes with step navigation, relationship context, and an overview map that focuses a component or pans the diagram. Manual depth stays selected until Auto is reselected. It also provides stable deep links, light/dark and high-contrast themes, three visual presets, presentation with a visible exit fallback, responsive zoom steps, and reduced-motion-aware route traces. On narrow layouts, the initial pan centers the first authored node; presentation preserves the canvas center across its responsive width change and restores the prior pan on exit. Keyboard shortcuts are `/` search, `S` cycle visual style, `T` toggle theme, `E` open exports, `R` probe a selected route, `L` focus the semantic lens, `M` focus the overview, `F` enter presentation, `+`/`-` zoom, `0` reset, `?` guide, and `Escape` close or exit. Print rules restore every graph element and label regardless of focus, filters, or MAP depth. Canonical PNG can be copied to the clipboard or downloaded; Copy PNG downloads the rendered image if clipboard access is unavailable or fails. JPEG/WebP, one auto-theme SVG (light by default and dark under the system color preference), the light/dark SVG pair, and finite route-only WebM exports exclude temporary viewer state while preserving the selected visual preset. Exact-size 1200×630 route and directional-reach cards encode the resolved authored snapshot; long route cards retain both endpoints and label omitted component and relationship counts, while reach cards label the certainty of each visible component and relationship as well as any omitted items. Viewer controls and captures are separate from the editable source and deterministic diagram receipt.
 
+## Preview
+
 `preview` binds to `127.0.0.1` at an ephemeral port. It serves only generated HTML and its status endpoint, watches the source spec and repository evidence, retains the last-good in-memory build on invalid candidates, and shuts down on Ctrl-C. It is an interactive local authoring aid, not a hosted or remotely accessible service.
 
+## Architecture comparison
+
 `compare` (also named `delta`) accepts two checked architecture HTML artifacts, compares stable authored IDs and facts, and emits `<slug>.delta.json`, `<slug>.delta.html`, and `<slug>.delta.receipt.json`. The report classifies `added`, `removed`, `changed`, `moved`, and `rerouted`, includes layer and within-layer position, and renders receipt-bound before/after SVG snapshots beside the authored delta table. The snapshots retain their checked input model, source revision headers, unique accessible titles/descriptions, and full-size scrollable viewports. The HTML remains static with one hash-pinned local stylesheet. Each input artifact is read once and validation, delta facts, and receipt digests use that same byte snapshot. It does not infer impact, risk, compatibility, runtime behavior, or merge safety; use `patpat-impact` and repository verification for those claims.
+
+## Cleanup
 
 Remove temporary source specs, screenshots, receipts, and preview servers after review; keep only requested deliverables.
 

@@ -2,9 +2,13 @@
 name: patpat-unslop
 description: Cut AI tells, superficial patterns, and fluff from text or diffs.
 disable-model-invocation: true
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Artifact","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Unslop
+
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 Scan text, documentation, and diffs to remove artificial writing artifacts and fluff.
 

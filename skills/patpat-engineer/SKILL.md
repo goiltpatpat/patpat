@@ -2,9 +2,13 @@
 name: patpat-engineer
 description: Execute one bounded implementation slice delegated by a named integration owner. Use only when ownership, forbidden scope, allowed mutations, and a proof contract are explicit; do not use for broad direct user requests.
 disable-model-invocation: true
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Codebase","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Engineer
+
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 Read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full before acting. Do not load the router. Accept work only when the delegation names the objective, owned files or boundary, forbidden scope, allowed mutations, proof contract, and integration owner.
 

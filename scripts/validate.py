@@ -23,7 +23,7 @@ SEMVER_PATTERN = re.compile(
     r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
 )
 LINK_PATTERN = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
-ALLOWED_FRONTMATTER = {"name", "description", "disable-model-invocation"}
+ALLOWED_FRONTMATTER = {"name", "description", "disable-model-invocation", "metadata"}
 AGENT_SKILL_FRONTMATTER_FIELDS = {
     "name",
     "description",
@@ -53,6 +53,7 @@ AGENT_PLUGIN_NAME_PATTERN = re.compile(
 )
 ALLOWED_SKILL_POLICIES = {"mutating", "read-only", "support", "router"}
 SKILL_POLICIES = {
+    "00-workspace-mapper": "mutating",
     "patpat": "router",
     "patpat-architect": "read-only",
     "patpat-arena": "mutating",
@@ -80,7 +81,12 @@ SKILL_POLICIES = {
     "patpat-verifier": "mutating",
     "patpat-verify": "read-only",
 }
+REQUIRED_MUTATION_LEVELS = {
+    "patpat-setup": "DESTRUCTIVE",
+    "patpat-ship": "DESTRUCTIVE",
+}
 EXPECTED_MUTATING_SKILLS = {
+    "00-workspace-mapper",
     "patpat-arena",
     "patpat-automation",
     "patpat-change",
@@ -98,6 +104,27 @@ EXPECTED_MUTATING_SKILLS = {
     "patpat-verifier",
 }
 MUTATING_SKILLS = {name for name, policy in SKILL_POLICIES.items() if policy == "mutating"}
+ONTOLOGY_METADATA_KEY = "patpat.ontology"
+ONTOLOGY_SCHEMA = "patpat-ontology/v1"
+SKILL_STATE_GATE_MARKER = "#skill-state-and-mutation-gate"
+ONTOLOGY_MUTATION_LEVELS = {"READ_ONLY", "LOCAL_MUTATION", "DESTRUCTIVE"}
+ONTOLOGY_TARGET_ENTITIES = {
+    "AgentHost",
+    "AgentSkill",
+    "Artifact",
+    "Automation",
+    "Codebase",
+    "EngineeringTask",
+    "GitRepository",
+    "PullRequest",
+    "Workspace",
+}
+ONTOLOGY_ROOT_STATES = {"workspace-root-open"}
+ONTOLOGY_STATE_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
+WORKSPACE_MAPPER_VERIFIER = Path("skills/00-workspace-mapper/scripts/verify_context_graph.py")
+WORKSPACE_MAPPER_VERIFY_COMMAND = (
+    "python3 <loaded-skill-directory>/scripts/verify_context_graph.py --root <workspace-root>"
+)
 REVIEWER_DESCRIPTION = (
     "Independently challenge an implementation and its verification evidence "
     "without modifying repository or external state."
@@ -313,7 +340,15 @@ def operational_markdown(text: str) -> str:
     return re.sub(r"```.*?```|~~~.*?~~~", "", without_comments, flags=re.DOTALL)
 
 
-def parse_frontmatter(path: Path) -> tuple[dict[str, str], str]:
+def unquote_frontmatter_scalar(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] == "'":
+        return value[1:-1].replace("''", "'")
+    if len(value) >= 2 and value[0] == value[-1] == '"':
+        return value[1:-1]
+    return value
+
+
+def parse_frontmatter(path: Path) -> tuple[dict[str, object], str]:
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
@@ -323,18 +358,194 @@ def parse_frontmatter(path: Path) -> tuple[dict[str, str], str]:
     except StopIteration as error:
         raise ValueError("missing closing frontmatter delimiter") from error
 
-    data: dict[str, str] = {}
+    data: dict[str, object] = {}
+    active_mapping: dict[str, str] | None = None
     for line in lines[1:end]:
         if not line.strip() or line.lstrip().startswith("#"):
             continue
+        if line[:1].isspace():
+            if active_mapping is None or not line.startswith("  ") or line.startswith("   "):
+                raise ValueError(f"unsupported nested frontmatter: {line}")
+            key, separator, raw_value = line[2:].partition(":")
+            if not separator or not key.strip() or not raw_value.strip():
+                raise ValueError(f"unsupported metadata line: {line}")
+            normalized_key = key.strip()
+            if normalized_key in active_mapping:
+                raise ValueError(f"duplicate metadata key: {normalized_key}")
+            active_mapping[normalized_key] = unquote_frontmatter_scalar(raw_value.strip())
+            continue
         key, separator, value = line.partition(":")
-        if not separator or not key.strip() or not value.strip():
+        if not separator or not key.strip():
             raise ValueError(f"unsupported frontmatter line: {line}")
         normalized_key = key.strip()
         if normalized_key in data:
             raise ValueError(f"duplicate frontmatter key: {normalized_key}")
-        data[normalized_key] = value.strip().strip('"').strip("'")
+        raw_value = value.strip()
+        if normalized_key == "metadata" and not raw_value:
+            metadata: dict[str, str] = {}
+            data[normalized_key] = metadata
+            active_mapping = metadata
+        elif raw_value:
+            data[normalized_key] = unquote_frontmatter_scalar(raw_value)
+            active_mapping = None
+        else:
+            raise ValueError(f"unsupported frontmatter line: {line}")
     return data, "\n".join(lines[end + 1 :]).strip()
+
+
+def validate_skill_ontology(
+    frontmatter: dict[str, object],
+    path: Path,
+    policy: str | None,
+    errors: list[str],
+) -> dict[str, object] | None:
+    metadata = frontmatter.get("metadata")
+    if not isinstance(metadata, dict) or ONTOLOGY_METADATA_KEY not in metadata:
+        errors.append(f"{path}: metadata must include {ONTOLOGY_METADATA_KEY}")
+        return None
+    if any(not isinstance(key, str) or not isinstance(value, str) for key, value in metadata.items()):
+        errors.append(f"{path}: Agent Skills metadata keys and values must be strings")
+        return None
+    encoded = metadata.get(ONTOLOGY_METADATA_KEY)
+    if not isinstance(encoded, str):
+        errors.append(f"{path}: {ONTOLOGY_METADATA_KEY} must be a string")
+        return None
+    try:
+        ontology = json.loads(encoded)
+    except json.JSONDecodeError as error:
+        errors.append(f"{path}: invalid {ONTOLOGY_METADATA_KEY} JSON: {error}")
+        return None
+    required_fields = {
+        "schema",
+        "mutation_level",
+        "target_entity",
+        "requires_state",
+        "produces_state",
+        "verification_cmd",
+    }
+    if not isinstance(ontology, dict) or set(ontology) != required_fields:
+        errors.append(f"{path}: ontology fields do not match {sorted(required_fields)}")
+        return None
+    if ontology.get("schema") != ONTOLOGY_SCHEMA:
+        errors.append(f"{path}: unsupported Patpat ontology schema")
+    mutation_level = ontology.get("mutation_level")
+    if not isinstance(mutation_level, str) or mutation_level not in ONTOLOGY_MUTATION_LEVELS:
+        errors.append(f"{path}: invalid ontology mutation_level {mutation_level!r}")
+    elif path.parent.name in REQUIRED_MUTATION_LEVELS:
+        expected_level = REQUIRED_MUTATION_LEVELS[path.parent.name]
+        if mutation_level != expected_level:
+            errors.append(
+                f"{path}: {path.parent.name} must declare ontology mutation_level {expected_level}"
+            )
+    elif policy in {"read-only", "support"} and mutation_level != "READ_ONLY":
+        errors.append(f"{path}: read-only or support skill must declare READ_ONLY")
+    elif policy in {"mutating", "router"} and mutation_level == "READ_ONLY":
+        errors.append(f"{path}: mutating or router skill cannot declare READ_ONLY")
+    target_entity = ontology.get("target_entity")
+    if not isinstance(target_entity, str) or target_entity not in ONTOLOGY_TARGET_ENTITIES:
+        errors.append(f"{path}: invalid ontology target_entity {target_entity!r}")
+
+    for field in ("requires_state", "produces_state"):
+        value = ontology.get(field)
+        if not isinstance(value, list) or any(
+            not isinstance(state, str) or not ONTOLOGY_STATE_PATTERN.fullmatch(state)
+            for state in value
+        ):
+            errors.append(f"{path}: ontology {field} must be a list of kebab-case state ids")
+        elif len(value) != len(set(value)):
+            errors.append(f"{path}: ontology {field} contains duplicate state ids")
+
+    command = ontology.get("verification_cmd")
+    if not isinstance(command, str) or "\n" in command or "\r" in command or "\0" in command:
+        errors.append(f"{path}: ontology verification_cmd must be a single-line string")
+    elif isinstance(ontology.get("produces_state"), list) and ontology["produces_state"] and not command:
+        errors.append(f"{path}: produced states require a deterministic verification_cmd")
+    elif path.parent.name == "00-workspace-mapper" and command != WORKSPACE_MAPPER_VERIFY_COMMAND:
+        errors.append(f"{path}: workspace mapper verification_cmd must invoke its bundled verifier")
+    return ontology
+
+
+def validate_skill_state_gate(path: Path, body: str, errors: list[str]) -> None:
+    relative = (
+        "references/operating-protocol.md"
+        if path.parent.name == "patpat-loop"
+        else "../patpat-loop/references/operating-protocol.md"
+    )
+    expected = (
+        "Before following this skill, apply the [skill state and mutation gate]"
+        f"({relative}{SKILL_STATE_GATE_MARKER})."
+    )
+    lines = body.splitlines()
+    heading = next((index for index, line in enumerate(lines) if line.startswith("# ")), None)
+    if heading is None:
+        errors.append(f"{path}: missing skill title before the direct state and mutation gate")
+        return
+    directive_index = heading + 1
+    while directive_index < len(lines) and not lines[directive_index].strip():
+        directive_index += 1
+    if directive_index >= len(lines) or lines[directive_index] != expected:
+        errors.append(f"{path}: missing direct skill state and mutation gate")
+
+
+def validate_workspace_mapper_resource(root: Path, errors: list[str]) -> None:
+    verifier = root / WORKSPACE_MAPPER_VERIFIER
+    if not verifier.is_file() or verifier.is_symlink():
+        errors.append(f"{verifier}: missing workspace mapper verifier")
+
+
+def validate_ontology_graph(
+    records: dict[str, tuple[dict[str, object], Path]], errors: list[str]
+) -> None:
+    producers: dict[str, str] = {}
+    duplicate_states: set[str] = set()
+    for skill_name, (ontology, path) in records.items():
+        states = ontology.get("produces_state", [])
+        if not isinstance(states, list):
+            continue
+        for state in states:
+            if not isinstance(state, str):
+                continue
+            previous = producers.get(state)
+            if previous is not None and previous != skill_name:
+                duplicate_states.add(state)
+                errors.append(
+                    f"{path}: state {state!r} also has producer {previous}; producers must be unique"
+                )
+            else:
+                producers[state] = skill_name
+
+    edges: dict[str, set[str]] = {name: set() for name in records}
+    for skill_name, (ontology, path) in records.items():
+        states = ontology.get("requires_state", [])
+        if not isinstance(states, list):
+            continue
+        for state in states:
+            if not isinstance(state, str):
+                continue
+            producer = producers.get(state)
+            if state in ONTOLOGY_ROOT_STATES:
+                continue
+            if producer is None:
+                errors.append(f"{path}: required state {state!r} has no producer or observed root")
+            elif state not in duplicate_states:
+                edges[producer].add(skill_name)
+
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(skill_name: str) -> bool:
+        if skill_name in visiting:
+            return True
+        if skill_name in visited:
+            return False
+        visiting.add(skill_name)
+        cyclic = any(visit(child) for child in edges[skill_name])
+        visiting.remove(skill_name)
+        visited.add(skill_name)
+        return cyclic
+
+    if any(visit(skill_name) for skill_name in edges if skill_name not in visited):
+        errors.append("Patpat ontology dependency graph contains a cycle")
 
 
 def validate_json(path: Path, errors: list[str]) -> dict[str, object]:
@@ -460,6 +671,7 @@ def parse_agent_frontmatter(path: Path) -> tuple[dict[str, object], str]:
 
     data: dict[str, object] = {}
     active_list: str | None = None
+    active_mapping: dict[str, str] | None = None
     for line in lines[1:end]:
         if not line.strip() or line.lstrip().startswith("#"):
             continue
@@ -471,7 +683,16 @@ def parse_agent_frontmatter(path: Path) -> tuple[dict[str, object], str]:
             data[active_list].append(value)
             continue
         if line[:1].isspace():
-            raise ValueError(f"unsupported nested frontmatter: {line}")
+            if active_mapping is None or not line.startswith("  ") or line.startswith("   "):
+                raise ValueError(f"unsupported nested frontmatter: {line}")
+            key, separator, raw_value = line[2:].partition(":")
+            if not separator or not key.strip() or not raw_value.strip():
+                raise ValueError(f"unsupported metadata line: {line}")
+            normalized_key = key.strip()
+            if normalized_key in active_mapping:
+                raise ValueError(f"duplicate metadata key: {normalized_key}")
+            active_mapping[normalized_key] = unquote_frontmatter_scalar(raw_value.strip())
+            continue
         key, separator, value = line.partition(":")
         if not separator or not key.strip():
             raise ValueError(f"unsupported frontmatter line: {line}")
@@ -480,14 +701,23 @@ def parse_agent_frontmatter(path: Path) -> tuple[dict[str, object], str]:
             raise ValueError(f"duplicate frontmatter key: {key}")
         value = value.strip()
         if not value:
-            data[key] = []
-            active_list = key
+            if key == "metadata":
+                metadata: dict[str, str] = {}
+                data[key] = metadata
+                active_mapping = metadata
+                active_list = None
+            else:
+                data[key] = []
+                active_list = key
+                active_mapping = None
         elif value in {"true", "false"}:
             data[key] = value == "true"
             active_list = None
+            active_mapping = None
         else:
-            data[key] = value.strip('"').strip("'")
+            data[key] = unquote_frontmatter_scalar(value)
             active_list = None
+            active_mapping = None
     return data, "\n".join(lines[end + 1 :]).strip()
 
 
@@ -698,6 +928,7 @@ def validate_agent_plugin_package(root: Path) -> list[str]:
     if not skills_root.is_dir() or is_link_or_reparse_point(skills_root):
         errors.append(f"{skills_root}: missing regular skills directory")
         return errors
+    validate_workspace_mapper_resource(root, errors)
 
     children = list(skills_root.iterdir())
     actual_skill_names = {child.name for child in children if child.is_dir()}
@@ -730,6 +961,7 @@ def validate_agent_plugin_package(root: Path) -> list[str]:
                 markdown_files.append(path)
 
     descriptions: dict[str, Path] = {}
+    ontology_records: dict[str, tuple[dict[str, object], Path]] = {}
     for skill_name in sorted(expected_skill_names & actual_skill_names):
         skill = skills_root / skill_name
         skill_file = skill / "SKILL.md"
@@ -749,6 +981,15 @@ def validate_agent_plugin_package(root: Path) -> list[str]:
                 f"{skill_file}: frontmatter is not Agent Skills compatible; "
                 f"unsupported fields {sorted(unknown)}"
             )
+        ontology = validate_skill_ontology(
+            frontmatter,
+            skill_file,
+            SKILL_POLICIES.get(skill_name),
+            errors,
+        )
+        if ontology is not None:
+            ontology_records[skill_name] = (ontology, skill_file)
+        validate_skill_state_gate(skill_file, body, errors)
         if name != skill_name:
             errors.append(f"{skill_file}: name must match folder {skill_name}")
         if not NAME_PATTERN.fullmatch(name):
@@ -773,6 +1014,7 @@ def validate_agent_plugin_package(root: Path) -> list[str]:
         if not body:
             errors.append(f"{skill_file}: body is required")
 
+    validate_ontology_graph(ontology_records, errors)
     for path in sorted(markdown_files):
         validate_links(path, root, errors)
     return errors
@@ -974,6 +1216,7 @@ def validate_root(root: Path) -> list[str]:
     validate_hooks(root, parsed, errors)
 
     skills_root = root / "skills"
+    validate_workspace_mapper_resource(root, errors)
     skills = skill_directories(skills_root) if skills_root.is_dir() else []
     if not skills:
         errors.append(f"{skills_root}: no skills found")
@@ -1007,6 +1250,7 @@ def validate_root(root: Path) -> list[str]:
                     errors.append(f"{path}: symlinks are not allowed in canonical skills")
 
     descriptions: dict[str, Path] = {}
+    ontology_records: dict[str, tuple[dict[str, object], Path]] = {}
     for skill in skills:
         skill_file = skill / "SKILL.md"
         try:
@@ -1019,6 +1263,15 @@ def validate_root(root: Path) -> list[str]:
         unknown = set(frontmatter) - ALLOWED_FRONTMATTER
         if unknown:
             errors.append(f"{skill_file}: non-portable frontmatter: {sorted(unknown)}")
+        ontology = validate_skill_ontology(
+            frontmatter,
+            skill_file,
+            SKILL_POLICIES.get(skill.name),
+            errors,
+        )
+        if ontology is not None:
+            ontology_records[skill.name] = (ontology, skill_file)
+        validate_skill_state_gate(skill_file, body, errors)
         if name in MODE_SKILLS:
             openai_config = skill / "agents" / "openai.yaml"
             try:
@@ -1043,6 +1296,7 @@ def validate_root(root: Path) -> list[str]:
         if not body:
             errors.append(f"{skill_file}: body is required")
 
+    validate_ontology_graph(ontology_records, errors)
     agents_guide = root / "AGENTS.md"
     if not agents_guide.is_file():
         errors.append(f"{agents_guide}: missing agent install contract")
@@ -1126,7 +1380,7 @@ def validate_root(root: Path) -> list[str]:
         operational = operational_markdown(workflow.read_text(encoding="utf-8"))
         expected_closure = (
             LOCAL_PROOF_CLOSURE_BLOCK
-            if skill_name in {"patpat-change", "patpat-debug", "patpat-game-builder"}
+            if skill_name in {"00-workspace-mapper", "patpat-change", "patpat-debug", "patpat-game-builder"}
             else PROOF_CLOSURE_BLOCK
         )
         if not operational.rstrip().endswith(expected_closure):
@@ -1338,6 +1592,86 @@ def run_self_test(root: Path) -> list[str]:
         text = skill.read_text(encoding="utf-8")
         skill.write_text(text.replace("name: patpat-inspect", "name: broken-name", 1), encoding="utf-8")
 
+    def remove_skill_state_gate(fixture: Path) -> None:
+        skill = fixture / "skills" / "patpat-change" / "SKILL.md"
+        lines = skill.read_text(encoding="utf-8").splitlines()
+        filtered = [line for line in lines if SKILL_STATE_GATE_MARKER not in line]
+        skill.write_text("\n".join(filtered) + "\n", encoding="utf-8")
+
+    def replace_skill_state_gate_with_inert_marker(fixture: Path) -> None:
+        skill = fixture / "skills" / "patpat-change" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        expected = (
+            "Before following this skill, apply the [skill state and mutation gate]"
+            "(../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate)."
+        )
+        skill.write_text(
+            text.replace(expected, "<!-- #skill-state-and-mutation-gate -->", 1),
+            encoding="utf-8",
+        )
+
+    def update_ontology(fixture: Path, skill_name: str, update: Callable[[dict[str, object]], None]) -> None:
+        skill = fixture / "skills" / skill_name / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        lines = text.splitlines()
+        for index, line in enumerate(lines):
+            if line.startswith("  patpat.ontology: "):
+                encoded = unquote_frontmatter_scalar(line.partition(": ")[2])
+                ontology = json.loads(encoded)
+                update(ontology)
+                replacement = json.dumps(ontology, separators=(",", ":"), ensure_ascii=False)
+                lines[index] = f"  patpat.ontology: '{replacement}'"
+                skill.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                return
+        raise ValueError(f"missing ontology metadata in {skill}")
+
+    def invalidate_ontology_mutation_level(fixture: Path) -> None:
+        update_ontology(
+            fixture,
+            "patpat-inspect",
+            lambda ontology: ontology.update(mutation_level="UNSAFE"),
+        )
+
+    def downgrade_ship_mutation_level(fixture: Path) -> None:
+        update_ontology(
+            fixture,
+            "patpat-ship",
+            lambda ontology: ontology.update(mutation_level="LOCAL_MUTATION"),
+        )
+
+    def downgrade_setup_mutation_level(fixture: Path) -> None:
+        update_ontology(
+            fixture,
+            "patpat-setup",
+            lambda ontology: ontology.update(mutation_level="LOCAL_MUTATION"),
+        )
+
+    def duplicate_ontology_state_producer(fixture: Path) -> None:
+        def update(ontology: dict[str, object]) -> None:
+            ontology["produces_state"] = ["workspace-map-current"]
+            ontology["verification_cmd"] = "python3 -m json.tool .patpat/context-graph.json"
+
+        update_ontology(fixture, "patpat-inspect", update)
+
+    def create_ontology_cycle(fixture: Path) -> None:
+        def inspect_update(ontology: dict[str, object]) -> None:
+            ontology["requires_state"] = ["workspace-map-current"]
+            ontology["produces_state"] = ["workspace-context-inspected"]
+            ontology["verification_cmd"] = "python3 -m json.tool .patpat/context-graph.json"
+
+        def mapper_update(ontology: dict[str, object]) -> None:
+            ontology["requires_state"] = ["workspace-context-inspected"]
+
+        update_ontology(fixture, "patpat-inspect", inspect_update)
+        update_ontology(fixture, "00-workspace-mapper", mapper_update)
+
+    def drift_workspace_mapper_verifier_command(fixture: Path) -> None:
+        update_ontology(
+            fixture,
+            "00-workspace-mapper",
+            lambda ontology: ontology.update(verification_cmd="python3 -m json.tool graph.json"),
+        )
+
     def remove_skill_file(fixture: Path) -> None:
         (fixture / "skills" / "patpat-inspect" / "SKILL.md").unlink()
 
@@ -1367,6 +1701,9 @@ def run_self_test(root: Path) -> list[str]:
 
     def remove_import_graph(fixture: Path) -> None:
         (fixture / "skills" / "patpat-repository-diagram" / "scripts" / "import_graph.py").unlink()
+
+    def remove_workspace_mapper_verifier(fixture: Path) -> None:
+        (fixture / WORKSPACE_MAPPER_VERIFIER).unlink()
 
     def remove_inspect_eval(fixture: Path) -> None:
         (fixture / "scripts" / "eval_inspect.py").unlink()
@@ -1896,6 +2233,14 @@ def run_self_test(root: Path) -> list[str]:
             encoding="utf-8",
         )
 
+    def add_nonstandard_ontology_field(fixture: Path) -> None:
+        skill_file = fixture / "skills" / "patpat-inspect" / "SKILL.md"
+        text = skill_file.read_text(encoding="utf-8")
+        skill_file.write_text(
+            text.replace("metadata:\n", "ontology: {}\nmetadata:\n", 1),
+            encoding="utf-8",
+        )
+
     def remove_codex_logo_asset(fixture: Path) -> None:
         (fixture / "assets" / "logo.png").unlink()
 
@@ -1926,6 +2271,14 @@ def run_self_test(root: Path) -> list[str]:
     cases.extend(
         [
             ("skill-name mismatch", break_name, "name must match folder patpat-inspect"),
+            ("direct skill state gate drift", remove_skill_state_gate, "missing direct skill state and mutation gate"),
+            ("inert skill state gate marker", replace_skill_state_gate_with_inert_marker, "missing direct skill state and mutation gate"),
+            ("invalid ontology mutation level", invalidate_ontology_mutation_level, "invalid ontology mutation_level"),
+            ("setup mutation level downgrade", downgrade_setup_mutation_level, "patpat-setup must declare ontology mutation_level DESTRUCTIVE"),
+            ("ship mutation level downgrade", downgrade_ship_mutation_level, "patpat-ship must declare ontology mutation_level DESTRUCTIVE"),
+            ("duplicate ontology state producer", duplicate_ontology_state_producer, "producers must be unique"),
+            ("cyclic ontology prerequisites", create_ontology_cycle, "dependency graph contains a cycle"),
+            ("workspace mapper verifier command drift", drift_workspace_mapper_verifier_command, "verification_cmd must invoke its bundled verifier"),
             ("missing SKILL.md", remove_skill_file, "immediate skill directory is missing SKILL.md"),
             ("missing Codex smoke", remove_codex_smoke, "missing isolated Codex marketplace smoke test"),
             ("missing Antigravity smoke", remove_antigravity_smoke, "missing isolated Antigravity plugin smoke test"),
@@ -1936,6 +2289,7 @@ def run_self_test(root: Path) -> list[str]:
             ("missing portable updater", remove_update_script, "missing portable skill updater"),
             ("missing loop dry-run", remove_dry_run, "missing loop dry-run"),
             ("missing Python import graph analyzer", remove_import_graph, "missing optional Python import graph analyzer"),
+            ("missing workspace mapper verifier", remove_workspace_mapper_verifier, "missing workspace mapper verifier"),
             ("missing inspect eval", remove_inspect_eval, "missing inspect contract eval"),
             ("missing why eval", remove_why_eval, "missing rationale contract eval"),
             ("missing representation eval", remove_representation_eval, "missing representation contract eval"),
@@ -2028,6 +2382,9 @@ def run_self_test(root: Path) -> list[str]:
             ("Agent Plugins invalid extension value", invalidate_agent_plugin_extension, "extensions.com.patpat must be an object"),
             ("Agent Plugins invalid name", invalidate_agent_plugin_name, "Agent Plugins 1.0 name constraints"),
             ("Agent Plugins Codex-only skill field", add_codex_only_agent_skill_field, "frontmatter is not Agent Skills compatible"),
+            ("Agent Plugins nonstandard ontology field", add_nonstandard_ontology_field, "frontmatter is not Agent Skills compatible"),
+            ("Agent Plugins missing workspace mapper verifier", remove_workspace_mapper_verifier, "missing workspace mapper verifier"),
+            ("Agent Plugins workspace mapper verifier command drift", drift_workspace_mapper_verifier_command, "verification_cmd must invoke its bundled verifier"),
         ]
     )
 
@@ -2191,6 +2548,12 @@ def run_self_test(root: Path) -> list[str]:
         temp_root = Path(temp_directory)
         portable_fixture = temp_root / "valid-agent-plugin-package"
         create_agent_plugin_fixture(portable_fixture)
+        metadata_skill = portable_fixture / "skills" / "patpat-inspect" / "SKILL.md"
+        metadata_text = metadata_skill.read_text(encoding="utf-8")
+        metadata_skill.write_text(
+            metadata_text.replace("metadata:\n", "metadata:\n  author: Patpat maintainers\n", 1),
+            encoding="utf-8",
+        )
         portable_errors = validate_agent_plugin_package(portable_fixture)
         if portable_errors:
             failures.append(

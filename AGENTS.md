@@ -2,7 +2,7 @@
 
 This file is the machine-readable install surface. Engineering workflows live in `skills/`. Do not invent a home directory, updater, uninstaller, or Cursor marketplace command.
 
-Canonical skill tree: [`skills/`](skills/). Host adapters are thin manifests over that tree. Read [`docs/guide/installing.md`](docs/guide/installing.md) for host commands and [`skills/patpat-setup/SKILL.md`](skills/patpat-setup/SKILL.md) when that skill is already loadable.
+Canonical skill tree: [`skills/`](skills/). Host adapters are thin manifests over that tree. Read [`docs/guide/installing.md`](docs/guide/installing.md) for host commands and [`skills/patpat-setup/SKILL.md`](skills/patpat-setup/SKILL.md) when that skill is already loadable. Shared execution and state/mutation gates live in [`skills/patpat-loop/references/operating-protocol.md`](skills/patpat-loop/references/operating-protocol.md).
 
 ## Detect, then choose one route
 

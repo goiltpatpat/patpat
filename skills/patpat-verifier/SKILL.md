@@ -2,9 +2,13 @@
 name: patpat-verifier
 description: Create or maintain a project-specific verification skill that launches, exercises, observes, and cleans up the real system. Use when a repository lacks repeatable proof of its user-facing behavior.
 disable-model-invocation: true
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"AgentSkill","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Verifier
+
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 

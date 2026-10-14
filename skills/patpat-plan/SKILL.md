@@ -1,9 +1,13 @@
 ---
 name: patpat-plan
 description: Design a falsifiable workflow for multi-phase repository work or a task with no safe narrow route. Use when several contracts or verification surfaces must be sequenced; remain read-only.
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"EngineeringTask","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Plan
+
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 

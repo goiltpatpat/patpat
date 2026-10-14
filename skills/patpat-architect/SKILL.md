@@ -1,9 +1,13 @@
 ---
 name: patpat-architect
 description: Design repository-native changes before implementation or run a requested read-only architecture-opportunity scan. Use for architecture, migrations, public contracts, security-sensitive boundaries, cross-cutting work, or decisions with meaningful compatibility risk.
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Codebase","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Architect
+
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 

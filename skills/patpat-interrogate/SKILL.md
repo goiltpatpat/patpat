@@ -2,9 +2,13 @@
 name: patpat-interrogate
 description: Challenge architecture, designs, and changes from adversarial independent perspectives without editing.
 disable-model-invocation: true
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Codebase","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Interrogate
+
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 Run adversarial multi-perspective review to stress-test designs, code changes, and unstated assumptions before delivery.
 

@@ -1,9 +1,13 @@
 ---
 name: patpat-perf
 description: Diagnose a resource regression or drive sustained numeric optimization against a measurable target. Use for latency, CPU, memory, throughput, startup, or other performance implementation when comparable before-and-after measurement is practical.
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Codebase","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Performance
+
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) and [execution graph](../patpat-loop/references/execution-graph.md) in full. Do not load the router.
 

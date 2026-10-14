@@ -100,36 +100,43 @@ def run_self_test() -> None:
     ) != "serial-fallback":
         raise ParallelEvalError("isolation without earned-parallelism evidence was admitted")
 
-    receipt = {
-        "schema_version": 1,
-        "kind": team_shape.PARALLEL_GATE_KIND,
-        "program_id": "parallel-eval",
-        "plan_digest": "a" * 64,
-        "integration_owner": "integration-owner",
-        "checks": {name: True for name in team_shape.PARALLEL_GATE_CHECKS},
-        "isolation_identities": {
-            "alpha": "worktree-alpha",
-            "beta": "worktree-beta",
-        },
-    }
-    selection = team_shape.select_team_shape(
-        work_kind="writable",
-        decomposable=True,
-        stable_verifier=True,
-        worker_capacity=2,
-        worker_budget=2,
-        writable_gates_passed=True,
-        uncertainty="low",
-        consequence="medium",
-        independent_oracle=False,
-        parallel_gate_receipt=receipt,
-        expected_program_id="parallel-eval",
-        expected_plan_digest="a" * 64,
-        expected_integration_owner="integration-owner",
-        expected_units={"alpha", "beta"},
-    )
-    if selection["pattern"] != "distributed" or selection["worker_limit"] != 2:
-        raise ParallelEvalError("valid earned-parallelism evidence was not admitted")
+    with tempfile.TemporaryDirectory(prefix="patpat-parallel-eval-gate-") as evidence_temporary:
+        evidence_path = Path(evidence_temporary) / "gate-evidence.txt"
+        write(evidence_path, "supporting evidence for the parallel gate\n")
+        evidence_binding = team_shape.bind_parallel_gate_evidence(evidence_path.resolve())
+        receipt = {
+            "schema_version": team_shape.PARALLEL_GATE_SCHEMA_VERSION,
+            "kind": team_shape.PARALLEL_GATE_KIND,
+            "program_id": "parallel-eval",
+            "plan_digest": "a" * 64,
+            "integration_owner": "integration-owner",
+            "checks": {name: True for name in team_shape.PARALLEL_GATE_CHECKS},
+            "supporting_evidence": {
+                name: [evidence_binding] for name in team_shape.PARALLEL_GATE_CHECKS
+            },
+            "isolation_identities": {
+                "alpha": "worktree-alpha",
+                "beta": "worktree-beta",
+            },
+        }
+        selection = team_shape.select_team_shape(
+            work_kind="writable",
+            decomposable=True,
+            stable_verifier=True,
+            worker_capacity=2,
+            worker_budget=2,
+            writable_gates_passed=True,
+            uncertainty="low",
+            consequence="medium",
+            independent_oracle=False,
+            parallel_gate_receipt=receipt,
+            expected_program_id="parallel-eval",
+            expected_plan_digest="a" * 64,
+            expected_integration_owner="integration-owner",
+            expected_units={"alpha", "beta"},
+        )
+        if selection["pattern"] != "distributed" or selection["worker_limit"] != 2:
+            raise ParallelEvalError("valid earned-parallelism evidence was not admitted")
 
     with tempfile.TemporaryDirectory(prefix="patpat-parallel-eval-") as temporary:
         sandbox = Path(temporary)

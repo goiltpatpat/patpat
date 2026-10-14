@@ -1,9 +1,13 @@
 ---
 name: patpat-learn
 description: Convert a recurring failure, correction, or verification gap from the active task into the smallest durable constraint. Use when the same engineering mistake could recur and should be prevented structurally.
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"AgentSkill","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Learn
+
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 

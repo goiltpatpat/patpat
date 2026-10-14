@@ -22,9 +22,30 @@ If isolation is unavailable, run the work serially. Locks do not turn a shared m
 
 ## Choose the right topology
 
-Record one bounded receipt that binds the program id, validated plan digest, integration owner, every writable gate above, and one unique isolation identity per unit. Pass its absolute path plus those expected bindings to `patpat-run/scripts/team_shape.py`, then use the same receipt to open the program dispatch gate. Assign each unit with its receipt-bound isolation identity and a compare-and-swap generation before accepting worker output. Without a valid content-bound receipt it returns serial work and dispatch remains closed. Its non-authoritative recommendation selects the smallest viable topology: `iterative` for a tight test/refine loop, `distributed` for independent slices, or `adversarial` for high-uncertainty candidates that an independent oracle can falsify. Use `arena` for adversarial candidates, `swarm` for distributed coverage, and `autopilot` for a checked queue whose items each close their own proof loop.
+Record one bounded schema-v2 coordinator-attestation receipt that binds the program id, validated plan digest, integration owner, each writable gate claim, one unique isolation identity per unit, and supporting evidence for each check. Each evidence entry is one or more `{path, sha256, size}` file bindings; create them with `skills/patpat-run/scripts/team_shape.py --bind-evidence /absolute/path/to/safe-artifact`. The validator rechecks those bounded files when opening dispatch and before assignments, worker mutations, and delivery readiness; status exposes whether they remain fresh. The receipt still does not prove whether its claims are true or a host enforces isolation. If evidence is unavailable or stale, keep writable work serial. A schema-v1 receipt causes serial fallback for writable team selection and cannot open writable dispatch; read-only selection remains eligible under its own checks. Pass the receipt's absolute path and exact program bindings to `skills/patpat-run/scripts/team_shape.py`:
+
+```sh
+python3 skills/patpat-run/scripts/team_shape.py \
+  --bind-evidence /absolute/evidence/verifier.md
+```
+
+Then assemble the printed `{path, sha256, size}` bindings into the receipt. For team selection, pass that same receipt and its exact program bindings to the script:
+
+```sh
+python3 skills/patpat-run/scripts/team_shape.py \
+  --work-kind writable --decomposable true --stable-verifier true \
+  --worker-capacity 2 --worker-budget 2 --writable-gates-passed true \
+  --uncertainty low --consequence low --independent-oracle false \
+  --parallel-gate-receipt /absolute/path/parallel-gate.json \
+  --program-id release-train --plan-digest "$PLAN_DIGEST" \
+  --integration-owner coordinator --unit contract --unit consumer
+```
+
+Set `PLAN_DIGEST` to the validated plan digest. The `supporting_evidence` map has one non-empty array for each of `representative_single_owner_run`, `stable_verifier`, `independent_slices`, `isolated_workspaces`, `isolated_resources`, and `whole_system_verification`. Each array contains binder output such as `{"path": "/absolute/evidence/verifier.md", "sha256": "<sha256>", "size": 123}`. A missing, changed, or malformed schema-v2 artifact is rejected rather than falling back to serial. If a bound file changes later, delivery readiness and admission also fail until the evidence is refreshed and dispatch reopened. The hashes make coordinator evidence inspectable; they do not prove the claims, authorship, or host-enforced isolation. Use the same receipt to open the program dispatch gate. Assign each unit with its receipt-bound isolation identity and a compare-and-swap generation before accepting worker output. Its non-authoritative recommendation selects the smallest viable topology: `iterative` for a tight test/refine loop, `distributed` for independent slices, or `adversarial` for high-uncertainty candidates that an independent oracle can falsify. Use `arena` for adversarial candidates, `swarm` for distributed coverage, and `autopilot` for a checked queue whose items each close their own proof loop.
 
 Workers return typed cards with scope, proof, receipts, objections, reusable parts, verdict, and next frontier. Preserve those artifacts; discard transcript-shaped context.
+
+The returned `worker_limit` is advisory to the coordinator: the durable state store does not cap concurrent assignments. Likewise, the plan checks declared ownership overlap but does not inspect future diffs. Keep assignments within the returned limit and have the integration owner compare each candidate's changed paths with its declared files before recording the head.
 
 Do not use parallelism to hide an unclear contract. Resolve shared shapes and integration boundaries before fan-out.
 

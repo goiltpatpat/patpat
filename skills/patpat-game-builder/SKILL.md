@@ -1,9 +1,13 @@
 ---
 name: patpat-game-builder
 description: Build or extend a runnable game or gameplay feature in the user's project. Verify rules and a real playthrough when the target runtime is available. Do not use for game concepts, design documents, repository diagrams, or ordinary applications.
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Codebase","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Game Builder
+
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 Work in the user's actual game project and conventions. For a new feature, guide the work from brief to runnable slice; for existing projects, load only the applicable playbooks. Verify requested rules and player-facing behavior on the target runtime when available; name any missing proof. Keep this entry point short: load the primary playbook and only the conditional workflows and matrix rows that apply.
 

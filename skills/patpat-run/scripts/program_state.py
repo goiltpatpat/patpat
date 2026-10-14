@@ -35,7 +35,9 @@ from team_shape import (
     PARALLEL_GATE_CHECKS,
     PARALLEL_GATE_KIND,
     TeamShapeError,
+    bind_parallel_gate_evidence,
     load_parallel_gate_receipt,
+    validate_parallel_gate_evidence,
     validate_parallel_gate_receipt,
 )
 from validate_plan import (
@@ -54,7 +56,8 @@ from validate_plan import (
 )
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
+PREVIOUS_SCHEMA_VERSION = 2
 LEGACY_SCHEMA_VERSION = 1
 PROGRAM_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 HEAD_SHA = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
@@ -100,7 +103,8 @@ EVIDENCE_KEYS = {"path", "sha256", "size"}
 INBOX_KEYS = {"sequence", "kind", "unit_id", "summary", "head_sha", "assignment", "recorded_at"}
 ASSIGNMENT_KEYS = {"actor", "isolation_identity", "generation", "assigned_at"}
 ASSIGNMENT_SNAPSHOT_KEYS = {"actor", "isolation_identity", "generation"}
-DISPATCH_BINDING_KEYS = {"receipt_sha256", "integration_owner", "isolation_identities"}
+DISPATCH_BINDING_KEYS_V2 = {"receipt_sha256", "integration_owner", "isolation_identities"}
+DISPATCH_BINDING_KEYS = DISPATCH_BINDING_KEYS_V2 | {"supporting_evidence"}
 LEGACY_PROGRAM_KEYS = PROGRAM_KEYS - {"dispatch_binding"}
 LEGACY_UNIT_KEYS = UNIT_KEYS - {"assignment"}
 LEGACY_VERDICT_KEYS = VERDICT_KEYS - {"assignment"}
@@ -423,6 +427,8 @@ def require_current_assignment(
 ) -> dict[str, Any]:
     if not state["gates"]["dispatch"]["open"] or state["dispatch_binding"] is None:
         raise ProgramStateError("worker mutation requires an open bound dispatch gate")
+    if not dispatch_evidence_is_fresh(state["dispatch_binding"]):
+        raise ProgramStateError("worker mutation requires fresh parallel gate evidence")
     expected_generation = checked_generation(generation)
     snapshot = assignment_snapshot(unit)
     if snapshot is None:
@@ -479,6 +485,18 @@ def evidence_is_fresh(binding: Any) -> bool:
         return evidence_binding(Path(binding["path"])) == binding
     except (KeyError, OSError, ProgramStateError, TypeError):
         return False
+
+
+def dispatch_evidence_is_fresh(binding: Any) -> bool:
+    if not isinstance(binding, dict):
+        return False
+    try:
+        validate_parallel_gate_evidence(
+            binding.get("supporting_evidence"), verify_files=True
+        )
+    except (OSError, TeamShapeError, TypeError, ValueError):
+        return False
+    return True
 
 
 def canonical_json_digest(value: Any) -> str:
@@ -544,8 +562,17 @@ def dependencies_complete(root: Path, state: dict[str, Any], unit: dict[str, Any
     )
 
 
-def frontier(root: Path, state: dict[str, Any]) -> list[str]:
+def frontier(
+    root: Path,
+    state: dict[str, Any],
+    *,
+    evidence_fresh: bool | None = None,
+) -> list[str]:
     if not state["gates"]["dispatch"]["open"]:
+        return []
+    if evidence_fresh is None:
+        evidence_fresh = dispatch_evidence_is_fresh(state["dispatch_binding"])
+    if not evidence_fresh:
         return []
     return sorted(
         unit_id
@@ -554,7 +581,18 @@ def frontier(root: Path, state: dict[str, Any]) -> list[str]:
     )
 
 
-def delivery_ready(root: Path, state: dict[str, Any]) -> bool:
+def delivery_ready(
+    root: Path,
+    state: dict[str, Any],
+    *,
+    evidence_fresh: bool | None = None,
+) -> bool:
+    dispatch_binding = state["dispatch_binding"]
+    if dispatch_binding is not None:
+        if evidence_fresh is None:
+            evidence_fresh = dispatch_evidence_is_fresh(dispatch_binding)
+        if not evidence_fresh:
+            return False
     return bool(state["units"]) and all(
         unit_is_complete(root, state, unit) for unit in state["units"].values()
     )
@@ -582,10 +620,12 @@ def schema_errors(
         return ["state root must be an object"]
     errors: list[str] = []
     version = state.get("schema_version")
-    program_keys = PROGRAM_KEYS if version == SCHEMA_VERSION else LEGACY_PROGRAM_KEYS
-    unit_keys = UNIT_KEYS if version == SCHEMA_VERSION else LEGACY_UNIT_KEYS
-    verdict_keys = VERDICT_KEYS if version == SCHEMA_VERSION else LEGACY_VERDICT_KEYS
-    inbox_keys = INBOX_KEYS if version == SCHEMA_VERSION else LEGACY_INBOX_KEYS
+    legacy_v1 = isinstance(version, int) and not isinstance(version, bool) and version == LEGACY_SCHEMA_VERSION
+    has_assignment_schema = isinstance(version, int) and not isinstance(version, bool) and version >= PREVIOUS_SCHEMA_VERSION
+    program_keys = LEGACY_PROGRAM_KEYS if legacy_v1 else PROGRAM_KEYS
+    unit_keys = LEGACY_UNIT_KEYS if legacy_v1 else UNIT_KEYS
+    verdict_keys = LEGACY_VERDICT_KEYS if legacy_v1 else VERDICT_KEYS
+    inbox_keys = LEGACY_INBOX_KEYS if legacy_v1 else INBOX_KEYS
     if set(state) != program_keys:
         errors.append("state fields do not match schema")
     if isinstance(version, bool) or not isinstance(version, int) or version not in allowed_versions:
@@ -602,11 +642,14 @@ def schema_errors(
         errors.append("objective is required")
     if not isinstance(state.get("plan_digest"), str) or re.fullmatch(r"[0-9a-f]{64}", state.get("plan_digest", "")) is None:
         errors.append("plan digest is invalid")
-    dispatch_binding = state.get("dispatch_binding") if version == SCHEMA_VERSION else None
+    dispatch_binding = state.get("dispatch_binding") if has_assignment_schema else None
     normalized_dispatch_identities: dict[str, str] = {}
     normalized_integration_owner: str | None = None
-    if version == SCHEMA_VERSION and dispatch_binding is not None:
-        if not isinstance(dispatch_binding, dict) or set(dispatch_binding) != DISPATCH_BINDING_KEYS:
+    if has_assignment_schema and dispatch_binding is not None:
+        expected_binding_keys = (
+            DISPATCH_BINDING_KEYS if version == SCHEMA_VERSION else DISPATCH_BINDING_KEYS_V2
+        )
+        if not isinstance(dispatch_binding, dict) or set(dispatch_binding) != expected_binding_keys:
             errors.append("dispatch binding is malformed")
         else:
             if (
@@ -638,6 +681,13 @@ def schema_errors(
                     and normalized_integration_owner in normalized_dispatch_identities.values()
                 ):
                     errors.append("dispatch isolation identities must differ from integration owner")
+            if version == SCHEMA_VERSION:
+                try:
+                    validate_parallel_gate_evidence(
+                        dispatch_binding.get("supporting_evidence"), verify_files=False
+                    )
+                except TeamShapeError:
+                    errors.append("dispatch supporting evidence bindings are malformed")
     delivery = state.get("delivery")
     if not isinstance(delivery, dict) or set(delivery) != {"authority", "actions"}:
         errors.append("delivery claim is malformed")
@@ -677,7 +727,7 @@ def schema_errors(
             ):
                 errors.append(f"gate {name} fields are invalid")
         if (
-            version == SCHEMA_VERSION
+            has_assignment_schema
             and isinstance(gates.get("dispatch"), dict)
             and gates["dispatch"].get("open") is True
             and dispatch_binding is None
@@ -720,7 +770,7 @@ def schema_errors(
             head = unit.get("head_sha")
             if head is not None and (not isinstance(head, str) or HEAD_SHA.fullmatch(head) is None):
                 errors.append(f"unit {unit_id} head SHA is invalid")
-            if version == SCHEMA_VERSION:
+            if has_assignment_schema:
                 assignment = unit.get("assignment")
                 if not isinstance(assignment, dict) or set(assignment) != ASSIGNMENT_KEYS:
                     errors.append(f"unit {unit_id} assignment is malformed")
@@ -773,7 +823,7 @@ def schema_errors(
                         errors.append(f"unit {unit_id} {kind} verdict is invalid")
                     if not isinstance(record.get("head_sha"), str) or HEAD_SHA.fullmatch(record["head_sha"]) is None:
                         errors.append(f"unit {unit_id} {kind} head SHA is invalid")
-                    if version == SCHEMA_VERSION:
+                    if has_assignment_schema:
                         snapshot = record.get("assignment")
                         if not isinstance(snapshot, dict) or set(snapshot) != ASSIGNMENT_SNAPSHOT_KEYS:
                             errors.append(f"unit {unit_id} {kind} assignment snapshot is malformed")
@@ -798,11 +848,12 @@ def schema_errors(
                         or not isinstance(evidence.get("path"), str)
                         or not isinstance(evidence.get("sha256"), str)
                         or re.fullmatch(r"[0-9a-f]{64}", evidence.get("sha256", "")) is None
+                        or isinstance(evidence.get("size"), bool)
                         or not isinstance(evidence.get("size"), int)
                         or evidence.get("size", -1) < 0
                     ):
                         errors.append(f"unit {unit_id} {kind} evidence binding is invalid")
-            if version == SCHEMA_VERSION and isinstance(unit.get("review"), dict):
+            if has_assignment_schema and isinstance(unit.get("review"), dict):
                 verification = unit.get("verification")
                 current_assignment = assignment_snapshot(unit)
                 if not isinstance(verification, dict) or current_assignment is None:
@@ -828,7 +879,7 @@ def schema_errors(
                             errors.append(
                                 f"unit {unit_id} review actor is not independent"
                             )
-        if version == SCHEMA_VERSION and dispatch_binding is not None:
+        if has_assignment_schema and dispatch_binding is not None:
             if set(normalized_dispatch_identities) != known:
                 errors.append("dispatch binding must map every program unit exactly once")
         graph = {
@@ -894,7 +945,11 @@ def schema_errors(
         observed_sequences: list[int] = []
         for event in inbox:
             sequence_value = event.get("sequence")
-            if not isinstance(sequence_value, int) or sequence_value < 1:
+            if (
+                isinstance(sequence_value, bool)
+                or not isinstance(sequence_value, int)
+                or sequence_value < 1
+            ):
                 errors.append("inbox event sequence is invalid")
             else:
                 observed_sequences.append(sequence_value)
@@ -907,7 +962,7 @@ def schema_errors(
             event_head = event.get("head_sha")
             if event_head is not None and (not isinstance(event_head, str) or HEAD_SHA.fullmatch(event_head) is None):
                 errors.append("inbox event head SHA is invalid")
-            if version == SCHEMA_VERSION:
+            if has_assignment_schema:
                 snapshot = event.get("assignment")
                 if event.get("unit_id") is None:
                     if snapshot is not None:
@@ -930,7 +985,7 @@ def schema_errors(
         if observed_sequences != sorted(set(observed_sequences)):
             errors.append("inbox event sequence order is invalid")
     sequence = state.get("inbox_sequence")
-    if not isinstance(sequence, int) or sequence < 0:
+    if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 0:
         errors.append("inbox sequence is invalid")
     elif isinstance(inbox, list) and inbox and any(event.get("sequence", 0) > sequence for event in inbox if isinstance(event, dict)):
         errors.append("inbox event sequence exceeds store sequence")
@@ -975,12 +1030,14 @@ def read_state_document(root: Path, program_id: str) -> dict[str, Any]:
 
 def load_state(root: Path, program_id: str) -> dict[str, Any]:
     value = read_state_document(root, program_id)
-    if (
-        not isinstance(value.get("schema_version"), bool)
-        and value.get("schema_version") == LEGACY_SCHEMA_VERSION
-    ):
+    version = value.get("schema_version")
+    if isinstance(version, int) and not isinstance(version, bool) and version == LEGACY_SCHEMA_VERSION:
         raise ProgramStateError(
             "legacy schema v1 requires explicit migrate-v1 --invalidate-legacy-evidence"
+        )
+    if isinstance(version, int) and not isinstance(version, bool) and version == PREVIOUS_SCHEMA_VERSION:
+        raise ProgramStateError(
+            "schema v2 requires explicit migrate-v2 --invalidate-legacy-evidence"
         )
     errors = schema_errors(value, root, program_id)
     if errors:
@@ -1043,6 +1100,57 @@ def migrate_v1(
             unit["review"] = None
             unit["assignment"] = empty_assignment()
             unit["updated_at"] = timestamp
+        migrated["updated_at"] = timestamp
+        save_state(root, program_id, migrated)
+        return migrated
+
+
+def migrate_v2(
+    root: Path,
+    program_id: str,
+    invalidate_legacy_evidence: bool,
+) -> dict[str, Any]:
+    if invalidate_legacy_evidence is not True:
+        raise ProgramStateError("v2 migration requires --invalidate-legacy-evidence")
+    with program_lock(root, program_id):
+        legacy = read_state_document(root, program_id)
+        if (
+            isinstance(legacy.get("schema_version"), bool)
+            or legacy.get("schema_version") != PREVIOUS_SCHEMA_VERSION
+        ):
+            raise ProgramStateError("program state is not schema v2")
+        errors = schema_errors(
+            legacy,
+            root,
+            program_id,
+            allowed_versions=frozenset({PREVIOUS_SCHEMA_VERSION}),
+        )
+        if errors:
+            raise ProgramStateError("schema v2 state is invalid: " + "; ".join(errors))
+        timestamp = now()
+        migrated = dict(legacy)
+        migrated["schema_version"] = SCHEMA_VERSION
+        migrated["dispatch_binding"] = None
+        migrated["gates"] = {
+            "dispatch": {
+                "open": False,
+                "reason": "schema v2 migration requires a fresh evidence-bound dispatch receipt",
+                "updated_at": timestamp,
+            },
+            "delivery": {
+                "open": False,
+                "reason": "schema v2 migration closed delivery pending fresh dispatch evidence",
+                "updated_at": timestamp,
+            },
+        }
+        for unit_id, unit in migrated["units"].items():
+            invalidate_assignment(
+                migrated,
+                unit_id,
+                timestamp,
+                advance_generation=assignment_snapshot(unit) is not None,
+            )
+        migrated["inbox"] = []
         migrated["updated_at"] = timestamp
         save_state(root, program_id, migrated)
         return migrated
@@ -1144,6 +1252,7 @@ def set_gate(
                     expected_plan_digest=state["plan_digest"],
                     expected_integration_owner=integration_owner,
                     expected_units=set(state["units"]),
+                    require_evidence=True,
                 )
             except TeamShapeError as error:
                 raise ProgramStateError(f"dispatch gate receipt is invalid: {error}") from error
@@ -1156,6 +1265,7 @@ def set_gate(
                     unit_id: canonical_identity(identity, f"isolation identity for {unit_id}")
                     for unit_id, identity in sorted(receipt["isolation_identities"].items())
                 },
+                "supporting_evidence": receipt_summary["supporting_evidence"],
             }
             if state["dispatch_binding"] != dispatch_binding:
                 timestamp = now()
@@ -1222,6 +1332,8 @@ def assign_unit(
         if current_generation == MAX_ASSIGNMENT_GENERATION:
             raise ProgramStateError("assignment generation is exhausted")
         binding = state["dispatch_binding"]
+        if not dispatch_evidence_is_fresh(binding):
+            raise ProgramStateError("unit assignment requires fresh parallel gate evidence")
         if isolation_key != binding["isolation_identities"][unit_id]:
             raise ProgramStateError("assignment isolation identity does not match dispatch")
         if actor_key == binding["integration_owner"]:
@@ -1542,14 +1654,26 @@ def status(
     state = load_state(root, program_id)
     if unit_id is not None and unit_id not in state["units"]:
         raise ProgramStateError(f"unknown unit: {unit_id}")
-    ready = delivery_ready(root, state)
-    open_frontier = frontier(root, state)
+    dispatch_evidence_fresh = (
+        dispatch_evidence_is_fresh(state["dispatch_binding"])
+        if state["dispatch_binding"] is not None
+        else None
+    )
+    ready = delivery_ready(
+        root, state, evidence_fresh=dispatch_evidence_fresh
+    )
+    open_frontier = frontier(
+        root,
+        state,
+        evidence_fresh=dispatch_evidence_fresh is True,
+    )
     result: dict[str, Any] = {
         "store": str(program_directory(root, program_id)),
         "program_id": program_id,
         "objective": state["objective"],
         "plan_digest": state["plan_digest"],
         "dispatch_binding": state["dispatch_binding"],
+        "dispatch_evidence_fresh": dispatch_evidence_fresh,
         "gates": state["gates"],
         "frontier": open_frontier,
         "delivery_ready": ready,
@@ -1599,8 +1723,19 @@ def status(
 def compact_state_receipt(root: Path, state: dict[str, Any], action: str) -> dict[str, Any]:
     """Return a bounded coordination receipt instead of the full unit ledger."""
     payload = json.dumps(state, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-    ready = delivery_ready(root, state)
-    open_frontier = frontier(root, state)
+    dispatch_evidence_fresh = (
+        dispatch_evidence_is_fresh(state["dispatch_binding"])
+        if state["dispatch_binding"] is not None
+        else None
+    )
+    ready = delivery_ready(
+        root, state, evidence_fresh=dispatch_evidence_fresh
+    )
+    open_frontier = frontier(
+        root,
+        state,
+        evidence_fresh=dispatch_evidence_fresh is True,
+    )
     return {
         "schema_version": 1,
         "kind": "patpat.program.mutation_receipt",
@@ -1608,6 +1743,7 @@ def compact_state_receipt(root: Path, state: dict[str, Any], action: str) -> dic
         "store": str(program_directory(root, state["program_id"])),
         "program_id": state["program_id"],
         "plan_digest": state["plan_digest"],
+        "dispatch_evidence_fresh": dispatch_evidence_fresh,
         "frontier_count": len(open_frontier),
         "frontier_preview": open_frontier[:8],
         "frontier_truncated": len(open_frontier) > 8,
@@ -1663,13 +1799,19 @@ def run_self_test() -> None:
             "content-bound parallel gate receipt",
         )
         initialized = load_state(root, "release-train")
+        gate_evidence_path = root / "parallel-gate-evidence.txt"
+        gate_evidence_path.write_text("supporting evidence for every gate check\n", encoding="utf-8")
+        gate_evidence = bind_parallel_gate_evidence(gate_evidence_path)
         parallel_receipt = {
-            "schema_version": 1,
+            "schema_version": 2,
             "kind": PARALLEL_GATE_KIND,
             "program_id": "release-train",
             "plan_digest": initialized["plan_digest"],
             "integration_owner": "Integration Owner",
             "checks": {name: True for name in PARALLEL_GATE_CHECKS},
+            "supporting_evidence": {
+                name: [gate_evidence] for name in PARALLEL_GATE_CHECKS
+            },
             "isolation_identities": {
                 "contract": "worktree-contract",
                 "consumer": "worktree-consumer",
@@ -1912,6 +2054,74 @@ def run_self_test() -> None:
         assert status(root, "release-train")["delivery_ready"]
         completed_state_path = state_path(root, "release-train")
         completed_state_bytes = completed_state_path.read_bytes()
+
+        v2_state = json.loads(completed_state_bytes)
+        v2_state["program_id"] = "migration-program"
+        v2_state["schema_version"] = PREVIOUS_SCHEMA_VERSION
+        v2_state["dispatch_binding"].pop("supporting_evidence")
+        contract_assignment = assignment_snapshot(v2_state["units"]["contract"])
+        v2_state["inbox"].append(
+            {
+                "sequence": v2_state["inbox_sequence"] + 1,
+                "kind": "worker-update",
+                "unit_id": "contract",
+                "summary": "legacy v2 handoff",
+                "head_sha": v2_state["units"]["contract"]["head_sha"],
+                "assignment": contract_assignment,
+                "recorded_at": now(),
+            }
+        )
+        v2_state["inbox_sequence"] += 1
+        atomic_write_json(state_path(root, "migration-program"), v2_state)
+        expect_error(lambda: status(root, "migration-program"), "schema v2 requires")
+        expect_error(
+            lambda: migrate_v2(root, "migration-program", False),
+            "--invalidate-legacy-evidence",
+        )
+        v2_heads = {
+            unit_id: unit["head_sha"] for unit_id, unit in v2_state["units"].items()
+        }
+        v2_generations = {
+            unit_id: unit["assignment"]["generation"] + 1
+            for unit_id, unit in v2_state["units"].items()
+        }
+        migrated_v2 = migrate_v2(root, "migration-program", True)
+        assert migrated_v2["schema_version"] == SCHEMA_VERSION
+        assert migrated_v2["plan_digest"] == v2_state["plan_digest"]
+        assert migrated_v2["dispatch_binding"] is None
+        assert not migrated_v2["gates"]["dispatch"]["open"]
+        assert not migrated_v2["gates"]["delivery"]["open"]
+        assert migrated_v2["inbox"] == []
+        for unit_id, unit in migrated_v2["units"].items():
+            assert unit["head_sha"] == v2_heads[unit_id]
+            assert unit["state"] == "pending"
+            assert unit["verification"] is None and unit["review"] is None
+            assert unit["assignment"] == empty_assignment(v2_generations[unit_id])
+        assert schema_errors(migrated_v2, root, "migration-program") == []
+
+        malformed_evidence_size = json.loads(completed_state_bytes)
+        malformed_evidence_size["units"]["contract"]["verification"]["evidence"]["size"] = True
+        evidence_errors = schema_errors(malformed_evidence_size, root, "release-train")
+        if "unit contract verification evidence binding is invalid" not in evidence_errors:
+            raise AssertionError("boolean evidence size was accepted as a valid integer")
+        malformed_event_sequence = json.loads(completed_state_bytes)
+        malformed_event_sequence["inbox"] = [{
+            "sequence": True,
+            "kind": "note",
+            "unit_id": None,
+            "summary": "malformed boolean sequence",
+            "head_sha": None,
+            "assignment": None,
+            "recorded_at": now(),
+        }]
+        event_sequence_errors = schema_errors(malformed_event_sequence, root, "release-train")
+        if "inbox event sequence is invalid" not in event_sequence_errors:
+            raise AssertionError("boolean inbox event sequence was accepted as a valid integer")
+        malformed_inbox_sequence = json.loads(completed_state_bytes)
+        malformed_inbox_sequence["inbox_sequence"] = True
+        inbox_sequence_errors = schema_errors(malformed_inbox_sequence, root, "release-train")
+        if "inbox sequence is invalid" not in inbox_sequence_errors:
+            raise AssertionError("boolean inbox sequence was accepted as a valid integer")
         tampered_review = json.loads(completed_state_bytes)
         tampered_review["units"]["contract"]["review"]["actor"] = "WORKER CONTRACT"
         atomic_write_json(completed_state_path, tampered_review)
@@ -2336,6 +2546,65 @@ def run_self_test() -> None:
         )
         assert parsed.coordinator == "Integration Owner"
 
+        initialize(root, "freshness-program", plan_path)
+        freshness_state = load_state(root, "freshness-program")
+        freshness_evidence_path = root / "freshness-parallel-gate-evidence.txt"
+        freshness_evidence_path.write_text("fresh dispatch proof\n", encoding="utf-8")
+        freshness_evidence = bind_parallel_gate_evidence(freshness_evidence_path)
+        freshness_receipt = {
+            "schema_version": 2,
+            "kind": PARALLEL_GATE_KIND,
+            "program_id": "freshness-program",
+            "plan_digest": freshness_state["plan_digest"],
+            "integration_owner": "Integration Owner",
+            "checks": {name: True for name in PARALLEL_GATE_CHECKS},
+            "supporting_evidence": {
+                name: [freshness_evidence] for name in PARALLEL_GATE_CHECKS
+            },
+            "isolation_identities": {
+                "contract": "worktree-contract",
+                "consumer": "worktree-consumer",
+            },
+        }
+        freshness_receipt_path = root / "freshness-parallel-gate.json"
+        freshness_receipt_path.write_text(json.dumps(freshness_receipt), encoding="utf-8")
+        set_gate(
+            root,
+            "freshness-program",
+            "dispatch",
+            True,
+            "freshness self-test",
+            freshness_receipt_path,
+            "Integration Owner",
+        )
+        assign_unit(
+            root,
+            "freshness-program",
+            "contract",
+            "Worker Contract",
+            "worktree-contract",
+            0,
+        )
+        freshness_evidence_path.write_text("changed dispatch proof\n", encoding="utf-8")
+        stale_status = status(root, "freshness-program")
+        assert stale_status["frontier"] == []
+        assert not stale_status["delivery_ready"]
+        expect_error(
+            lambda: assign_unit(
+                root,
+                "freshness-program",
+                "contract",
+                "Worker Contract",
+                "worktree-contract",
+                1,
+            ),
+            "fresh parallel gate evidence",
+        )
+        expect_error(
+            lambda: set_unit_state(root, "freshness-program", "contract", "running", 1),
+            "fresh parallel gate evidence",
+        )
+
     print("Patpat program state self-test passed.")
 
 
@@ -2359,6 +2628,9 @@ def build_parser() -> argparse.ArgumentParser:
     migrate_parser = commands.add_parser("migrate-v1")
     migrate_parser.add_argument("--invalidate-legacy-evidence", action="store_true")
     migrate_parser.add_argument("--full", action="store_true", help="Print the complete state ledger")
+    migrate_v2_parser = commands.add_parser("migrate-v2")
+    migrate_v2_parser.add_argument("--invalidate-legacy-evidence", action="store_true")
+    migrate_v2_parser.add_argument("--full", action="store_true", help="Print the complete state ledger")
 
     gate_parser = commands.add_parser("set-gate")
     gate_parser.add_argument("name", choices=sorted(GATE_NAMES))
@@ -2443,6 +2715,8 @@ def main() -> int:
             result = {"recovered_lock": str(recover_stale_lock(root, args.program))}
         elif args.command == "migrate-v1":
             result = migrate_v1(root, args.program, args.invalidate_legacy_evidence)
+        elif args.command == "migrate-v2":
+            result = migrate_v2(root, args.program, args.invalidate_legacy_evidence)
         elif args.command == "set-gate":
             result = set_gate(
                 root,
@@ -2501,7 +2775,7 @@ def main() -> int:
         else:
             parser.error(f"unsupported command: {args.command}")
         full_state_commands = {
-            "init", "migrate-v1", "set-gate", "assign-unit", "set-head", "set-unit", "record-verdict"
+            "init", "migrate-v1", "migrate-v2", "set-gate", "assign-unit", "set-head", "set-unit", "record-verdict"
         }
         if args.command in full_state_commands and not args.full:
             result = compact_state_receipt(root, result, args.command)
