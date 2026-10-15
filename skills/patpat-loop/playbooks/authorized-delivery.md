@@ -9,4 +9,5 @@ Read [preserve safety](../principles/preserve-safety.md), [proof over proxy](../
 3. Require explicit `land` or `merge` language for the named pull request or stack. Overnight, going to bed, don't stop, or a generic ship request without a named merge action reaches merge-ready and stops. State-then-wait still applies when the user asked only for the plan.
 4. If CI is green, merge. If CI failed, classify flake vs real fail. Retry a flake once. Do not land a real fail. Do not land because the playbook ended.
 5. Pause for production deploy, package publish, force-push, secret rotation, and risky auth, billing, or permission changes. Explain blast radius, rollback, and verification, then wait.
-6. Re-check the remote revision directly after the action.
+6. For squash merges, ensure the final commit subject is `<PR title> (#<PR number>)`; if GitHub's generated title differs, set the subject explicitly before merging. Verify the resulting subject. Do not rewrite base history solely to add a suffix to an already-merged commit.
+7. Re-check the remote revision directly after the action.
