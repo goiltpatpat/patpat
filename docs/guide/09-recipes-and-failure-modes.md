@@ -35,7 +35,7 @@ Use natural goals with observable outcomes. These prompts are starting points, n
 ## Drive a pull request without merging
 
 ```text
-/patpat babysit this PR until required checks pass and review findings are resolved. Stop merge-ready.
+/patpat keep this PR moving until required checks pass and review findings are resolved. Hand it back at merge-ready without merging.
 ```
 
 ## Common failure modes

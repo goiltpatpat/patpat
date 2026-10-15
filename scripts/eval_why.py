@@ -135,7 +135,32 @@ def run_self_test() -> None:
     assert dry_run_loop.route(HOW_NEIGHBOR) == "inspect"
     assert dry_run_loop.route("why was ship_plan merge gated?") == "inspect"
     assert dry_run_loop.route("/patpat pause safely, I am going offline") == "pause"
-    assert dry_run_loop.route("/patpat babysit this PR and get it green") == "pr-babysit"
+    assert (
+        dry_run_loop.route(
+            "/patpat keep this PR moving until checks pass and hand it back at merge-ready"
+        )
+        == "pr-handoff"
+    )
+    assert dry_run_loop.route("/patpat make this PR merge-ready without landing") == "pr-handoff"
+    assert dry_run_loop.route("/patpat babysit this PR") == "pr-handoff"
+    assert dry_run_loop.route("/patpat babysit CI") == "pr-handoff"
+    assert dry_run_loop.route("/patpat do not babysit this PR") == "loop"
+    assert dry_run_loop.route("/patpat don't babysit this PR") == "loop"
+    assert dry_run_loop.route("/patpat what is PR babysitting?") == "inspect"
+    assert dry_run_loop.route("/patpat what's PR babysitting?") == "inspect"
+    assert dry_run_loop.route("/patpat define PR babysitting") == "inspect"
+    assert (
+        dry_run_loop.route("/patpat what does babysitting a pull request mean?")
+        == "inspect"
+    )
+    assert dry_run_loop.route("/patpat keep this PR moving and merge it.") == "ship"
+    assert (
+        dry_run_loop.route(
+            "/patpat explain what PR merge-ready means without changing anything"
+        )
+        == "inspect"
+    )
+    assert dry_run_loop.route("/patpat explain PR babysitting without changing anything") == "inspect"
     assert dry_run_loop.route("/patpat prune abandoned worktrees") == "worktree-cleanup"
     assert dry_run_loop.route("/patpat fix the timeout") == "debug"
     assert dry_run_loop.route("/patpat merge this") == "ship"
@@ -176,7 +201,7 @@ def run_self_test() -> None:
     print(f"- trigger {WHY_PROMPT!r} -> inspect (rationale-forensics / why-report)")
     print(f"- neighbor {HOW_NEIGHBOR!r} -> inspect (C how-report, not D playbook)")
     print("- reject /patpat pause safely -> pause (A+B untouched)")
-    print("- reject /patpat babysit -> pr-babysit (A+B untouched)")
+    print("- accept PR readiness handoff -> pr-handoff; explanation-only neighbor -> inspect")
     print("- reject /patpat prune abandoned worktrees -> worktree-cleanup (A+B untouched)")
     print("- overnight continuation -> merge-ready not merge")
     print("== source ledger ==")
