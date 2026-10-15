@@ -22,6 +22,11 @@ MERGE_DENIAL = re.compile(
     r"[^.!?;\n]*\b(?:land|merge)\b",
     re.IGNORECASE,
 )
+LEGACY_BABYSIT_NEGATION = re.compile(
+    r"\b(?:do not|don't|dont|never|should not|shouldn't|avoid|skip)\s+"
+    r"babysit(?:ting)?\b",
+    re.IGNORECASE,
+)
 DISABLE_MODE = re.compile(
     r"^\s*(?:disable\s+(?:/|\$)?patpat(?:-loop)?|opt\s+out(?:\s+of)?\s+patpat(?:-loop)?)\s*[.!?]?\s*$",
     re.IGNORECASE,
@@ -395,6 +400,11 @@ def route(prompt: str) -> str:
         or "why does" in text
         or "why was" in text
         or "why is" in text
+        or (
+            "babysit" in text
+            and re.search(r"\b(?:what(?:['’]s|\s+(?:is|does))|define)\b", text)
+            is not None
+        )
         or "do not change" in text
         or "read-only" in text
         or "which skill owns" in text
@@ -405,8 +415,27 @@ def route(prompt: str) -> str:
         return "inspect"
     if "pause safely" in text or "go offline" in text:
         return "pause"
-    if "babysit" in text or "get it green" in text or "watch ci" in text:
-        return "pr-babysit"
+    if (
+        not explicit_merge_intent(prompt)
+        and (
+            "get it green" in text
+            or "watch ci" in text
+            or "keep this pr moving" in text
+            or "keep this pull request moving" in text
+            or "make this pr merge-ready" in text
+            or "make this pull request merge-ready" in text
+            or "drive this pr to merge-ready" in text
+            or "drive this pull request to merge-ready" in text
+            or "address review comments" in text
+            or "resolve review threads" in text
+            or (
+                "babysit" in text
+                and re.search(r"\b(?:pr|pull request|ci)\b", text) is not None
+                and LEGACY_BABYSIT_NEGATION.search(text) is None
+            )
+        )
+    ):
+        return "pr-handoff"
     if "worktree" in text and ("clean" in text or "prune" in text):
         return "worktree-cleanup"
     if "interrogate" in text or "adversarial review" in text:
@@ -1095,7 +1124,19 @@ def run_self_test() -> None:
         "/patpat autopilot this queue; do not merge": "autopilot",
         "/patpat design an issue-loop for GitHub issues; keep it paused": "issue-loop",
         "/patpat pause safely, I am going offline": "pause",
-        "/patpat babysit this PR and get it green": "pr-babysit",
+        "/patpat keep this PR moving until checks pass and hand it back at merge-ready": "pr-handoff",
+        "/patpat make this PR merge-ready without landing": "pr-handoff",
+        "/patpat babysit this PR": "pr-handoff",
+        "/patpat babysit CI": "pr-handoff",
+        "/patpat do not babysit this PR": "loop",
+        "/patpat don't babysit this PR": "loop",
+        "/patpat keep this PR moving and merge it.": "ship",
+        "/patpat explain what PR merge-ready means without changing anything": "inspect",
+        "/patpat explain PR babysitting without changing anything": "inspect",
+        "/patpat what is PR babysitting?": "inspect",
+        "/patpat what's PR babysitting?": "inspect",
+        "/patpat define PR babysitting": "inspect",
+        "/patpat what does babysitting a pull request mean?": "inspect",
         "/patpat prune abandoned worktrees": "worktree-cleanup",
         "/patpat merge this": "ship",
         "do not merge; keep the work local": "loop",

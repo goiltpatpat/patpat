@@ -148,7 +148,7 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 | [Session takeover](skills/patpat-loop/playbooks/session-takeover.md) | Resume or take over in-flight work from live repository state. |
 | [Pause safely](skills/patpat-loop/playbooks/pause-safely.md) | Pause in-flight work without opening a PR or merging. |
 | [PR drive](skills/patpat-loop/playbooks/pr-drive.md) | PR status only. Land only when named. |
-| [PR babysit](skills/patpat-loop/playbooks/pr-babysit.md) | Get a PR green, watch CI, or address review threads. Stops merge-ready. |
+| [PR Readiness Handoff](skills/patpat-loop/playbooks/pr-handoff.md) | Move a PR to verified merge-ready status, then return control to the human. |
 | [Worktree cleanup](skills/patpat-loop/playbooks/worktree-cleanup.md) | Prune merged or abandoned git worktrees. Simulators stay outside the core. |
 | [Arena](skills/patpat-loop/playbooks/arena.md) | Competing isolated attempts at one brief, then a verified synthesis. |
 | [Swarm](skills/patpat-loop/playbooks/swarm.md) | Parallel slices or races, one aggregated report. |

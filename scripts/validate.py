@@ -2753,6 +2753,18 @@ def run_self_test(root: Path) -> list[str]:
             "self-test: GitHub pull-request observer failed: "
             f"{observer_result.stdout}{observer_result.stderr}"
         )
+    bounded_pr_watch = root / "skills" / "patpat-ship" / "scripts" / "watch_pr.py"
+    bounded_watch_result = subprocess.run(
+        [sys.executable, str(bounded_pr_watch), "--self-test"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if bounded_watch_result.returncode != 0:
+        failures.append(
+            "self-test: bounded GitHub pull-request watch failed: "
+            f"{bounded_watch_result.stdout}{bounded_watch_result.stderr}"
+        )
     codex_probe = root / "scripts" / "probe_codex_behavior.py"
     probe_result = subprocess.run(
         [sys.executable, str(codex_probe), "--self-test"],
