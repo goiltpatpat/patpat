@@ -15,6 +15,10 @@ from pathlib import Path
 from typing import Any
 
 
+LAUNCHER_TIMEOUT_SECONDS = 5
+UNMATCHED_START_TIMEOUT_SECONDS = 10
+
+
 class SmokeError(RuntimeError):
     pass
 
@@ -107,6 +111,7 @@ def main() -> int:
             *,
             env: dict[str, str] | None = None,
             raw_input: bytes | None = None,
+            timeout_seconds: int = LAUNCHER_TIMEOUT_SECONDS,
         ) -> subprocess.CompletedProcess[bytes]:
             if request is None and raw_input is None:
                 raise SmokeError("hook invocation needs JSON or raw stdin")
@@ -130,19 +135,21 @@ def main() -> int:
                     stderr=subprocess.PIPE,
                     cwd=project,
                     env=environment if env is None else env,
-                    timeout=5,
+                    timeout=timeout_seconds,
                     check=False,
                 )
             except subprocess.TimeoutExpired as error:
                 elapsed = time.perf_counter() - started
                 raise SmokeError(
-                    f"{label} exceeded the 5-second launcher timeout after {elapsed:.3f}s"
+                    f"{label} exceeded the {timeout_seconds}-second launcher timeout after {elapsed:.3f}s"
                 ) from error
             invocation_seconds.append(time.perf_counter() - started)
             return result
 
-        def successful(request: dict[str, Any]) -> subprocess.CompletedProcess[bytes]:
-            result = invoke(request)
+        def successful(
+            request: dict[str, Any], *, timeout_seconds: int = LAUNCHER_TIMEOUT_SECONDS
+        ) -> subprocess.CompletedProcess[bytes]:
+            result = invoke(request, timeout_seconds=timeout_seconds)
             if result.returncode != 0:
                 raise SmokeError(
                     f"Windows hook exited {result.returncode}: "
@@ -153,8 +160,14 @@ def main() -> int:
         def output(result: subprocess.CompletedProcess[bytes]) -> str:
             return result.stdout.decode("utf-8", errors="replace")
 
-        for request in (
+        normal_start = successful(
             payload("SessionStart", "normal-start", source_name="startup"),
+            timeout_seconds=UNMATCHED_START_TIMEOUT_SECONDS,
+        )
+        if normal_start.stdout.strip():
+            raise SmokeError("healthy no-op emitted output")
+
+        for request in (
             payload("SessionStart", "missing-resume", source_name="resume"),
             payload("UserPromptSubmit", "inactive", prompt="run the tests"),
             payload("SessionEnd", "inactive-end"),
