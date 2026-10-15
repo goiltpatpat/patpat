@@ -104,7 +104,7 @@ Two steps:
 /patpat reproduce this timeout, fix the root cause, and land the PR
 ```
 
-That is enough. Explicit activation authorizes the Patpat loop, proof, and verify. Default commit-and-PR still requires delivery intent; see the [operating protocol](skills/patpat-loop/references/operating-protocol.md) and [default delivery](skills/patpat-loop/playbooks/default-delivery.md). The router stays on across later turns when a supported trusted host hook supplies a receipt. Say `disable /patpat` or `local only` to opt out. Higher-priority repository rules still win.
+That is enough. Explicit activation authorizes the Patpat loop, proof, and verify. Default commit-and-PR still requires delivery intent; see the [operating protocol](skills/patpat-loop/references/operating-protocol.md) and [default delivery](skills/patpat-loop/playbooks/default-delivery.md). The router stays on across later turns when a supported trusted host hook supplies a receipt. Say `disable /patpat` or `local only` to opt out. Higher-priority repository rules still win. [Optional personal engineering instructions](docs/guide/02-operating-loop.md#optional-personal-engineering-instructions) can add your preferences; Patpat works without them.
 
 ## Usage
 
