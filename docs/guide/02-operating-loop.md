@@ -42,6 +42,12 @@ Use patpat-inspect to trace who owns this cache invalidation. Read-only.
 
 Patpat reads the minimum safe repository context, nearby contracts, git state, and relevant history. It separates confirmed evidence from inference. When docs and verified behavior conflict, repository behavior wins and durable docs are corrected only when the project truth changed.
 
+## Optional personal engineering instructions
+
+Patpat's skills, playbooks, and host adapters provide its built-in workflows. Personal instructions are a separate, optional, host-managed place for preferences you want to carry across repositories. Patpat does not install or automatically load the [maintainer-provided Dev Master Operating Rules Lean Edition example](../examples/dev-master-operating-rules.md); each host defines how it reads personal instructions and where they sit in its instruction precedence.
+
+Copy and customize only the durable preferences that help you. The example overlaps with Patpat on inspection, proof, safety, and documentation restraint, so avoid repeating workflow details Patpat already supplies. Keep repository-specific requirements in that repository's `AGENTS.md`. Personal instructions do not override host system or developer instructions, the current task, or applicable repository guidance; follow the host's actual precedence rules and surface material conflicts.
+
 ## Name the proof before editing
 
 A proof contract records:
