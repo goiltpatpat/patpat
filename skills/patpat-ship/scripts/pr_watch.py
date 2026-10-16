@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 KIND = "patpat.pr_watch.verdict"
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 CHECK_STATES = {"queued", "in_progress", "completed"}
@@ -38,6 +38,16 @@ REVIEW_DECISIONS = {
     "not_required",
 }
 MERGEABILITY = {"mergeable", "conflicting", "unknown"}
+MERGE_STATE_STATUSES = {
+    "BEHIND",
+    "BLOCKED",
+    "CLEAN",
+    "DIRTY",
+    "DRAFT",
+    "HAS_HOOKS",
+    "UNKNOWN",
+    "UNSTABLE",
+}
 PULL_REQUEST_STATES = {"open", "closed", "merged"}
 MAX_CHECKS = 100
 MAX_NAME_LENGTH = 128
@@ -328,6 +338,11 @@ def evaluate(document: Any, *, evaluated_at: datetime | str | None = None) -> di
             "observation.mergeability",
             MERGEABILITY,
         )
+        merge_state_status = _enum(
+            observation.get("merge_state_status"),
+            "observation.merge_state_status",
+            MERGE_STATE_STATUSES,
+        )
 
         checks_input = observation.get("checks")
         if not isinstance(checks_input, list):
@@ -367,6 +382,7 @@ def evaluate(document: Any, *, evaluated_at: datetime | str | None = None) -> di
             "required_review": required_review,
             "review_decision": review,
             "mergeability": mergeability,
+            "merge_state_status": merge_state_status,
             "draft": draft,
             "deadline": deadline_raw,
             "max_attempts": max_attempts,
@@ -536,6 +552,34 @@ def evaluate(document: Any, *, evaluated_at: datetime | str | None = None) -> di
                     _reason("check_failed", f"{name}: {check['conclusion']}")
                 )
 
+        if merge_state_status == "UNKNOWN":
+            pending.append(
+                _reason("provider_merge_state_pending", "provider merge state is unknown")
+            )
+        elif merge_state_status == "UNSTABLE":
+            pending.append(
+                _reason(
+                    "provider_merge_state_pending",
+                    "provider reports non-passing commit status",
+                )
+            )
+        elif merge_state_status == "BLOCKED":
+            if pending:
+                pending.append(
+                    _reason(
+                        "provider_merge_state_pending",
+                        "provider reports blocked while an observed gate is pending",
+                    )
+                )
+            else:
+                blocked.append(
+                    _reason("provider_merge_state_blocked", merge_state_status)
+                )
+        elif merge_state_status not in {"CLEAN", "HAS_HOOKS"}:
+            blocked.append(
+                _reason("provider_merge_state_blocked", merge_state_status)
+            )
+
         if blocked:
             verdict = "blocked"
             reasons = blocked
@@ -602,6 +646,7 @@ def _fixture(**overrides: Any) -> dict[str, Any]:
             "draft": False,
             "review_decision": "approved",
             "mergeability": "mergeable",
+            "merge_state_status": "CLEAN",
             "checks": [
                 {"name": "contracts", "state": "completed", "conclusion": "success"},
                 {"name": "tests", "state": "completed", "conclusion": "success"},
@@ -756,6 +801,56 @@ def self_test() -> None:
     assert conflicting_result["verdict"] == "blocked"
     assert conflicting_result["reasons"][0]["code"] == "merge_conflict"
 
+    for merge_state in ("BEHIND", "DIRTY", "DRAFT"):
+        provider_blocked = _fixture(observation={"merge_state_status": merge_state})
+        provider_blocked_result = check(provider_blocked)
+        assert provider_blocked_result["verdict"] == "blocked"
+        assert provider_blocked_result["reasons"][0]["code"] == "provider_merge_state_blocked"
+
+    provider_blocked = _fixture(observation={"merge_state_status": "BLOCKED"})
+    provider_blocked_result = check(provider_blocked)
+    assert provider_blocked_result["verdict"] == "blocked"
+    assert provider_blocked_result["reasons"][0]["code"] == "provider_merge_state_blocked"
+
+    unknown_merge_state = _fixture(observation={"merge_state_status": "UNKNOWN"})
+    unknown_merge_state_result = check(unknown_merge_state)
+    assert unknown_merge_state_result["verdict"] == "pending"
+    assert unknown_merge_state_result["reasons"][0]["code"] == "provider_merge_state_pending"
+
+    unstable_merge_state = _fixture(observation={"merge_state_status": "UNSTABLE"})
+    unstable_merge_state_result = check(unstable_merge_state)
+    assert unstable_merge_state_result["verdict"] == "pending"
+    assert unstable_merge_state_result["reasons"][0]["code"] == "provider_merge_state_pending"
+
+    blocked_while_review_pending = _fixture(
+        observation={
+            "merge_state_status": "BLOCKED",
+            "review_decision": "review_required",
+        }
+    )
+    blocked_while_review_pending_result = check(blocked_while_review_pending)
+    assert blocked_while_review_pending_result["verdict"] == "pending"
+    assert any(
+        reason["code"] == "review_pending"
+        for reason in blocked_while_review_pending_result["reasons"]
+    )
+
+    unstable_with_failed_check = _fixture(
+        observation={
+            "merge_state_status": "UNSTABLE",
+            "checks": [
+                {"name": "contracts", "state": "completed", "conclusion": "failure"},
+                {"name": "tests", "state": "completed", "conclusion": "success"},
+            ],
+        }
+    )
+    unstable_with_failed_check_result = check(unstable_with_failed_check)
+    assert unstable_with_failed_check_result["verdict"] == "blocked"
+    assert unstable_with_failed_check_result["reasons"][0]["code"] == "check_failed"
+
+    with_hooks = _fixture(observation={"merge_state_status": "HAS_HOOKS"})
+    assert check(with_hooks)["verdict"] == "ready"
+
     missing = _fixture(
         observation={
             "checks": [
@@ -803,6 +898,17 @@ def self_test() -> None:
     invalid_result = check(invalid)
     assert invalid_result["verdict"] == "blocked"
     assert invalid_result["reasons"][0]["code"] == "invalid_observation"
+
+    invalid_merge_state = _fixture()
+    del invalid_merge_state["observation"]["merge_state_status"]
+    invalid_merge_state_result = check(invalid_merge_state)
+    assert invalid_merge_state_result["verdict"] == "blocked"
+    assert invalid_merge_state_result["reasons"][0]["code"] == "invalid_observation"
+
+    unsupported_merge_state = _fixture(observation={"merge_state_status": "FUTURE_STATE"})
+    unsupported_merge_state_result = check(unsupported_merge_state)
+    assert unsupported_merge_state_result["verdict"] == "blocked"
+    assert unsupported_merge_state_result["reasons"][0]["code"] == "invalid_observation"
 
     missing_provider_head = _fixture()
     del missing_provider_head["observation"]["provider_head_sha"]

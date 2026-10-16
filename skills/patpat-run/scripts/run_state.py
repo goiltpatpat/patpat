@@ -1460,6 +1460,7 @@ def run_self_test() -> None:
                     "draft": False,
                     "review_decision": "approved",
                     "mergeability": "mergeable",
+                    "merge_state_status": "CLEAN",
                     "checks": [
                         {"name": "contracts", "state": "completed", "conclusion": "success"},
                     ],
