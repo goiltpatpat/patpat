@@ -195,6 +195,62 @@ def self_test() -> None:
     assert sleeps == [10]
 
     current[0] = start
+    blocked_merge = _ready_fixture()
+    blocked_merge["data"]["repository"]["pullRequest"]["mergeStateStatus"] = "BLOCKED"
+    blocked_results: list[dict[str, Any]] = []
+    status = run_watch(
+        _fixture_args(deadline=start + timedelta(minutes=1)),
+        fetch=lambda *_: blocked_merge,
+        now=lambda: current[0],
+        sleep=lambda _: (_ for _ in ()).throw(
+            AssertionError("blocked provider state must stop the watch")
+        ),
+        emit=blocked_results.append,
+    )
+    assert status == 2
+    assert blocked_results[0]["verdict"] == "blocked"
+    assert blocked_results[0]["reasons"][0]["code"] == "provider_merge_state_blocked"
+
+    current[0] = start
+    blocked_pending_review = _ready_fixture()
+    blocked_pending_review["data"]["repository"]["pullRequest"]["mergeStateStatus"] = "BLOCKED"
+    blocked_pending_review["data"]["repository"]["pullRequest"][
+        "reviewDecision"
+    ] = "REVIEW_REQUIRED"
+    pending_review_results: list[dict[str, Any]] = []
+    review_responses = [blocked_pending_review, _ready_fixture()]
+    status = run_watch(
+        _fixture_args(deadline=start + timedelta(minutes=1)),
+        fetch=lambda *_: review_responses.pop(0),
+        now=lambda: current[0],
+        sleep=sleep,
+        emit=pending_review_results.append,
+    )
+    assert status == 0
+    assert [result["verdict"] for result in pending_review_results] == ["pending", "ready"]
+
+    current[0] = start
+    unstable_pending_check = _ready_fixture()
+    unstable_pr = unstable_pending_check["data"]["repository"]["pullRequest"]
+    unstable_pr["mergeStateStatus"] = "UNSTABLE"
+    unstable_contexts = unstable_pr["commits"]["nodes"][0]["commit"][
+        "statusCheckRollup"
+    ]["contexts"]["nodes"]
+    unstable_contexts[0]["status"] = "IN_PROGRESS"
+    unstable_contexts[0]["conclusion"] = None
+    pending_check_results: list[dict[str, Any]] = []
+    check_responses = [unstable_pending_check, _ready_fixture()]
+    status = run_watch(
+        _fixture_args(deadline=start + timedelta(minutes=1)),
+        fetch=lambda *_: check_responses.pop(0),
+        now=lambda: current[0],
+        sleep=sleep,
+        emit=pending_check_results.append,
+    )
+    assert status == 0
+    assert [result["verdict"] for result in pending_check_results] == ["pending", "ready"]
+
+    current[0] = start
     changed_head = _ready_fixture()
     pull_request = changed_head["data"]["repository"]["pullRequest"]
     changed_sha = "b" * 40

@@ -13,10 +13,20 @@ from datetime import datetime, timezone
 from typing import Any
 
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 MAX_API_BYTES = 1024 * 1024
 MAX_CHECKS = 100
 MAX_NAME_LENGTH = 128
+MERGE_STATE_STATUSES = {
+    "BEHIND",
+    "BLOCKED",
+    "CLEAN",
+    "DIRTY",
+    "DRAFT",
+    "HAS_HOOKS",
+    "UNKNOWN",
+    "UNSTABLE",
+}
 REPOSITORY = re.compile(
     r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}$"
 )
@@ -275,6 +285,11 @@ def observation_document(
     }.get(bounded_string(pr.get("mergeable"), "pullRequest.mergeable").upper())
     if mergeability is None:
         raise ObserverError("pullRequest.mergeable is unsupported")
+    merge_state_status = bounded_string(
+        pr.get("mergeStateStatus"), "pullRequest.mergeStateStatus"
+    ).upper()
+    if merge_state_status not in MERGE_STATE_STATUSES:
+        raise ObserverError("pullRequest.mergeStateStatus is unsupported")
     raw_review = pr.get("reviewDecision")
     review_decision = {
         "APPROVED": "approved",
@@ -321,6 +336,7 @@ def observation_document(
                 "merge_state_status": pr["mergeStateStatus"],
             }} if policy_proven else {}),
             "mergeability": mergeability,
+            "merge_state_status": merge_state_status,
             "checks": checks,
         },
     }
@@ -412,6 +428,7 @@ def fixture() -> dict[str, Any]:
                     "state": "OPEN",
                     "merged": False,
                     "mergeable": "MERGEABLE",
+                    "mergeStateStatus": "CLEAN",
                     "reviewDecision": "APPROVED",
                     "reviewThreads": {
                         "nodes": [{"isResolved": True}, {"isResolved": False}],
@@ -486,6 +503,29 @@ def self_test() -> None:
     ready_contexts[1]["state"] = "SUCCESS"
     ready_document = observation_document(ready_fixture, **common)
     assert evaluate(ready_document, evaluated_at=common["observed_at"])["verdict"] == "ready"
+
+    blocked_merge_fixture = json.loads(json.dumps(ready_fixture))
+    blocked_merge_fixture["data"]["repository"]["pullRequest"][
+        "mergeStateStatus"
+    ] = "BLOCKED"
+    blocked_merge_document = observation_document(blocked_merge_fixture, **common)
+    blocked_merge_result = evaluate(
+        blocked_merge_document, evaluated_at=common["observed_at"]
+    )
+    assert blocked_merge_result["verdict"] == "blocked"
+    assert blocked_merge_result["reasons"][0]["code"] == "provider_merge_state_blocked"
+    assert blocked_merge_document["observation"]["merge_state_status"] == "BLOCKED"
+
+    unsupported_merge_fixture = json.loads(json.dumps(ready_fixture))
+    unsupported_merge_fixture["data"]["repository"]["pullRequest"][
+        "mergeStateStatus"
+    ] = "FUTURE_STATE"
+    try:
+        observation_document(unsupported_merge_fixture, **common)
+    except ObserverError as error:
+        assert "mergeStateStatus is unsupported" in str(error)
+    else:
+        raise AssertionError("unsupported provider merge state was accepted")
 
     absent_review_fixture = fixture()
     absent_review_pr = absent_review_fixture["data"]["repository"]["pullRequest"]
