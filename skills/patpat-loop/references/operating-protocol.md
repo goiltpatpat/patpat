@@ -12,12 +12,13 @@ Treat proposed approaches, including the user's, as hypotheses. Disagree with ev
 
 ## Priority
 
-1. Direct user request
-2. Safety and system constraints
-3. Repository and project rules
-4. Memory Bank when the consuming repo uses it
+1. System instructions
+2. Developer instructions
+3. Direct user request
+4. Repository and project rules
 5. Local repository evidence
-6. Prior assumptions
+6. Memory Bank when the consuming repo uses it
+7. Prior assumptions
 
 If docs conflict with verified repository behavior, trust the repo. Update a doc only when durable project truth changed.
 

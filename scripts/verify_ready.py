@@ -106,10 +106,14 @@ def check_hook_status(hook_root: Path) -> dict[str, Any]:
 
 
 def check_core_routes(skills_dir: Path) -> dict[str, Any]:
-    """Verify presence of the 8 core routes without requiring all 22 skills."""
+    """Verify presence of each canonical core route."""
     present: list[str] = []
     missing: list[str] = []
-    for route, skill_name in CORE_SKILLS.items():
+    for route in CORE_ROUTES:
+        skill_name = CORE_SKILLS.get(route)
+        if skill_name is None:
+            missing.append(route)
+            continue
         skill_file = skills_dir / skill_name / "SKILL.md"
         if skill_file.is_file():
             present.append(route)
@@ -253,6 +257,17 @@ def run_self_test(root: Path) -> int:
         trimmed_discovery = check_patpat_discovery(temp_skills)
         if not trimmed_discovery["present"]:
             raise AssertionError("discovery failed on trimmed set")
+
+        original_skills = CORE_SKILLS.copy()
+        try:
+            del CORE_SKILLS["review"]
+            CORE_SKILLS["audit"] = "patpat-review"
+            renamed_routes = check_core_routes(temp_skills)
+            if renamed_routes["all_present"] or "review" not in renamed_routes["missing"]:
+                raise AssertionError("renamed core route mapping was not detected")
+        finally:
+            CORE_SKILLS.clear()
+            CORE_SKILLS.update(original_skills)
 
         shutil.rmtree(temp_skills / "patpat-ship")
         broken_routes = check_core_routes(temp_skills)
