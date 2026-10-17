@@ -34,6 +34,15 @@ AGENT_SKILL_FRONTMATTER_FIELDS = {
 }
 MODE_SKILLS = {"patpat", "patpat-loop"}
 PUBLISHED_SOURCE = "https://github.com/goiltpatpat/patpat"
+OPERATING_PRIORITY_CONTRACT = """## Priority
+
+1. System instructions
+2. Developer instructions
+3. Direct user request
+4. Repository and project rules
+5. Local repository evidence
+6. Memory Bank when the consuming repo uses it
+7. Prior assumptions"""
 ANTIGRAVITY_PLUGIN_SCHEMA = "https://antigravity.google/schemas/v1/plugin.json"
 AGENT_PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
 AGENT_PLUGIN_FIELDS = {
@@ -1324,6 +1333,8 @@ def validate_root(root: Path) -> list[str]:
     else:
         if candor_contract not in protocol_text:
             errors.append(f"{operating_protocol}: missing candor contract")
+        if OPERATING_PRIORITY_CONTRACT not in protocol_text:
+            errors.append(f"{operating_protocol}: instruction priority contract is out of order")
 
     eval_skill = root / "skills" / "patpat-eval" / "SKILL.md"
     if eval_skill.is_file():
@@ -1819,6 +1830,22 @@ def run_self_test(root: Path) -> list[str]:
             encoding="utf-8",
         )
 
+    def invert_instruction_priority(fixture: Path) -> None:
+        protocol = fixture / "skills" / "patpat-loop" / "references" / "operating-protocol.md"
+        text = protocol.read_text(encoding="utf-8")
+        legacy_contract = """## Priority
+
+1. Direct user request
+2. Safety and system constraints
+3. Repository and project rules
+4. Memory Bank when the consuming repo uses it
+5. Local repository evidence
+6. Prior assumptions"""
+        protocol.write_text(
+            text.replace(OPERATING_PRIORITY_CONTRACT, legacy_contract, 1),
+            encoding="utf-8",
+        )
+
     def strip_delivery_intent_default_delivery(fixture: Path) -> None:
         playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "default-delivery.md"
         text = playbook.read_text(encoding="utf-8")
@@ -2306,6 +2333,7 @@ def run_self_test(root: Path) -> list[str]:
             ("project-verifier isolation drift", strip_project_verifier_isolation, "missing project-verifier isolation contract"),
             ("project-verifier readiness drift", strip_project_verifier_readiness, "missing project-verifier readiness and recovery contract"),
             ("risk-scaled judgment drift", strip_risk_scaled_judgment, "missing risk-scaled judgment contract"),
+            ("instruction priority inversion", invert_instruction_priority, "instruction priority contract is out of order"),
             ("delivery-intent default-delivery drift", strip_delivery_intent_default_delivery, "missing delivery-intent default-delivery contract"),
             ("capability-map delivery-intent drift", strip_capability_map_delivery_intent, "missing capability-map delivery-intent contract"),
             ("risk-scaled start ceremony drift", strip_risk_scaled_start, "missing risk-scaled start ceremony contract"),
