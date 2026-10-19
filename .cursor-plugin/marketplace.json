@@ -1,0 +1,13 @@
+{
+  "name": "patpat",
+  "owner": {
+    "name": "Patpat maintainers"
+  },
+  "plugins": [
+    {
+      "name": "patpat",
+      "source": ".",
+      "description": "Engineering skills for code that must survive contact with reality."
+    }
+  ]
+}

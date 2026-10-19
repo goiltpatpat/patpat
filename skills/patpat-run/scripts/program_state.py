@@ -16,7 +16,7 @@ import tempfile
 import unicodedata
 import uuid
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -56,8 +56,9 @@ from validate_plan import (
 )
 
 
-SCHEMA_VERSION = 3
-PREVIOUS_SCHEMA_VERSION = 2
+SCHEMA_VERSION = 4
+PREVIOUS_SCHEMA_VERSION = 3
+INTERMEDIATE_SCHEMA_VERSION = 2
 LEGACY_SCHEMA_VERSION = 1
 PROGRAM_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 HEAD_SHA = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
@@ -67,6 +68,8 @@ MAX_PROGRAM_STATE_BYTES = 4 * 1024 * 1024
 MAX_EVIDENCE_BYTES = 64 * 1024 * 1024
 MAX_INBOX_EVENTS = 4096
 MAX_ASSIGNMENT_GENERATION = (1 << 63) - 1
+MAX_INTEGRATION_RESERVE_MINUTES = 525600
+UTC_DEADLINE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 UNIT_STATES = {"pending", "running", "completed", "blocked"}
 VERDICT_KINDS = {"verification", "review"}
 VERDICTS = {"pass", "fail"}
@@ -79,6 +82,7 @@ PROGRAM_KEYS = {
     "plan_digest",
     "delivery",
     "dispatch_binding",
+    "execution_policy",
     "gates",
     "units",
     "inbox",
@@ -105,7 +109,8 @@ ASSIGNMENT_KEYS = {"actor", "isolation_identity", "generation", "assigned_at"}
 ASSIGNMENT_SNAPSHOT_KEYS = {"actor", "isolation_identity", "generation"}
 DISPATCH_BINDING_KEYS_V2 = {"receipt_sha256", "integration_owner", "isolation_identities"}
 DISPATCH_BINDING_KEYS = DISPATCH_BINDING_KEYS_V2 | {"supporting_evidence"}
-LEGACY_PROGRAM_KEYS = PROGRAM_KEYS - {"dispatch_binding"}
+PREVIOUS_PROGRAM_KEYS = PROGRAM_KEYS - {"execution_policy"}
+LEGACY_PROGRAM_KEYS = PREVIOUS_PROGRAM_KEYS - {"dispatch_binding"}
 LEGACY_UNIT_KEYS = UNIT_KEYS - {"assignment"}
 LEGACY_VERDICT_KEYS = VERDICT_KEYS - {"assignment"}
 LEGACY_INBOX_KEYS = INBOX_KEYS - {"assignment"}
@@ -117,6 +122,124 @@ class ProgramStateError(ValueError):
 
 def now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def parse_utc_deadline(value: Any, label: str) -> datetime:
+    if not isinstance(value, str) or UTC_DEADLINE.fullmatch(value) is None:
+        raise ProgramStateError(
+            f"{label} must use YYYY-MM-DDTHH:MM:SSZ UTC format"
+        )
+    try:
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+    except ValueError as error:
+        raise ProgramStateError(f"{label} is not a valid UTC timestamp") from error
+
+
+def checked_execution_budget(
+    deadline_at: str | None,
+    integration_reserve_minutes: int | None,
+    *,
+    current_time: datetime | None = None,
+) -> dict[str, Any]:
+    if deadline_at is None and integration_reserve_minutes is None:
+        return {
+            "deadline_at": None,
+            "dispatch_cutoff_at": None,
+            "integration_reserve_minutes": None,
+        }
+    if deadline_at is None or integration_reserve_minutes is None:
+        raise ProgramStateError(
+            "deadline and integration reserve must be supplied together"
+        )
+    if (
+        isinstance(integration_reserve_minutes, bool)
+        or not isinstance(integration_reserve_minutes, int)
+        or integration_reserve_minutes < 0
+        or integration_reserve_minutes > MAX_INTEGRATION_RESERVE_MINUTES
+    ):
+        raise ProgramStateError(
+            f"integration reserve must be an integer from 0 to {MAX_INTEGRATION_RESERVE_MINUTES} minutes"
+        )
+    deadline = parse_utc_deadline(deadline_at, "deadline")
+    observed_now = current_time or datetime.now(UTC)
+    if deadline <= observed_now:
+        raise ProgramStateError("deadline must be in the future")
+    try:
+        cutoff = deadline - timedelta(minutes=integration_reserve_minutes)
+    except OverflowError as error:
+        raise ProgramStateError(
+            "dispatch cutoff is outside the supported timestamp range"
+        ) from error
+    if cutoff <= observed_now:
+        raise ProgramStateError(
+            "dispatch cutoff must be in the future after the integration reserve"
+        )
+    return {
+        "deadline_at": deadline.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "dispatch_cutoff_at": cutoff.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "integration_reserve_minutes": integration_reserve_minutes,
+    }
+
+
+def empty_execution_policy() -> dict[str, Any]:
+    return {
+        "worker_limit": None,
+        "deadline_at": None,
+        "dispatch_cutoff_at": None,
+        "integration_reserve_minutes": None,
+    }
+
+
+def execution_policy_errors(value: Any) -> list[str]:
+    if not isinstance(value, dict) or set(value) != {
+        "worker_limit",
+        "deadline_at",
+        "dispatch_cutoff_at",
+        "integration_reserve_minutes",
+    }:
+        return ["execution policy is malformed"]
+    errors: list[str] = []
+    worker_limit = value.get("worker_limit")
+    if worker_limit is not None and (
+        isinstance(worker_limit, bool)
+        or not isinstance(worker_limit, int)
+        or worker_limit < 1
+        or worker_limit > MAX_UNITS
+    ):
+        errors.append("execution policy worker limit is invalid")
+    deadline_at = value.get("deadline_at")
+    cutoff_at = value.get("dispatch_cutoff_at")
+    reserve = value.get("integration_reserve_minutes")
+    if deadline_at is None:
+        if cutoff_at is not None or reserve is not None:
+            errors.append("execution policy budget fields must be empty without a deadline")
+    else:
+        try:
+            deadline = parse_utc_deadline(deadline_at, "execution policy deadline")
+            cutoff = parse_utc_deadline(cutoff_at, "execution policy dispatch cutoff")
+        except ProgramStateError:
+            errors.append("execution policy timestamps are invalid")
+        else:
+            if (
+                isinstance(reserve, bool)
+                or not isinstance(reserve, int)
+                or reserve < 0
+                or reserve > MAX_INTEGRATION_RESERVE_MINUTES
+            ):
+                errors.append("execution policy integration reserve is invalid")
+            else:
+                try:
+                    expected_cutoff = deadline - timedelta(minutes=reserve)
+                except OverflowError:
+                    errors.append(
+                        "execution policy dispatch cutoff is outside the supported timestamp range"
+                    )
+                else:
+                    if cutoff != expected_cutoff:
+                        errors.append(
+                            "execution policy dispatch cutoff does not match its reserve"
+                        )
+    return errors
 
 
 def git_text(root: Path, *args: str) -> str | None:
@@ -417,6 +540,54 @@ def assignment_snapshot(unit: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def active_assignment_count(state: dict[str, Any], *, exclude_unit: str | None = None) -> int:
+    return sum(
+        unit_id != exclude_unit
+        and unit.get("state") in {"pending", "running"}
+        and assignment_snapshot(unit) is not None
+        for unit_id, unit in state.get("units", {}).items()
+        if isinstance(unit, dict)
+    )
+
+
+def execution_capacity_status(state: dict[str, Any]) -> dict[str, Any]:
+    policy = state["execution_policy"]
+    active_count = active_assignment_count(state)
+    worker_limit = policy["worker_limit"]
+    return {
+        "execution_policy": policy,
+        "active_assignment_count": active_count,
+        "available_worker_slots": (
+            max(0, worker_limit - active_count) if worker_limit is not None else None
+        ),
+        "dispatch_cutoff_reached": dispatch_cutoff_reached(state),
+    }
+
+
+def dispatch_cutoff_reached(state: dict[str, Any], *, current_time: datetime | None = None) -> bool:
+    policy = state.get("execution_policy")
+    cutoff_at = policy.get("dispatch_cutoff_at") if isinstance(policy, dict) else None
+    if cutoff_at is None:
+        return False
+    cutoff = parse_utc_deadline(cutoff_at, "execution policy dispatch cutoff")
+    return (current_time or datetime.now(UTC)) >= cutoff
+
+
+def require_assignment_capacity(state: dict[str, Any], unit_id: str) -> None:
+    policy = state["execution_policy"]
+    worker_limit = policy["worker_limit"]
+    if worker_limit is None:
+        raise ProgramStateError("dispatch requires a bounded worker limit")
+    if dispatch_cutoff_reached(state):
+        raise ProgramStateError(
+            "dispatch cutoff reached; finish current assignments and extend the budget before new work"
+        )
+    if active_assignment_count(state, exclude_unit=unit_id) >= worker_limit:
+        raise ProgramStateError(
+            f"worker assignment limit reached ({worker_limit}); finish or block an assigned unit before dispatching more work"
+        )
+
+
 def require_current_assignment(
     state: dict[str, Any],
     unit: dict[str, Any],
@@ -621,8 +792,14 @@ def schema_errors(
     errors: list[str] = []
     version = state.get("schema_version")
     legacy_v1 = isinstance(version, int) and not isinstance(version, bool) and version == LEGACY_SCHEMA_VERSION
-    has_assignment_schema = isinstance(version, int) and not isinstance(version, bool) and version >= PREVIOUS_SCHEMA_VERSION
-    program_keys = LEGACY_PROGRAM_KEYS if legacy_v1 else PROGRAM_KEYS
+    has_assignment_schema = isinstance(version, int) and not isinstance(version, bool) and version >= INTERMEDIATE_SCHEMA_VERSION
+    program_keys = (
+        LEGACY_PROGRAM_KEYS
+        if legacy_v1
+        else PREVIOUS_PROGRAM_KEYS
+        if isinstance(version, int) and not isinstance(version, bool) and version < SCHEMA_VERSION
+        else PROGRAM_KEYS
+    )
     unit_keys = LEGACY_UNIT_KEYS if legacy_v1 else UNIT_KEYS
     verdict_keys = LEGACY_VERDICT_KEYS if legacy_v1 else VERDICT_KEYS
     inbox_keys = LEGACY_INBOX_KEYS if legacy_v1 else INBOX_KEYS
@@ -647,7 +824,9 @@ def schema_errors(
     normalized_integration_owner: str | None = None
     if has_assignment_schema and dispatch_binding is not None:
         expected_binding_keys = (
-            DISPATCH_BINDING_KEYS if version == SCHEMA_VERSION else DISPATCH_BINDING_KEYS_V2
+            DISPATCH_BINDING_KEYS
+            if isinstance(version, int) and not isinstance(version, bool) and version >= 3
+            else DISPATCH_BINDING_KEYS_V2
         )
         if not isinstance(dispatch_binding, dict) or set(dispatch_binding) != expected_binding_keys:
             errors.append("dispatch binding is malformed")
@@ -681,13 +860,16 @@ def schema_errors(
                     and normalized_integration_owner in normalized_dispatch_identities.values()
                 ):
                     errors.append("dispatch isolation identities must differ from integration owner")
-            if version == SCHEMA_VERSION:
+            if isinstance(version, int) and not isinstance(version, bool) and version >= 3:
                 try:
                     validate_parallel_gate_evidence(
                         dispatch_binding.get("supporting_evidence"), verify_files=False
                     )
                 except TeamShapeError:
                     errors.append("dispatch supporting evidence bindings are malformed")
+    execution_policy = state.get("execution_policy") if version == SCHEMA_VERSION else None
+    if version == SCHEMA_VERSION:
+        errors.extend(execution_policy_errors(execution_policy))
     delivery = state.get("delivery")
     if not isinstance(delivery, dict) or set(delivery) != {"authority", "actions"}:
         errors.append("delivery claim is malformed")
@@ -733,6 +915,14 @@ def schema_errors(
             and dispatch_binding is None
         ):
             errors.append("open dispatch gate requires a dispatch binding")
+        if (
+            version == SCHEMA_VERSION
+            and isinstance(gates.get("dispatch"), dict)
+            and gates["dispatch"].get("open") is True
+            and isinstance(execution_policy, dict)
+            and execution_policy.get("worker_limit") is None
+        ):
+            errors.append("open dispatch gate requires a worker limit")
     units = state.get("units")
     if not isinstance(units, dict) or not units or len(units) > MAX_UNITS:
         errors.append(f"units must be a non-empty object with at most {MAX_UNITS} entries")
@@ -934,6 +1124,14 @@ def schema_errors(
                     errors.append(
                         f"unordered units {left_id} and {right_id} have overlapping ownership"
                     )
+        if version == SCHEMA_VERSION and isinstance(execution_policy, dict):
+            worker_limit = execution_policy.get("worker_limit")
+            if (
+                isinstance(worker_limit, int)
+                and not isinstance(worker_limit, bool)
+                and active_assignment_count(state) > worker_limit
+            ):
+                errors.append("active assignment count exceeds the execution policy worker limit")
     inbox = state.get("inbox")
     if (
         not isinstance(inbox, list)
@@ -1035,9 +1233,13 @@ def load_state(root: Path, program_id: str) -> dict[str, Any]:
         raise ProgramStateError(
             "legacy schema v1 requires explicit migrate-v1 --invalidate-legacy-evidence"
         )
-    if isinstance(version, int) and not isinstance(version, bool) and version == PREVIOUS_SCHEMA_VERSION:
+    if isinstance(version, int) and not isinstance(version, bool) and version == INTERMEDIATE_SCHEMA_VERSION:
         raise ProgramStateError(
             "schema v2 requires explicit migrate-v2 --invalidate-legacy-evidence"
+        )
+    if isinstance(version, int) and not isinstance(version, bool) and version == PREVIOUS_SCHEMA_VERSION:
+        raise ProgramStateError(
+            "schema v3 requires explicit migrate-v3 --invalidate-legacy-evidence"
         )
     errors = schema_errors(value, root, program_id)
     if errors:
@@ -1081,6 +1283,7 @@ def migrate_v1(
         migrated = dict(legacy)
         migrated["schema_version"] = SCHEMA_VERSION
         migrated["dispatch_binding"] = None
+        migrated["execution_policy"] = empty_execution_policy()
         migrated["gates"] = {
             "dispatch": {
                 "open": False,
@@ -1116,14 +1319,14 @@ def migrate_v2(
         legacy = read_state_document(root, program_id)
         if (
             isinstance(legacy.get("schema_version"), bool)
-            or legacy.get("schema_version") != PREVIOUS_SCHEMA_VERSION
+            or legacy.get("schema_version") != INTERMEDIATE_SCHEMA_VERSION
         ):
             raise ProgramStateError("program state is not schema v2")
         errors = schema_errors(
             legacy,
             root,
             program_id,
-            allowed_versions=frozenset({PREVIOUS_SCHEMA_VERSION}),
+            allowed_versions=frozenset({INTERMEDIATE_SCHEMA_VERSION}),
         )
         if errors:
             raise ProgramStateError("schema v2 state is invalid: " + "; ".join(errors))
@@ -1131,6 +1334,7 @@ def migrate_v2(
         migrated = dict(legacy)
         migrated["schema_version"] = SCHEMA_VERSION
         migrated["dispatch_binding"] = None
+        migrated["execution_policy"] = empty_execution_policy()
         migrated["gates"] = {
             "dispatch": {
                 "open": False,
@@ -1140,6 +1344,58 @@ def migrate_v2(
             "delivery": {
                 "open": False,
                 "reason": "schema v2 migration closed delivery pending fresh dispatch evidence",
+                "updated_at": timestamp,
+            },
+        }
+        for unit_id, unit in migrated["units"].items():
+            invalidate_assignment(
+                migrated,
+                unit_id,
+                timestamp,
+                advance_generation=assignment_snapshot(unit) is not None,
+            )
+        migrated["inbox"] = []
+        migrated["updated_at"] = timestamp
+        save_state(root, program_id, migrated)
+        return migrated
+
+
+def migrate_v3(
+    root: Path,
+    program_id: str,
+    invalidate_legacy_evidence: bool,
+) -> dict[str, Any]:
+    if invalidate_legacy_evidence is not True:
+        raise ProgramStateError("v3 migration requires --invalidate-legacy-evidence")
+    with program_lock(root, program_id):
+        legacy = read_state_document(root, program_id)
+        if (
+            isinstance(legacy.get("schema_version"), bool)
+            or legacy.get("schema_version") != PREVIOUS_SCHEMA_VERSION
+        ):
+            raise ProgramStateError("program state is not schema v3")
+        errors = schema_errors(
+            legacy,
+            root,
+            program_id,
+            allowed_versions=frozenset({PREVIOUS_SCHEMA_VERSION}),
+        )
+        if errors:
+            raise ProgramStateError("schema v3 state is invalid: " + "; ".join(errors))
+        timestamp = now()
+        migrated = dict(legacy)
+        migrated["schema_version"] = SCHEMA_VERSION
+        migrated["execution_policy"] = empty_execution_policy()
+        migrated["dispatch_binding"] = None
+        migrated["gates"] = {
+            "dispatch": {
+                "open": False,
+                "reason": "schema v3 migration requires a fresh evidence-bound dispatch receipt and worker limit",
+                "updated_at": timestamp,
+            },
+            "delivery": {
+                "open": False,
+                "reason": "schema v3 migration closed delivery pending fresh dispatch evidence",
                 "updated_at": timestamp,
             },
         }
@@ -1185,6 +1441,7 @@ def initialize(root: Path, program_id: str, plan_path: Path) -> dict[str, Any]:
             "plan_digest": canonical_json_digest(plan),
             "delivery": plan["delivery"],
             "dispatch_binding": None,
+            "execution_policy": empty_execution_policy(),
             "gates": {
                 "dispatch": {"open": False, "reason": "requires explicit coordinator decision", "updated_at": timestamp},
                 "delivery": {"open": False, "reason": "requires complete fresh evidence", "updated_at": timestamp},
@@ -1231,12 +1488,23 @@ def set_gate(
     reason: str,
     receipt_path: Path | None = None,
     integration_owner: str | None = None,
+    worker_limit: int | None = None,
+    deadline_at: str | None = None,
+    integration_reserve_minutes: int | None = None,
+    clear_budget: bool = False,
 ) -> dict[str, Any]:
     if name not in GATE_NAMES:
         raise ProgramStateError(f"gate must be one of {sorted(GATE_NAMES)}")
     reason = checked_text(reason, "gate reason", 1000)
+    if (worker_limit is not None or deadline_at is not None or integration_reserve_minutes is not None or clear_budget) and not (
+        opened and name == "dispatch"
+    ):
+        raise ProgramStateError("execution policy can be changed only when opening dispatch")
+    if clear_budget and (deadline_at is not None or integration_reserve_minutes is not None):
+        raise ProgramStateError("clear-budget cannot be combined with a deadline or integration reserve")
     with program_lock(root, program_id):
         state = load_state(root, program_id)
+        dispatch_was_open = state["gates"]["dispatch"]["open"] is True
         if opened and name == "delivery" and not delivery_ready(root, state):
             raise ProgramStateError("delivery gate requires every unit to have complete fresh evidence")
         if opened and name == "dispatch":
@@ -1281,10 +1549,51 @@ def set_gate(
                     "reason": "dispatch receipt changed",
                     "updated_at": timestamp,
                 }
+            current_policy = state["execution_policy"]
+            selected_worker_limit = worker_limit
+            if selected_worker_limit is None:
+                selected_worker_limit = current_policy["worker_limit"] or 1
+            if (
+                isinstance(selected_worker_limit, bool)
+                or not isinstance(selected_worker_limit, int)
+                or selected_worker_limit < 1
+                or selected_worker_limit > MAX_UNITS
+            ):
+                raise ProgramStateError(
+                    f"worker limit must be an integer from 1 to {MAX_UNITS}"
+                )
+            if clear_budget:
+                budget = checked_execution_budget(None, None)
+            elif deadline_at is not None or integration_reserve_minutes is not None:
+                budget = checked_execution_budget(
+                    deadline_at, integration_reserve_minutes
+                )
+            else:
+                budget = {
+                    "deadline_at": current_policy["deadline_at"],
+                    "dispatch_cutoff_at": current_policy["dispatch_cutoff_at"],
+                    "integration_reserve_minutes": current_policy[
+                        "integration_reserve_minutes"
+                    ],
+                }
+            if active_assignment_count(state) > selected_worker_limit:
+                raise ProgramStateError(
+                    "worker limit cannot be lower than the current active assignment count"
+                )
+            state["execution_policy"] = {
+                "worker_limit": selected_worker_limit,
+                **budget,
+            }
+            if not dispatch_was_open and dispatch_cutoff_reached(state):
+                raise ProgramStateError(
+                    "dispatch cutoff reached; set a future deadline or clear the expired budget before reopening dispatch"
+                )
             reason = (
                 f"{reason}; receipt_sha256={receipt_summary['sha256']}; "
                 f"integration_owner={receipt_summary['integration_owner']}; "
-                f"isolation_count={receipt_summary['isolation_count']}"
+                f"isolation_count={receipt_summary['isolation_count']}; "
+                f"worker_limit={selected_worker_limit}; "
+                f"dispatch_cutoff_at={budget['dispatch_cutoff_at'] or 'unbounded'}"
             )
         if not opened and name == "dispatch":
             timestamp = now()
@@ -1338,6 +1647,7 @@ def assign_unit(
             raise ProgramStateError("assignment isolation identity does not match dispatch")
         if actor_key == binding["integration_owner"]:
             raise ProgramStateError("assignment actor must differ from integration owner")
+        require_assignment_capacity(state, unit_id)
         timestamp = now()
         invalidate_assignment(
             state, unit_id, timestamp, advance_generation=False
@@ -1382,6 +1692,8 @@ def set_head(
                 "unit head must contain every dependency head in its Git ancestry"
             )
         if unit["head_sha"] != head_sha:
+            if unit["state"] == "completed":
+                require_assignment_capacity(state, unit_id)
             timestamp = now()
             unit["head_sha"] = head_sha
             unit["verification"] = None
@@ -1465,7 +1777,7 @@ def record_verdict(
         if kind == "verification":
             unit["review"] = None
         if verdict == "fail" and unit["state"] == "completed":
-            unit["state"] = "running"
+            unit["state"] = "blocked"
         state["gates"]["delivery"] = {
             "open": False,
             "reason": f"unit {unit_id} evidence changed",
@@ -1500,6 +1812,16 @@ def set_unit_state(
         }
         if destination not in transitions[unit["state"]]:
             raise ProgramStateError(f"illegal unit transition: {unit['state']} -> {destination}")
+        current_assignment_active = (
+            assignment_snapshot(unit) is not None
+            and unit["state"] in {"pending", "running"}
+        )
+        target_assignment_active = (
+            assignment_snapshot(unit) is not None
+            and destination in {"pending", "running"}
+        )
+        if target_assignment_active and not current_assignment_active:
+            require_assignment_capacity(state, unit_id)
         if destination == "running" and unit["state"] == "pending" and unit_id not in frontier(root, state):
             raise ProgramStateError("unit is not in the open dependency frontier")
         if destination == "completed":
@@ -1674,6 +1996,7 @@ def status(
         "plan_digest": state["plan_digest"],
         "dispatch_binding": state["dispatch_binding"],
         "dispatch_evidence_fresh": dispatch_evidence_fresh,
+        **execution_capacity_status(state),
         "gates": state["gates"],
         "frontier": open_frontier,
         "delivery_ready": ready,
@@ -1744,6 +2067,7 @@ def compact_state_receipt(root: Path, state: dict[str, Any], action: str) -> dic
         "program_id": state["program_id"],
         "plan_digest": state["plan_digest"],
         "dispatch_evidence_fresh": dispatch_evidence_fresh,
+        **execution_capacity_status(state),
         "frontier_count": len(open_frontier),
         "frontier_preview": open_frontier[:8],
         "frontier_truncated": len(open_frontier) > 8,
@@ -1819,6 +2143,146 @@ def run_self_test() -> None:
         }
         receipt_path = root / "parallel-gate.json"
         receipt_path.write_text(json.dumps(parallel_receipt), encoding="utf-8")
+
+        policy_plan = example_plan()
+        policy_plan["units"][1]["depends_on"] = []
+        policy_plan_path = root / "policy-plan.json"
+        policy_plan_path.write_text(json.dumps(policy_plan), encoding="utf-8")
+        initialize(root, "policy-program", policy_plan_path)
+        policy_state = load_state(root, "policy-program")
+        policy_receipt = {
+            **parallel_receipt,
+            "program_id": "policy-program",
+            "plan_digest": policy_state["plan_digest"],
+        }
+        policy_receipt_path = root / "policy-parallel-gate.json"
+        policy_receipt_path.write_text(json.dumps(policy_receipt), encoding="utf-8")
+        policy_deadline = (datetime.now(UTC) + timedelta(minutes=30)).replace(
+            microsecond=0
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        set_gate(
+            root,
+            "policy-program",
+            "dispatch",
+            True,
+            "bounded policy test",
+            policy_receipt_path,
+            "Integration Owner",
+            worker_limit=1,
+            deadline_at=policy_deadline,
+            integration_reserve_minutes=5,
+        )
+        policy_status = status(root, "policy-program", brief=True)
+        assert policy_status["execution_policy"]["worker_limit"] == 1
+        assert policy_status["execution_policy"]["integration_reserve_minutes"] == 5
+        assert policy_status["available_worker_slots"] == 1
+        assert not policy_status["dispatch_cutoff_reached"]
+        expect_error(
+            lambda: checked_execution_budget(policy_deadline, None),
+            "supplied together",
+        )
+        expect_error(
+            lambda: checked_execution_budget(policy_deadline, True),
+            "must be an integer",
+        )
+        expect_error(
+            lambda: checked_execution_budget("0001-01-01T00:00:00Z", 1),
+            "deadline must be in the future",
+        )
+        assert (
+            "execution policy dispatch cutoff is outside the supported timestamp range"
+            in execution_policy_errors(
+                {
+                    "worker_limit": None,
+                    "deadline_at": "0001-01-01T00:00:00Z",
+                    "dispatch_cutoff_at": "0001-01-01T00:00:00Z",
+                    "integration_reserve_minutes": 1,
+                }
+            )
+        )
+        assign_unit(
+            root, "policy-program", "contract", "Policy Worker", "worktree-contract", 0
+        )
+        expect_error(
+            lambda: assign_unit(
+                root, "policy-program", "consumer", "Second Worker", "worktree-consumer", 0
+            ),
+            "worker assignment limit reached",
+        )
+        set_unit_state(root, "policy-program", "contract", "blocked", 1)
+        assign_unit(
+            root, "policy-program", "consumer", "Policy Worker", "worktree-consumer", 0
+        )
+        over_limit_state = load_state(root, "policy-program")
+        over_limit_state["units"]["contract"]["state"] = "pending"
+        expect_error(
+            lambda: save_state(root, "policy-program", over_limit_state),
+            "active assignment count exceeds",
+        )
+        policy_state = load_state(root, "policy-program")
+        expired = (datetime.now(UTC) - timedelta(minutes=1)).replace(
+            microsecond=0
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        policy_state["execution_policy"].update(
+            deadline_at=expired,
+            dispatch_cutoff_at=expired,
+            integration_reserve_minutes=0,
+        )
+        save_state(root, "policy-program", policy_state)
+        policy_status = status(root, "policy-program", brief=True)
+        assert policy_status["dispatch_cutoff_reached"]
+        assert policy_status["active_assignment_count"] == 1
+        assert policy_status["available_worker_slots"] == 0
+        expect_error(
+            lambda: assign_unit(
+                root, "policy-program", "contract", "Policy Worker", "worktree-contract", 1
+            ),
+            "dispatch cutoff reached",
+        )
+        set_unit_state(root, "policy-program", "consumer", "running", 1)
+        policy_head = git_text(root, "rev-parse", "HEAD")
+        assert policy_head is not None
+        set_head(root, "policy-program", "consumer", policy_head, None, 1)
+        policy_evidence = root / "policy-evidence.txt"
+        policy_evidence.write_text("work completed after dispatch cutoff\n", encoding="utf-8")
+        record_verdict(
+            root, "policy-program", "consumer", "verification", "pass",
+            policy_head, "Policy Verifier", policy_evidence, 1,
+        )
+        record_verdict(
+            root, "policy-program", "consumer", "review", "pass",
+            policy_head, "Policy Reviewer", policy_evidence, 1,
+        )
+        set_unit_state(root, "policy-program", "consumer", "completed", 1)
+        assert status(root, "policy-program", brief=True)["active_assignment_count"] == 0
+        set_gate(root, "policy-program", "dispatch", False, "close expired dispatch")
+        expect_error(
+            lambda: set_gate(
+                root,
+                "policy-program",
+                "dispatch",
+                True,
+                "reopen expired dispatch",
+                policy_receipt_path,
+                "Integration Owner",
+            ),
+            "clear the expired budget before reopening",
+        )
+        set_gate(
+            root,
+            "policy-program",
+            "dispatch",
+            True,
+            "reopen without an expired budget",
+            policy_receipt_path,
+            "Integration Owner",
+            worker_limit=1,
+            clear_budget=True,
+        )
+        reopened_policy_status = status(root, "policy-program", brief=True)
+        assert reopened_policy_status["gates"]["dispatch"]["open"]
+        assert not reopened_policy_status["dispatch_cutoff_reached"]
+
         tampered_receipt = json.loads(json.dumps(parallel_receipt))
         tampered_receipt["plan_digest"] = "f" * 64
         tampered_path = root / "tampered-parallel-gate.json"
@@ -2055,9 +2519,41 @@ def run_self_test() -> None:
         completed_state_path = state_path(root, "release-train")
         completed_state_bytes = completed_state_path.read_bytes()
 
+        v3_state = json.loads(completed_state_bytes)
+        v3_state["program_id"] = "migration-v3-program"
+        v3_state["schema_version"] = PREVIOUS_SCHEMA_VERSION
+        v3_state.pop("execution_policy")
+        v3_heads = {
+            unit_id: unit["head_sha"] for unit_id, unit in v3_state["units"].items()
+        }
+        v3_generations = {
+            unit_id: unit["assignment"]["generation"] + 1
+            for unit_id, unit in v3_state["units"].items()
+        }
+        atomic_write_json(state_path(root, "migration-v3-program"), v3_state)
+        expect_error(lambda: status(root, "migration-v3-program"), "schema v3 requires")
+        expect_error(
+            lambda: migrate_v3(root, "migration-v3-program", False),
+            "--invalidate-legacy-evidence",
+        )
+        migrated_v3 = migrate_v3(root, "migration-v3-program", True)
+        assert migrated_v3["schema_version"] == SCHEMA_VERSION
+        assert migrated_v3["dispatch_binding"] is None
+        assert migrated_v3["execution_policy"] == empty_execution_policy()
+        assert not migrated_v3["gates"]["dispatch"]["open"]
+        assert not migrated_v3["gates"]["delivery"]["open"]
+        assert migrated_v3["inbox"] == []
+        for unit_id, unit in migrated_v3["units"].items():
+            assert unit["head_sha"] == v3_heads[unit_id]
+            assert unit["state"] == "pending"
+            assert unit["verification"] is None and unit["review"] is None
+            assert unit["assignment"] == empty_assignment(v3_generations[unit_id])
+        assert schema_errors(migrated_v3, root, "migration-v3-program") == []
+
         v2_state = json.loads(completed_state_bytes)
         v2_state["program_id"] = "migration-program"
-        v2_state["schema_version"] = PREVIOUS_SCHEMA_VERSION
+        v2_state["schema_version"] = INTERMEDIATE_SCHEMA_VERSION
+        v2_state.pop("execution_policy")
         v2_state["dispatch_binding"].pop("supporting_evidence")
         contract_assignment = assignment_snapshot(v2_state["units"]["contract"])
         v2_state["inbox"].append(
@@ -2089,6 +2585,7 @@ def run_self_test() -> None:
         assert migrated_v2["schema_version"] == SCHEMA_VERSION
         assert migrated_v2["plan_digest"] == v2_state["plan_digest"]
         assert migrated_v2["dispatch_binding"] is None
+        assert migrated_v2["execution_policy"] == empty_execution_policy()
         assert not migrated_v2["gates"]["dispatch"]["open"]
         assert not migrated_v2["gates"]["delivery"]["open"]
         assert migrated_v2["inbox"] == []
@@ -2383,6 +2880,7 @@ def run_self_test() -> None:
         legacy_state = load_state(root, "legacy-program")
         legacy_state["schema_version"] = LEGACY_SCHEMA_VERSION
         legacy_state.pop("dispatch_binding")
+        legacy_state.pop("execution_policy")
         legacy_timestamp = now()
         legacy_evidence = evidence_binding(evidence)
         for unit in legacy_state["units"].values():
@@ -2424,6 +2922,7 @@ def run_self_test() -> None:
         migrated = migrate_v1(root, "legacy-program", True)
         assert migrated["schema_version"] == SCHEMA_VERSION
         assert migrated["dispatch_binding"] is None
+        assert migrated["execution_policy"] == empty_execution_policy()
         assert not migrated["gates"]["dispatch"]["open"]
         assert not migrated["gates"]["delivery"]["open"]
         assert migrated["inbox"] == [] and migrated["inbox_sequence"] == 1
@@ -2631,6 +3130,9 @@ def build_parser() -> argparse.ArgumentParser:
     migrate_v2_parser = commands.add_parser("migrate-v2")
     migrate_v2_parser.add_argument("--invalidate-legacy-evidence", action="store_true")
     migrate_v2_parser.add_argument("--full", action="store_true", help="Print the complete state ledger")
+    migrate_v3_parser = commands.add_parser("migrate-v3")
+    migrate_v3_parser.add_argument("--invalidate-legacy-evidence", action="store_true")
+    migrate_v3_parser.add_argument("--full", action="store_true", help="Print the complete state ledger")
 
     gate_parser = commands.add_parser("set-gate")
     gate_parser.add_argument("name", choices=sorted(GATE_NAMES))
@@ -2638,6 +3140,10 @@ def build_parser() -> argparse.ArgumentParser:
     gate_parser.add_argument("--reason", required=True)
     gate_parser.add_argument("--receipt", type=Path)
     gate_parser.add_argument("--integration-owner")
+    gate_parser.add_argument("--worker-limit", type=int)
+    gate_parser.add_argument("--deadline", dest="deadline_at")
+    gate_parser.add_argument("--integration-reserve-minutes", type=int)
+    gate_parser.add_argument("--clear-budget", action="store_true")
     gate_parser.add_argument("--full", action="store_true", help="Print the complete state ledger")
 
     head_parser = commands.add_parser("set-head")
@@ -2717,6 +3223,8 @@ def main() -> int:
             result = migrate_v1(root, args.program, args.invalidate_legacy_evidence)
         elif args.command == "migrate-v2":
             result = migrate_v2(root, args.program, args.invalidate_legacy_evidence)
+        elif args.command == "migrate-v3":
+            result = migrate_v3(root, args.program, args.invalidate_legacy_evidence)
         elif args.command == "set-gate":
             result = set_gate(
                 root,
@@ -2726,6 +3234,10 @@ def main() -> int:
                 args.reason,
                 args.receipt,
                 args.integration_owner,
+                worker_limit=args.worker_limit,
+                deadline_at=args.deadline_at,
+                integration_reserve_minutes=args.integration_reserve_minutes,
+                clear_budget=args.clear_budget,
             )
         elif args.command == "set-head":
             expected_head = None if args.expected_head == "none" else args.expected_head
@@ -2775,7 +3287,7 @@ def main() -> int:
         else:
             parser.error(f"unsupported command: {args.command}")
         full_state_commands = {
-            "init", "migrate-v1", "migrate-v2", "set-gate", "assign-unit", "set-head", "set-unit", "record-verdict"
+            "init", "migrate-v1", "migrate-v2", "migrate-v3", "set-gate", "assign-unit", "set-head", "set-unit", "record-verdict"
         }
         if args.command in full_state_commands and not args.full:
             result = compact_state_receipt(root, result, args.command)

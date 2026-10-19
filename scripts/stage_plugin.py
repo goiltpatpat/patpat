@@ -363,6 +363,16 @@ def run_self_test(source: Path) -> None:
             raise StageError(
                 f"stage self-test found unexpected Claude entries: {sorted(staged_claude_entries)}"
             )
+        staged_cursor_entries = {
+            path for path in inventory if path.startswith(".cursor-plugin/")
+        }
+        if staged_cursor_entries != {
+            ".cursor-plugin/marketplace.json",
+            ".cursor-plugin/plugin.json",
+        }:
+            raise StageError(
+                f"stage self-test found unexpected Cursor entries: {sorted(staged_cursor_entries)}"
+            )
         try:
             stage(source, target)
         except StageError:

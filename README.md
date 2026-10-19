@@ -8,7 +8,7 @@
 Engineering skills for code that must survive contact with reality.
 
 Patpat is a portable engineering plugin for AI agents and AI-enabled developer tools that support a compatible plugin or project-scoped Agent Skills directory. Its canonical `skills/` tree is host-neutral, though installation and invocation vary by host.
-Patpat has host adapters for Codex, Claude Code, Grok CLI, Antigravity, and Cursor. Claude Code's marketplace contract is now defined, but its CLI validation and fresh-session invocation have not been run in this environment. Cursor's marketplace listing and fresh-session invocation are not yet verified; use the portable route for that host until they are. For other hosts, use the portable route only after proving the host reads a project-scoped skills directory. There is no universal plugin format: each host must support a compatible plugin contract or skills directory, and invocation must be verified on that host. See the [installation guide](docs/guide/installing.md) for host-specific setup.
+Patpat has host adapters for Codex, Claude Code, Grok CLI, Antigravity, and Cursor. Claude Code's marketplace contract is defined, but its CLI validation and fresh-session invocation have not been run in this environment. Cursor supports importing this repository through its GitHub repository flow, but Patpat's live import and fresh-session invocation have not been verified here; official marketplace listing is a separate review process. For other hosts, use the portable route only after proving the host reads a project-scoped skills directory. There is no universal plugin format: each host must support a compatible plugin contract or skills directory, and invocation must be verified on that host. See the [installation guide](docs/guide/installing.md) for host-specific setup.
 
 [Guide](docs/guide/README.md) · [Install and update](docs/guide/installing.md) · [Capability map](docs/guide/capability-map.md) · [Releases](https://github.com/goiltpatpat/patpat/releases) · [Security](https://github.com/goiltpatpat/patpat/security/policy)
 
@@ -79,7 +79,7 @@ python3 scripts/validate.py --agent-plugin /absolute/path/to/patpat-agent-plugin
 
 This output uses the standard root `plugin.json`; it is for compatible Agent Plugins clients, not Antigravity. Git-backed staging excludes Git-ignored local files from skills; without Git metadata, inspect the artifact before installing. Follow each host's documented install path and verify fresh-session discovery there. Hooks and other host-specific behavior still depend on the selected adapter.
 
-Patpat's Cursor marketplace listing and fresh-session invocation have not been proven in a live project. Cursor documents local plugin testing under `~/.cursor/plugins/local/<plugin>`; generate the portable package above, copy it into a fresh directory there, reload Cursor, and inspect Customize if local plugin imports are enabled. A same-name marketplace plugin takes precedence over the local copy. Treat Patpat as unverified until its skills are observed in a fresh session. If that host route is unavailable, use a proven project skills directory:
+To install the published repository in Cursor, open Customize, choose **From GitHub Repository**, and enter `goiltpatpat/patpat`. The repository includes `.cursor-plugin/marketplace.json` for this flow. After importing the repository, find Patpat in Customize, select **Install**, and choose project or user scope. Cursor's local plugin instructions describe a root Agent Plugin manifest or a `.cursor-plugin/plugin.json` manifest. Patpat's generic multi-host staging output also contains the root Antigravity `plugin.json`; that mixed package has not been tested locally in Cursor. This repository does not currently provide a Cursor-only local-test artifact. Patpat's live import and fresh-session skill invocation have not been verified here. Official Cursor marketplace listing remains a separate review process. If the plugin route is unavailable, use a proven project skills directory:
 
 ```bash
 python3 scripts/install_skills.py \
@@ -200,7 +200,7 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 | [`patpat-ship`](skills/patpat-ship/SKILL.md) | Commit-and-PR when delivery intent exists; merge only when explicitly named. |
 | [`patpat-skill`](skills/patpat-skill/SKILL.md) | Author a reusable skill. |
 | [`patpat-eval`](skills/patpat-eval/SKILL.md) | Evaluate skill triggering and behavior against the authorized project with an evidence rubric. |
-| [`patpat-unslop`](skills/patpat-unslop/SKILL.md) | Cut superficial patterns and fluff from text or diffs. |
+| [`patpat-unslop`](skills/patpat-unslop/SKILL.md) | Cut superficial patterns and fluff from engineering docs, PR text, and code diffs. |
 | [`patpat-verifier`](skills/patpat-verifier/SKILL.md) | Create or maintain a project-specific verifier. |
 | [`patpat-learn`](skills/patpat-learn/SKILL.md) | Encode a recurring failure. |
 | [`patpat-automation`](skills/patpat-automation/SKILL.md) | Design fail-closed automation. Do not enable it yet. |

@@ -1,6 +1,6 @@
 ---
 name: patpat-unslop
-description: Cut AI tells, superficial patterns, and fluff from text or diffs.
+description: Cut superficial patterns and fluff from engineering docs, PR text, and code diffs.
 disable-model-invocation: true
 metadata:
   patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Artifact","requires_state":[],"produces_state":[],"verification_cmd":""}'
@@ -10,7 +10,7 @@ metadata:
 
 Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
-Scan text, documentation, and diffs to remove artificial writing artifacts and fluff.
+Review engineering documentation, PR text, and code diffs for artificial writing artifacts and fluff. Preserve technical meaning, context, and the author's intended voice.
 
 ## Process
 
@@ -28,7 +28,7 @@ Scan text, documentation, and diffs to remove artificial writing artifacts and f
 
 ### Language and Vocabulary
 
-4. **Banned AI tropes.** Replace these inflated words with plain engineering terms:
+4. **Inflated vocabulary.** These words are often vague or inflated. Replace them only when the alternative preserves the exact claim and tone:
    - *additionally* -> *also* or merge sentences
    - *crucial / pivotal* -> *required* or *necessary*
    - *delve* -> *inspect* or *investigate*
@@ -36,10 +36,10 @@ Scan text, documentation, and diffs to remove artificial writing artifacts and f
    - *foster* -> *allow* or *enable*
    - *intricate* -> *complex* or specify the architecture
    - *landscape* -> *context* or specify the system
-   - *tapestry* -> delete
-   - *testament* -> delete or cite the test/metric
+   - *tapestry* -> remove or replace only when decorative; preserve literal or domain-specific uses
+   - *testament* -> name the specific evidence when used as vague praise; preserve literal uses
    - *underscore* -> *show* or *confirm*
-   - *vibrant* -> delete
+   - *vibrant* -> remove or replace only when decorative; preserve literal or domain-specific uses
 5. **Fancy copulas.** Replace *"serves as"*, *"stands as"*, *"boasts"*, *"features"* with simple *"is"* or *"has"*.
 6. **False contrasts.** Eliminate *"Not only X, but also Y"* structures. State both facts plainly.
 7. **Rule-of-three bias.** Do not force lists or arguments into groups of three. Use the natural, accurate count.
@@ -48,7 +48,7 @@ Scan text, documentation, and diffs to remove artificial writing artifacts and f
 
 ### Style and Punctuation
 
-10. **Em dash overuse.** Do not use em dashes (`—`). Use periods or commas only.
+10. **Em dash overuse.** Remove an em dash used only to join clauses. Keep it when it marks a parenthetical aside, interruption, attribution, or quoted source; prefer simpler punctuation only when it preserves the same meaning and voice.
 11. **Excessive bullet nesting.** Prefer flat, compact bullet points or code blocks over multi-nested outlines.
 12. **Apologetic or sycophantic tone.** Never use *"Certainly!"*, *"I would be happy to..."*, or *"You are absolutely right!"*. State technical findings and decisions neutrally.
 13. **Narrative code commentary.** Strip conversational commentary from code changes. Code should communicate via types, names, and explicit structure.
