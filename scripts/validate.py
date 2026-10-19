@@ -1046,6 +1046,32 @@ def validate_root(root: Path) -> list[str]:
         else:
             parsed[host] = validate_json(path, errors)
 
+    cursor_marketplace_path = root / ".cursor-plugin" / "marketplace.json"
+    cursor_marketplace = (
+        validate_json(cursor_marketplace_path, errors)
+        if cursor_marketplace_path.is_file()
+        else {}
+    )
+    if not cursor_marketplace_path.is_file():
+        errors.append(f"{cursor_marketplace_path}: missing Cursor repository marketplace")
+    if set(cursor_marketplace) != {"name", "owner", "plugins"}:
+        errors.append(
+            f"{cursor_marketplace_path}: fields do not match the Cursor marketplace contract"
+        )
+    if cursor_marketplace.get("name") != "patpat":
+        errors.append(f"{cursor_marketplace_path}: marketplace name must be patpat")
+    if cursor_marketplace.get("owner") != {"name": "Patpat maintainers"}:
+        errors.append(f"{cursor_marketplace_path}: marketplace owner must remain canonical")
+    expected_cursor_marketplace_plugin = {
+        "name": "patpat",
+        "source": ".",
+        "description": "Engineering skills for code that must survive contact with reality.",
+    }
+    if cursor_marketplace.get("plugins") != [expected_cursor_marketplace_plugin]:
+        errors.append(
+            f"{cursor_marketplace_path}: plugin entry must remain canonical and root-contained"
+        )
+
     marketplace_path = root / ".agents" / "plugins" / "marketplace.json"
     marketplace = (
         validate_json(marketplace_path, errors)
@@ -1698,6 +1724,9 @@ def run_self_test(root: Path) -> list[str]:
     def remove_claude_marketplace(fixture: Path) -> None:
         (fixture / ".claude-plugin" / "marketplace.json").unlink()
 
+    def remove_cursor_marketplace(fixture: Path) -> None:
+        (fixture / ".cursor-plugin" / "marketplace.json").unlink()
+
     def remove_stage_script(fixture: Path) -> None:
         (fixture / "scripts" / "stage_plugin.py").unlink()
 
@@ -2016,6 +2045,12 @@ def run_self_test(root: Path) -> list[str]:
         data["plugins"][0]["source"] = "../outside"
         marketplace.write_text(json.dumps(data), encoding="utf-8")
 
+    def escape_cursor_marketplace_source(fixture: Path) -> None:
+        marketplace = fixture / ".cursor-plugin" / "marketplace.json"
+        data = json.loads(marketplace.read_text(encoding="utf-8"))
+        data["plugins"][0]["source"] = "../outside"
+        marketplace.write_text(json.dumps(data), encoding="utf-8")
+
     def drift_claude_marketplace_version(fixture: Path) -> None:
         marketplace = fixture / ".claude-plugin" / "marketplace.json"
         data = json.loads(marketplace.read_text(encoding="utf-8"))
@@ -2030,6 +2065,12 @@ def run_self_test(root: Path) -> list[str]:
 
     def add_marketplace_plugin(fixture: Path) -> None:
         marketplace = fixture / ".agents" / "plugins" / "marketplace.json"
+        data = json.loads(marketplace.read_text(encoding="utf-8"))
+        data["plugins"].append(dict(data["plugins"][0]))
+        marketplace.write_text(json.dumps(data), encoding="utf-8")
+
+    def add_cursor_marketplace_plugin(fixture: Path) -> None:
+        marketplace = fixture / ".cursor-plugin" / "marketplace.json"
         data = json.loads(marketplace.read_text(encoding="utf-8"))
         data["plugins"].append(dict(data["plugins"][0]))
         marketplace.write_text(json.dumps(data), encoding="utf-8")
@@ -2311,6 +2352,7 @@ def run_self_test(root: Path) -> list[str]:
             ("missing Antigravity smoke", remove_antigravity_smoke, "missing isolated Antigravity plugin smoke test"),
             ("missing Grok smoke", remove_grok_smoke, "missing isolated Grok plugin and hook smoke test"),
             ("missing Claude marketplace", remove_claude_marketplace, "missing Claude marketplace manifest"),
+            ("missing Cursor marketplace", remove_cursor_marketplace, "missing Cursor repository marketplace"),
             ("missing stage script", remove_stage_script, "missing allowlisted plugin staging script"),
             ("missing Agent Plugins stage script", remove_agent_stage_script, "missing Agent Plugins package staging script"),
             ("missing portable updater", remove_update_script, "missing portable skill updater"),
@@ -2354,9 +2396,11 @@ def run_self_test(root: Path) -> list[str]:
             ("invalid manifest versions", invalid_versions, "valid semantic versioning"),
             ("marketplace path escape", escape_marketplace_source, "root-contained"),
             ("Claude marketplace path escape", escape_claude_marketplace_source, "root-contained"),
+            ("Cursor marketplace path escape", escape_cursor_marketplace_source, "root-contained"),
             ("Claude marketplace version drift", drift_claude_marketplace_version, "version-aligned"),
             ("marketplace policy drift", drift_marketplace_policy, "root-contained"),
             ("extra marketplace plugin", add_marketplace_plugin, "root-contained"),
+            ("extra Cursor marketplace plugin", add_cursor_marketplace_plugin, "root-contained"),
             ("manifest description drift", drift_description, "manifest descriptions must match"),
             ("missing presentation field", remove_presentation_field, "shortDescription"),
             ("understated Codex capabilities", understate_codex_capabilities, "must disclose Interactive"),
