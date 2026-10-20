@@ -2213,6 +2213,10 @@ def run_self_test() -> None:
         assign_unit(
             root, "policy-program", "consumer", "Policy Worker", "worktree-consumer", 0
         )
+        expect_error(
+            lambda: set_unit_state(root, "policy-program", "contract", "pending", 1),
+            "worker assignment limit reached",
+        )
         over_limit_state = load_state(root, "policy-program")
         over_limit_state["units"]["contract"]["state"] = "pending"
         expect_error(

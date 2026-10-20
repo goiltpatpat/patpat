@@ -2837,6 +2837,18 @@ def run_self_test(root: Path) -> list[str]:
             "self-test: bounded GitHub pull-request watch failed: "
             f"{bounded_watch_result.stdout}{bounded_watch_result.stderr}"
         )
+    pr_stack_watcher = root / "skills" / "patpat-ship" / "scripts" / "watch_pr_stack.py"
+    stack_watch_result = subprocess.run(
+        [sys.executable, str(pr_stack_watcher), "--self-test"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if stack_watch_result.returncode != 0:
+        failures.append(
+            "self-test: bounded GitHub PR stack watch failed: "
+            f"{stack_watch_result.stdout}{stack_watch_result.stderr}"
+        )
     codex_probe = root / "scripts" / "probe_codex_behavior.py"
     probe_result = subprocess.run(
         [sys.executable, str(codex_probe), "--self-test"],
