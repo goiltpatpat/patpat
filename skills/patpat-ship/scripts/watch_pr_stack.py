@@ -19,7 +19,7 @@ import github_observe
 import pr_watch
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 KIND = "patpat.pr_stack_watch.verdict"
 MAX_STACK_SIZE = 20
 MAX_MANIFEST_BYTES = 64 * 1024
@@ -53,6 +53,23 @@ def _positive_integer(value: Any, field: str, maximum: int) -> int:
 def _manifest_sha256(document: Any) -> str:
     payload = json.dumps(
         document, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _stack_input_sha256(
+    pr_input_sha256: str, base_ref_oid: str, base_oid_source: str
+) -> str:
+    payload = json.dumps(
+        {
+            "kind": KIND,
+            "schema_version": SCHEMA_VERSION,
+            "pr_input_sha256": pr_input_sha256,
+            "base_ref_oid": base_ref_oid,
+            "base_oid_source": base_oid_source,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
 
@@ -111,6 +128,7 @@ def validate_manifest(document: Any) -> tuple[str, list[dict[str, Any]]]:
         "pull_request",
         "expected_head",
         "expected_base",
+        "expected_base_sha",
         "required_checks",
         "require_review",
     }
@@ -126,6 +144,13 @@ def validate_manifest(document: Any) -> tuple[str, list[dict[str, Any]]]:
         if SHA_PATTERN.fullmatch(head) is None:
             raise WatchError(f"{label}.expected_head must be a full 40-character SHA")
         base = _string(entry["expected_base"], f"{label}.expected_base", 128)
+        base_sha = _string(entry["expected_base_sha"], f"{label}.expected_base_sha", 40).lower()
+        if SHA_PATTERN.fullmatch(base_sha) is None:
+            raise WatchError(f"{label}.expected_base_sha must be a full 40-character SHA")
+        if targets and base_sha != targets[-1]["expected_head"]:
+            raise WatchError(
+                f"{label}.expected_base_sha must equal the previous PR's expected_head"
+            )
         checks = entry["required_checks"]
         if not isinstance(checks, list) or not checks or len(checks) > pr_watch.MAX_CHECKS:
             raise WatchError(f"{label}.required_checks must contain 1 to {pr_watch.MAX_CHECKS} names")
@@ -143,6 +168,10 @@ def validate_manifest(document: Any) -> tuple[str, list[dict[str, Any]]]:
                 "pull_request": number,
                 "expected_head": head,
                 "expected_base": base,
+                "expected_base_sha": base_sha,
+                "_last_observed_base_sha": None,
+                "_last_observed_base_source": None,
+                "_last_stack_input_sha256": None,
                 "required_checks": normalized_checks,
                 "require_review": require_review,
             }
@@ -202,9 +231,13 @@ def _state_rows(
             "pull_request": target["pull_request"],
             "expected_head": target["expected_head"],
             "expected_base": target["expected_base"],
+            "expected_base_sha": target["expected_base_sha"],
             "attempts": attempts[index],
             "status": statuses[index],
             "last_input_sha256": input_hashes[index],
+            "last_observed_base_sha": target["_last_observed_base_sha"],
+            "last_observed_base_source": target["_last_observed_base_source"],
+            "last_stack_input_sha256": target["_last_stack_input_sha256"],
         }
         for index, target in enumerate(targets)
     ]
@@ -252,6 +285,10 @@ def _emit_event(
                 "pull_request": target["pull_request"],
                 "head_sha": target["expected_head"],
                 "base_ref": target["expected_base"],
+                "expected_base_sha": target["expected_base_sha"],
+                "observed_base_sha": target["_last_observed_base_sha"],
+                "observed_base_source": target["_last_observed_base_source"],
+                "stack_input_sha256": target["_last_stack_input_sha256"],
             }
             if target is not None
             else None
@@ -381,7 +418,37 @@ def run_watch(
                 deadline=args.deadline,
                 observed_at=_rfc3339(now()),
             )
+            observed_base_sha, base_oid_source = github_observe.provider_base_commit_oid(response)
+            target["_last_observed_base_sha"] = observed_base_sha
+            target["_last_observed_base_source"] = base_oid_source
+            input_hashes[index] = _manifest_sha256(document_observation)
+            target["_last_stack_input_sha256"] = _stack_input_sha256(
+                input_hashes[index], observed_base_sha, base_oid_source
+            )
+            if observed_base_sha != target["expected_base_sha"]:
+                statuses[index] = "stale"
+                _emit_event(
+                    emit,
+                    repository=repository,
+                    manifest_sha256=manifest_sha256,
+                    sequence=sequence,
+                    observed_at=now(),
+                    status="stale",
+                    target=target,
+                    targets=targets,
+                    attempts=attempts,
+                    statuses=statuses,
+                    input_hashes=input_hashes,
+                    reason=(
+                        "provider base commit does not match the frozen binding: expected "
+                        f"{target['expected_base_sha']}, observed {observed_base_sha}"
+                    ),
+                    reason_code="base_commit_changed",
+                )
+                return 2
             pr_verdict = pr_watch.evaluate(document_observation, evaluated_at=now())
+            if pr_verdict.get("input_sha256") != input_hashes[index]:
+                raise WatchError("PR evaluator input digest does not match the stack observation")
         except github_observe.ObserverError:
             statuses[index] = "incomplete"
             _emit_event(
@@ -400,7 +467,6 @@ def run_watch(
                 reason_code="provider_observation_failed",
             )
             raise
-        input_hashes[index] = pr_verdict.get("input_sha256")
         underlying = pr_verdict.get("verdict")
         verdict_reasons = _reasons(pr_verdict)
 
@@ -548,7 +614,8 @@ def run_watch(
 
 
 def _fixture_response(target: dict[str, Any], *, state: str = "OPEN", head: str | None = None,
-                      base: str | None = None) -> dict[str, Any]:
+                      base: str | None = None, base_sha: str | None = None,
+                      merged_base_sha: str | None = None) -> dict[str, Any]:
     response = github_observe.fixture()
     repository = response["data"]["repository"]
     repository["nameWithOwner"] = "example/project"
@@ -556,6 +623,19 @@ def _fixture_response(target: dict[str, Any], *, state: str = "OPEN", head: str 
     pull_request["number"] = target["pull_request"]
     pull_request["headRefOid"] = head or target["expected_head"]
     pull_request["baseRefName"] = base or target["expected_base"]
+    pull_request["baseRefOid"] = merged_base_sha or target["expected_base_sha"]
+    pull_request["baseRef"] = {
+        "name": base or target["expected_base"],
+        "target": {
+            "__typename": "Commit",
+            "oid": base_sha or target["expected_base_sha"],
+        },
+        "branchProtectionRule": None,
+        "rules": {
+            "nodes": [],
+            "pageInfo": {"hasNextPage": False, "endCursor": None},
+        },
+    }
     pull_request["state"] = state
     pull_request["merged"] = state == "MERGED"
     pull_request["reviewThreads"]["nodes"] = [{"isResolved": True}]
@@ -576,6 +656,7 @@ def _fixture_target(number: int, head: str, base: str) -> dict[str, Any]:
         "pull_request": number,
         "expected_head": head,
         "expected_base": base,
+        "expected_base_sha": "0" * 40 if number == 17 else "a" * 40,
         "required_checks": ["tests", "policy"],
         "require_review": True,
     }
@@ -620,6 +701,25 @@ def self_test() -> None:
         max_observation_age_seconds=900,
         deadline=_rfc3339(start + timedelta(minutes=1)),
     )
+    invalid_chain = _fixture_manifest()
+    invalid_chain["pull_requests"][1]["expected_base_sha"] = "c" * 40
+    expect_error(
+        lambda: validate_manifest(invalid_chain),
+        "must equal the previous PR's expected_head",
+    )
+    invalid_base_sha = _fixture_manifest()
+    invalid_base_sha["pull_requests"][0]["expected_base_sha"] = "not-a-sha"
+    expect_error(
+        lambda: validate_manifest(invalid_base_sha),
+        "expected_base_sha must be a full 40-character SHA",
+    )
+    legacy_manifest = _fixture_manifest()
+    legacy_manifest["schema_version"] = 1
+    expect_error(
+        lambda: validate_manifest(legacy_manifest),
+        "schema_version must equal 2",
+    )
+
     status = run_watch(
         args,
         document,
@@ -640,6 +740,14 @@ def self_test() -> None:
     assert all(event["mutations_performed"] == [] for event in emitted)
     assert sleeps == [10, 10]
     assert emitted[-1]["pull_requests"][-1]["status"] == "merged"
+    assert emitted[-1]["pull_requests"][0]["last_observed_base_sha"] == "0" * 40
+    assert emitted[-1]["pull_requests"][1]["last_observed_base_sha"] == "a" * 40
+    assert emitted[0]["frontier"]["observed_base_source"] == "live_base_ref_target"
+    assert emitted[1]["frontier"]["observed_base_source"] == "pr_associated_base_ref_oid"
+    assert all(
+        len(row["last_stack_input_sha256"]) == 64
+        for row in emitted[-1]["pull_requests"]
+    )
 
     stale_document = _fixture_manifest()
     stale_events: list[dict[str, Any]] = []
@@ -675,6 +783,57 @@ def self_test() -> None:
     assert base_status == 2
     assert base_events[0]["status"] == "stale"
     assert base_events[0]["pr_verdict"]["reasons"][0]["code"] == "base_changed"
+
+    changed_base_sha = _fixture_manifest()
+    base_sha_events: list[dict[str, Any]] = []
+    base_sha_calls: list[int] = []
+    base_sha_status = run_watch(
+        args,
+        changed_base_sha,
+        fetch=lambda _repo, number: (
+            base_sha_calls.append(number)
+            or _fixture_response(
+                changed_base_sha["pull_requests"][0], base_sha="d" * 40
+            )
+        ),
+        now=lambda: start,
+        sleep=lambda _: (_ for _ in ()).throw(AssertionError("stale base commit must stop")),
+        emit=base_sha_events.append,
+    )
+    assert base_sha_status == 2
+    assert base_sha_calls == [17]
+    assert base_sha_events[0]["status"] == "stale"
+    assert base_sha_events[0]["reasons"][0]["code"] == "base_commit_changed"
+    assert base_sha_events[0]["frontier"]["expected_base_sha"] == "0" * 40
+    assert base_sha_events[0]["frontier"]["observed_base_sha"] == "d" * 40
+    assert base_sha_events[0]["pr_verdict"] is None
+    assert len(base_sha_events[0]["frontier"]["stack_input_sha256"]) == 64
+    assert len(base_sha_events[0]["pull_requests"][0]["last_input_sha256"]) == 64
+    assert base_sha_events[0]["pull_requests"][0]["last_observed_base_sha"] == "d" * 40
+
+    merged_base_changed = _fixture_manifest()
+    merged_base_changed["pull_requests"] = [merged_base_changed["pull_requests"][0]]
+    merged_base_events: list[dict[str, Any]] = []
+    merged_base_status = run_watch(
+        args,
+        merged_base_changed,
+        fetch=lambda _repo, _number: _fixture_response(
+            merged_base_changed["pull_requests"][0],
+            state="MERGED",
+            merged_base_sha="e" * 40,
+        ),
+        now=lambda: start,
+        sleep=lambda _: (_ for _ in ()).throw(AssertionError("merged base change must stop")),
+        emit=merged_base_events.append,
+    )
+    assert merged_base_status == 2
+    assert merged_base_events[0]["status"] == "stale"
+    assert merged_base_events[0]["reasons"][0]["code"] == "base_commit_changed"
+    assert merged_base_events[0]["frontier"]["observed_base_sha"] == "e" * 40
+    assert (
+        merged_base_events[0]["frontier"]["observed_base_source"]
+        == "pr_associated_base_ref_oid"
+    )
 
     closed_document = _fixture_manifest()
     closed_calls: list[int] = []

@@ -39,6 +39,7 @@ query($owner: String!, $name: String!, $number: Int!) {
       number
       headRefOid
       baseRefName
+      baseRefOid
       isDraft
       state
       merged
@@ -47,6 +48,10 @@ query($owner: String!, $name: String!, $number: Int!) {
       mergeStateStatus
       baseRef {
         name
+        target {
+          __typename
+          oid
+        }
         branchProtectionRule {
           requiresApprovingReviews
           requiredApprovingReviewCount
@@ -342,6 +347,40 @@ def observation_document(
     }
 
 
+def provider_base_commit_oid(response: Any) -> tuple[str, str]:
+    """Return the live open-PR base tip or the base OID recorded on a merged PR."""
+    root = mapping(response, "response")
+    if root.get("errors"):
+        raise ObserverError("GitHub GraphQL returned errors")
+    repository = mapping(mapping(root.get("data"), "data").get("repository"), "repository")
+    pull_request = mapping(repository.get("pullRequest"), "repository.pullRequest")
+    merged = pull_request.get("merged")
+    if not isinstance(merged, bool):
+        raise ObserverError("pullRequest.merged must be a boolean")
+    if merged:
+        base_oid = bounded_string(
+            pull_request.get("baseRefOid"), "pullRequest.baseRefOid", 40
+        ).lower()
+        source = "pr_associated_base_ref_oid"
+    else:
+        base_ref_name = bounded_string(
+            pull_request.get("baseRefName"), "pullRequest.baseRefName"
+        )
+        base_ref = mapping(pull_request.get("baseRef"), "pullRequest.baseRef")
+        if bounded_string(base_ref.get("name"), "pullRequest.baseRef.name") != base_ref_name:
+            raise ObserverError("pull request base ref name does not match its baseRefName")
+        target = mapping(base_ref.get("target"), "pullRequest.baseRef.target")
+        if target.get("__typename") != "Commit":
+            raise ObserverError("pull request base ref must point to a commit")
+        base_oid = bounded_string(
+            target.get("oid"), "pullRequest.baseRef.target.oid", 40
+        ).lower()
+        source = "live_base_ref_target"
+    if SHA.fullmatch(base_oid) is None:
+        raise ObserverError("pull request base commit is not a full 40-character SHA")
+    return base_oid, source
+
+
 def github_command(executable: str, repository: str, pull_request: int) -> list[str]:
     owner, name = repository.split("/", 1)
     return [
@@ -424,6 +463,7 @@ def fixture() -> dict[str, Any]:
                     "number": 17,
                     "headRefOid": "a" * 40,
                     "baseRefName": "main",
+                    "baseRefOid": "0" * 40,
                     "isDraft": False,
                     "state": "OPEN",
                     "merged": False,
@@ -483,6 +523,46 @@ def self_test() -> None:
         "observed_at": "2026-08-29T12:00:00Z",
     }
     document = observation_document(fixture(), **common)
+    def base_ref_fixture() -> dict[str, Any]:
+        response = fixture()
+        response["data"]["repository"]["pullRequest"]["baseRef"] = {
+            "name": "main",
+            "target": {"__typename": "Commit", "oid": "0" * 40},
+        }
+        return response
+
+    assert provider_base_commit_oid(base_ref_fixture()) == (
+        "0" * 40,
+        "live_base_ref_target",
+    )
+    missing_base_ref = base_ref_fixture()
+    missing_base_ref["data"]["repository"]["pullRequest"]["baseRef"] = None
+    try:
+        provider_base_commit_oid(missing_base_ref)
+    except ObserverError as error:
+        assert "pullRequest.baseRef" in str(error)
+    else:
+        raise AssertionError("missing live pull request base ref was accepted")
+    malformed_base_oid = base_ref_fixture()
+    malformed_base_oid["data"]["repository"]["pullRequest"]["baseRef"]["target"][
+        "oid"
+    ] = "b" * 39
+    try:
+        provider_base_commit_oid(malformed_base_oid)
+    except ObserverError as error:
+        assert "full 40-character SHA" in str(error)
+    else:
+        raise AssertionError("malformed live pull request base OID was accepted")
+    merged_fixture = fixture()
+    merged_pr = merged_fixture["data"]["repository"]["pullRequest"]
+    merged_pr["state"] = "MERGED"
+    merged_pr["merged"] = True
+    merged_pr["baseRefOid"] = "c" * 40
+    merged_pr["baseRef"] = None
+    assert provider_base_commit_oid(merged_fixture) == (
+        "c" * 40,
+        "pr_associated_base_ref_oid",
+    )
     assert document["observation"]["unresolved_threads"] == 1
     assert document["observation"]["checks"] == [
         {"name": "tests", "state": "completed", "conclusion": "success"},
