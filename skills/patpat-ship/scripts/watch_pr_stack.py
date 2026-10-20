@@ -749,6 +749,35 @@ def self_test() -> None:
         for row in emitted[-1]["pull_requests"]
     )
 
+    rebase_after_merge = _fixture_manifest()
+    rebase_events: list[dict[str, Any]] = []
+    rebase_calls: list[int] = []
+
+    def fetch_after_stack_merge(_: str, number: int) -> Any:
+        rebase_calls.append(number)
+        if number == 17:
+            return _fixture_response(rebase_after_merge["pull_requests"][0], state="MERGED")
+        return _fixture_response(
+            rebase_after_merge["pull_requests"][1],
+            head="d" * 40,
+            base="main",
+            base_sha="c" * 40,
+        )
+
+    rebase_status = run_watch(
+        args,
+        rebase_after_merge,
+        fetch=fetch_after_stack_merge,
+        now=lambda: start,
+        sleep=lambda _: (_ for _ in ()).throw(AssertionError("retargeted stack must stop stale")),
+        emit=rebase_events.append,
+    )
+    assert rebase_status == 2
+    assert rebase_calls == [17, 18]
+    assert [event["status"] for event in rebase_events] == ["merged", "stale"]
+    assert rebase_events[-1]["reasons"][0]["code"] == "base_commit_changed"
+    assert rebase_events[-1]["frontier"]["observed_base_sha"] == "c" * 40
+
     stale_document = _fixture_manifest()
     stale_events: list[dict[str, Any]] = []
     stale_calls: list[int] = []

@@ -21,11 +21,11 @@ When one request requires outputs from more than one specialized row, keep `patp
 | Pixel-level UI parity | [`patpat-verify`](../../patpat-verify/SKILL.md) | [Visual equivalence](../playbooks/visual-equivalence.md) |
 | Competing attempts at the same brief | [`patpat-arena`](../../patpat-arena/SKILL.md) | [Arena](../playbooks/arena.md) |
 | Parallel slices, races, or coverage | [`patpat-swarm`](../../patpat-swarm/SKILL.md) | [Swarm](../playbooks/swarm.md) |
-| Queue of independent PRs or a linear verified stack | [`patpat-run`](../../patpat-run/SKILL.md) | [Autopilot](../playbooks/autopilot.md) |
+| PR or stack status/topology (read-only) | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [PR Drive](../playbooks/pr-drive.md); native stack discovery is in [PR Handoff](../playbooks/pr-handoff.md) |
+| Implement or coordinate work across a PR queue or verified stack | [`patpat-run`](../../patpat-run/SKILL.md) | [Autopilot](../playbooks/autopilot.md) |
 | Named issue-source triage and reproduce loop | [`patpat-automation`](../../patpat-automation/SKILL.md) | [Issue loop](../playbooks/issue-loop.md) |
 | Pause in-flight work or go offline | [`patpat-run`](../../patpat-run/SKILL.md) | [Pause safely](../playbooks/pause-safely.md) |
 | Resume or take over in-flight work with no valid run store | [`patpat-run`](../../patpat-run/SKILL.md) | [Session takeover](../playbooks/session-takeover.md) |
-| PR status | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [PR drive](../playbooks/pr-drive.md) |
 | Move a PR to verified merge-ready status or resolve review threads | [`patpat-change`](../../patpat-change/SKILL.md) | [PR Readiness Handoff](../playbooks/pr-handoff.md) |
 | Prune merged or abandoned Git worktrees | Use the playbook directly | [Worktree cleanup](../playbooks/worktree-cleanup.md) |
 | End of mutating work, or named commit or pull request | [`patpat-ship`](../../patpat-ship/SKILL.md) | [Default delivery](../playbooks/default-delivery.md) |
