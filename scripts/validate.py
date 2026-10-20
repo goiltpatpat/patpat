@@ -2861,6 +2861,18 @@ def run_self_test(root: Path) -> list[str]:
             "self-test: bounded GitHub PR stack watch failed: "
             f"{stack_watch_result.stdout}{stack_watch_result.stderr}"
         )
+    stack_discovery = root / "skills" / "patpat-ship" / "scripts" / "discover_pr_stack.py"
+    stack_discovery_result = subprocess.run(
+        [sys.executable, str(stack_discovery), "--self-test"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if stack_discovery_result.returncode != 0:
+        failures.append(
+            "self-test: read-only GitHub PR stack discovery failed: "
+            f"{stack_discovery_result.stdout}{stack_discovery_result.stderr}"
+        )
     codex_probe = root / "scripts" / "probe_codex_behavior.py"
     probe_result = subprocess.run(
         [sys.executable, str(codex_probe), "--self-test"],

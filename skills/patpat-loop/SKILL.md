@@ -61,7 +61,7 @@ The user speaks plainly and invokes `/patpat` (or host equivalent). Select the r
 | Proof of an existing claim or authoritative artifact | `verify` | [`patpat-verify`](../patpat-verify/SKILL.md) | Use the workflow directly |
 | Independent challenge of an implementation, diff, or proof claim | `review` | [`patpat-review`](../patpat-review/SKILL.md) | [Independent review](playbooks/independent-review.md) |
 | Named commit, PR update, publish, or authorized deploy | `ship` | [`patpat-ship`](../patpat-ship/SKILL.md) | [Authorized delivery](playbooks/authorized-delivery.md) |
-| Durable multi-phase execution, multi-PR queue, or overnight run | `run` | [`patpat-run`](../patpat-run/SKILL.md) | [Multi-phase run](playbooks/multi-phase-run.md) |
+| Durable multi-phase execution, implementation or coordination across a PR queue/stack, or overnight run | `run` | [`patpat-run`](../patpat-run/SKILL.md) | [Multi-phase run](playbooks/multi-phase-run.md) |
 
 Consult the [route catalog](references/route-catalog.md) for specialized workflows (`arena`, `swarm`, `automation`, `eval`, `perf`, `learn`, explicit game-building requests, and idea, plan, or codebase diagram requests) or overlap. If no narrow route fits, use `patpat-architect` or `patpat-run`.
 
