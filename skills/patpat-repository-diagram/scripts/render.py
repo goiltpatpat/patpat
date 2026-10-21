@@ -35,7 +35,16 @@ from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterator
 
-from model import MAX_SOURCE_JSON_BYTES, DiagramError, git_context, load_json, parse_json, validate_spec
+import model as diagram_model
+from model import (
+    MAX_EVIDENCE_SOURCE_BYTES,
+    MAX_SOURCE_JSON_BYTES,
+    DiagramError,
+    git_context,
+    load_json,
+    parse_json,
+    validate_spec,
+)
 from delta import compare_architecture
 
 TOOL_VERSION = "2.0.0"
@@ -4665,6 +4674,71 @@ def self_test() -> None:
         subprocess.run(["git", "-C", str(root), "add", "source.txt"], check=True)
         subprocess.run(["git", "-C", str(root), "-c", "user.name=Patpat Test", "-c", "user.email=patpat-test@example.invalid", "commit", "--quiet", "-m", "fixture"], check=True)
         subprocess.run(["git", "-C", str(root), "remote", "add", "origin", "https://user:secret@example.invalid/owner/repo.git?token=secret"], check=True)
+
+        def expect_evidence_rejection(path: str, expected: str) -> None:
+            invalid = _sample_spec("architecture", "Rejected evidence path")
+            invalid["evidence"][0]["path"] = path
+            try:
+                validate_spec(invalid, root)
+            except DiagramError as error:
+                if expected not in str(error):
+                    raise AssertionError(f"evidence rejection did not explain {expected!r}: {error}") from error
+            else:
+                raise AssertionError(f"repository evidence unexpectedly accepted {path}")
+
+        large_committed = root / "large-committed.txt"
+        large_committed.write_bytes(b"line one\n" + b"x" * MAX_EVIDENCE_SOURCE_BYTES)
+        subprocess.run(["git", "-C", str(root), "add", "large-committed.txt"], check=True)
+        subprocess.run(["git", "-C", str(root), "-c", "user.name=Patpat Test", "-c", "user.email=patpat-test@example.invalid", "commit", "--quiet", "-m", "large evidence fixture"], check=True)
+        large_committed.write_text("line one\nline two\nline three\n", encoding="utf-8")
+        expect_evidence_rejection("large-committed.txt", "committed source exceeds")
+
+        large_working = root / "large-working.txt"
+        large_working.write_bytes(b"line one\n" + b"y" * MAX_EVIDENCE_SOURCE_BYTES)
+        expect_evidence_rejection("large-working.txt", "working-tree source exceeds")
+
+        source_alias = root / "source-alias.txt"
+        try:
+            source_alias.symlink_to("source.txt")
+        except OSError:
+            pass
+        else:
+            expect_evidence_rejection("source-alias.txt", "symlink")
+
+        real_directory = root / "real-source"
+        real_directory.mkdir()
+        (real_directory / "source.txt").write_text("line one\nline two\nline three\n", encoding="utf-8")
+        directory_alias = root / "source-directory-alias"
+        try:
+            directory_alias.symlink_to(real_directory, target_is_directory=True)
+        except OSError:
+            pass
+        else:
+            expect_evidence_rejection("source-directory-alias/source.txt", "symlink")
+
+        aggregate_spec = _sample_spec("architecture", "Aggregate evidence budget")
+        (root / "zzz.txt").write_text("additional source\n", encoding="utf-8")
+        aggregate_spec["evidence"].append({
+            "id": "S2",
+            "path": "zzz.txt",
+            "start_line": 1,
+            "end_line": 1,
+            "claim": "Additional source exceeds the remaining aggregate budget",
+        })
+        aggregate_spec["body"]["components"][0]["evidence_ids"].append("S2")
+        original_total_limit = diagram_model.MAX_TOTAL_EVIDENCE_SOURCE_BYTES
+        diagram_model.MAX_TOTAL_EVIDENCE_SOURCE_BYTES = len((root / "source.txt").read_bytes()) * 2
+        try:
+            try:
+                validate_spec(aggregate_spec, root)
+            except DiagramError as error:
+                if "total source limit" not in str(error):
+                    raise AssertionError(f"aggregate evidence rejection did not explain the total limit: {error}") from error
+            else:
+                raise AssertionError("aggregate repository evidence unexpectedly exceeded its byte limit")
+        finally:
+            diagram_model.MAX_TOTAL_EVIDENCE_SOURCE_BYTES = original_total_limit
+
         specs_dir = root.parent / "specs"
         specs_dir.mkdir()
         oversized_path = specs_dir / "oversized.json"

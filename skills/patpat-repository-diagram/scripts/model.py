@@ -7,7 +7,9 @@ from collections import deque
 import hashlib
 import json
 import math
+import os
 import re
+import stat
 import subprocess
 from urllib.parse import urlsplit
 from pathlib import Path, PurePosixPath
@@ -24,10 +26,154 @@ MAX_EDGES = 160
 MAX_EVIDENCE = 240
 MAX_LABEL_LENGTH = 180
 MAX_SOURCE_JSON_BYTES = 1_000_000
+MAX_EVIDENCE_SOURCE_BYTES = 1_000_000
+MAX_TOTAL_EVIDENCE_SOURCE_BYTES = 64_000_000
 
 
 class DiagramError(ValueError):
     """A diagram source or repository anchor violates the Patpat contract."""
+
+
+def _repository_evidence_path(root: Path, relative_path: str) -> tuple[Path, os.stat_result]:
+    """Resolve a regular repository file while refusing symlinks in every path component."""
+    path = root
+    parts = PurePosixPath(relative_path).parts
+    for index, part in enumerate(parts):
+        path = path / part
+        try:
+            info = path.lstat()
+        except OSError as error:
+            raise DiagramError(f"source path cannot be resolved: {relative_path}") from error
+        if stat.S_ISLNK(info.st_mode):
+            raise DiagramError(f"source path contains a symlink: {relative_path}")
+        if index < len(parts) - 1 and not stat.S_ISDIR(info.st_mode):
+            raise DiagramError(f"source path has a non-directory parent: {relative_path}")
+
+    if not parts or not stat.S_ISREG(info.st_mode):
+        raise DiagramError(f"source path must be a regular file inside the repository: {relative_path}")
+    try:
+        resolved = path.resolve(strict=True)
+    except OSError as error:
+        raise DiagramError(f"source path cannot be resolved: {relative_path}") from error
+    if not resolved.is_relative_to(root):
+        raise DiagramError(f"source path must be a regular file inside the repository: {relative_path}")
+    if info.st_size > MAX_EVIDENCE_SOURCE_BYTES:
+        raise DiagramError(
+            f"working-tree source exceeds the {MAX_EVIDENCE_SOURCE_BYTES:,}-byte evidence limit: {relative_path}"
+        )
+    return path, info
+
+
+def _read_evidence_file(
+    path: Path, expected: os.stat_result, remaining_budget: int
+) -> bytes:
+    """Read one source snapshot with a fixed byte cap and identity check."""
+    max_bytes = min(MAX_EVIDENCE_SOURCE_BYTES, remaining_budget)
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise DiagramError(f"working-tree source could not be read: {path.name}") from error
+    try:
+        with os.fdopen(descriptor, "rb") as source:
+            opened = os.fstat(source.fileno())
+            if (
+                not stat.S_ISREG(opened.st_mode)
+                or (
+                    opened.st_dev,
+                    opened.st_ino,
+                    opened.st_size,
+                    opened.st_mtime_ns,
+                    opened.st_ctime_ns,
+                )
+                != (
+                    expected.st_dev,
+                    expected.st_ino,
+                    expected.st_size,
+                    expected.st_mtime_ns,
+                    expected.st_ctime_ns,
+                )
+            ):
+                raise DiagramError(f"working-tree source changed during validation: {path.name}")
+            if opened.st_size > max_bytes:
+                if remaining_budget < MAX_EVIDENCE_SOURCE_BYTES:
+                    raise DiagramError(
+                        f"repository evidence exceeds the {MAX_TOTAL_EVIDENCE_SOURCE_BYTES:,}-byte total source limit"
+                    )
+                raise DiagramError(
+                    f"working-tree source exceeds the {MAX_EVIDENCE_SOURCE_BYTES:,}-byte evidence limit: {path.name}"
+                )
+            data = source.read(max_bytes + 1)
+            after = os.fstat(source.fileno())
+            if len(data) > max_bytes:
+                if remaining_budget < MAX_EVIDENCE_SOURCE_BYTES:
+                    raise DiagramError(
+                        f"repository evidence exceeds the {MAX_TOTAL_EVIDENCE_SOURCE_BYTES:,}-byte total source limit"
+                    )
+                raise DiagramError(
+                    f"working-tree source exceeds the {MAX_EVIDENCE_SOURCE_BYTES:,}-byte evidence limit: {path.name}"
+                )
+            if (
+                len(data) != opened.st_size
+                or (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns)
+                != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+            ):
+                raise DiagramError(f"working-tree source changed during validation: {path.name}")
+            return data
+    except OSError as error:
+        raise DiagramError(f"working-tree source could not be read: {path.name}") from error
+
+
+def _git_output(root: Path, *args: str, max_output_bytes: int) -> bytes | None:
+    """Capture a Git result only when its command contract gives it a small or prechecked bound."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "--no-replace-objects", *args],
+            check=False,
+            capture_output=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise DiagramError("git source snapshot could not be read") from error
+    if result.returncode != 0:
+        return None
+    if len(result.stdout) > max_output_bytes:
+        raise DiagramError("git source snapshot exceeded its bounded output limit")
+    return result.stdout
+
+
+def _committed_evidence_digest(
+    root: Path,
+    revision: str,
+    relative_path: str,
+    remaining_budget: int,
+) -> tuple[str | None, int]:
+    """Hash a committed blob after checking its size, keeping Git output bounded."""
+    reference = f"{revision}:{relative_path}"
+    size_bytes = _git_output(root, "cat-file", "-s", reference, max_output_bytes=32)
+    if size_bytes is None:
+        return None, 0
+    if not re.fullmatch(rb"[0-9]+\n?", size_bytes):
+        raise DiagramError("git returned an invalid committed source size")
+    size = int(size_bytes)
+    if size > MAX_EVIDENCE_SOURCE_BYTES:
+        raise DiagramError(
+            f"committed source exceeds the {MAX_EVIDENCE_SOURCE_BYTES:,}-byte evidence limit: {relative_path}"
+        )
+    if size > remaining_budget:
+        raise DiagramError(
+            f"repository evidence exceeds the {MAX_TOTAL_EVIDENCE_SOURCE_BYTES:,}-byte total source limit"
+        )
+    contents = _git_output(
+        root,
+        "cat-file",
+        "blob",
+        reference,
+        max_output_bytes=MAX_EVIDENCE_SOURCE_BYTES,
+    )
+    if contents is None or len(contents) != size:
+        raise DiagramError(f"committed source snapshot could not be read: {relative_path}")
+    return hashlib.sha256(contents).hexdigest(), size
 
 
 def _object(value: Any, name: str, required: set[str], optional: set[str] = frozenset()) -> dict[str, Any]:
@@ -564,49 +710,55 @@ def validate_spec(
             }
     if repo_root is not None:
         root = repo_root.resolve(strict=True)
-
-        def git_bytes(*args: str) -> bytes | None:
-            try:
-                result = subprocess.run(
-                    ["git", "-C", str(root), *args],
-                    check=False,
-                    capture_output=True,
-                    timeout=10,
-                )
-            except (OSError, subprocess.TimeoutExpired) as error:
-                raise DiagramError("git source snapshot could not be read") from error
-            return result.stdout if result.returncode == 0 else None
-
-        revision_bytes = git_bytes("--no-replace-objects", "rev-parse", "--verify", "HEAD^{commit}")
+        revision_bytes = _git_output(
+            root,
+            "rev-parse",
+            "--verify",
+            "HEAD^{commit}",
+            max_output_bytes=128,
+        )
         revision = revision_bytes.decode("ascii", errors="ignore").strip() if revision_bytes else ""
         if not SHA_PATTERN.fullmatch(revision):
             raise DiagramError("Git source snapshot could not resolve an immutable HEAD commit")
 
+        evidence_by_path: dict[str, list[dict[str, Any]]] = {}
         for item in evidence:
-            if item.get("origin", "repository") == "brief":
-                continue
-            path = root.joinpath(*PurePosixPath(item["path"]).parts)
-            try:
-                resolved = path.resolve(strict=True)
-            except OSError as error:
-                raise DiagramError(f"{item['id']} source path cannot be resolved: {item['path']}") from error
-            if not resolved.is_relative_to(root) or not resolved.is_file():
-                raise DiagramError(f"{item['id']} source path must be a regular file inside the repository")
-            data = resolved.read_bytes()
+            if item.get("origin", "repository") == "repository":
+                evidence_by_path.setdefault(item["path"], []).append(item)
+
+        total_source_bytes = 0
+        for relative_path, path_evidence in sorted(evidence_by_path.items()):
+            path, expected_stat = _repository_evidence_path(root, relative_path)
+            if expected_stat.st_size > MAX_TOTAL_EVIDENCE_SOURCE_BYTES - total_source_bytes:
+                raise DiagramError(
+                    f"repository evidence exceeds the {MAX_TOTAL_EVIDENCE_SOURCE_BYTES:,}-byte total source limit"
+                )
+            data = _read_evidence_file(
+                path,
+                expected_stat,
+                MAX_TOTAL_EVIDENCE_SOURCE_BYTES - total_source_bytes,
+            )
+            total_source_bytes += len(data)
             lines = data.splitlines(keepends=True)
-            if item["end_line"] > len(lines):
-                raise DiagramError(f"{item['id']} line range exceeds {item['path']}")
-            excerpt = b"".join(lines[item["start_line"] - 1 : item["end_line"]])
-            committed = git_bytes("--no-replace-objects", "show", f"{revision}:{item['path']}")
-            committed_digest = hashlib.sha256(committed).hexdigest() if committed is not None else None
             file_digest = hashlib.sha256(data).hexdigest()
-            snapshots[item["id"]] = {
-                **item,
-                "sha256": hashlib.sha256(excerpt).hexdigest(),
-                "file_sha256": file_digest,
-                "snapshot": "committed" if committed_digest == file_digest else "working-tree",
-                "committed_file_sha256": committed_digest,
-            }
+            committed_digest, committed_size = _committed_evidence_digest(
+                root,
+                revision,
+                relative_path,
+                MAX_TOTAL_EVIDENCE_SOURCE_BYTES - total_source_bytes,
+            )
+            total_source_bytes += committed_size
+            for item in path_evidence:
+                if item["end_line"] > len(lines):
+                    raise DiagramError(f"{item['id']} line range exceeds {relative_path}")
+                excerpt = b"".join(lines[item["start_line"] - 1 : item["end_line"]])
+                snapshots[item["id"]] = {
+                    **item,
+                    "sha256": hashlib.sha256(excerpt).hexdigest(),
+                    "file_sha256": file_digest,
+                    "snapshot": "committed" if committed_digest == file_digest else "working-tree",
+                    "committed_file_sha256": committed_digest,
+                }
 
     return {
         "schema_version": schema_version,
