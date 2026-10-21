@@ -2096,6 +2096,16 @@ def expect_error(action: Any, expected: str) -> None:
         raise AssertionError(f"expected ProgramStateError containing {expected!r}")
 
 
+def expect_unchanged_state_error(
+    root: Path, program_id: str, action: Any, expected: str
+) -> None:
+    persisted_state = state_path(root, program_id)
+    before = persisted_state.read_bytes()
+    expect_error(action, expected)
+    if persisted_state.read_bytes() != before:
+        raise AssertionError("rejected stale assignment mutation changed persisted state")
+
+
 def run_self_test() -> None:
     with tempfile.TemporaryDirectory(prefix="patpat-program-state-") as raw:
         root = Path(raw).resolve()
@@ -2724,22 +2734,30 @@ def run_self_test() -> None:
         assert reassigned["units"]["contract"]["review"] is None
         assert reassigned["units"]["contract"]["state"] == "pending"
         assert [event["summary"] for event in reassigned["inbox"]] == ["global event"]
-        expect_error(
+        expect_unchanged_state_error(
+            root,
+            "release-train",
             lambda: set_head(root, "release-train", "contract", head_two, head_two, 3),
             "stale assignment generation",
         )
-        expect_error(
+        expect_unchanged_state_error(
+            root,
+            "release-train",
             lambda: set_unit_state(root, "release-train", "contract", "running", 3),
             "stale assignment generation",
         )
-        expect_error(
+        expect_unchanged_state_error(
+            root,
+            "release-train",
             lambda: record_verdict(
                 root, "release-train", "contract", "verification", "pass",
                 head_two, "Verifier", evidence, 3,
             ),
             "stale assignment generation",
         )
-        expect_error(
+        expect_unchanged_state_error(
+            root,
+            "release-train",
             lambda: append_inbox(
                 root, "release-train", "worker-update", "stale replay", "contract", head_two,
                 "Worker Contract", "worktree-contract", 3,

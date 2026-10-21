@@ -31,7 +31,8 @@ When one request requires outputs from more than one specialized row, keep `patp
 | End of mutating work, or named commit or pull request | [`patpat-ship`](../../patpat-ship/SKILL.md) | [Default delivery](../playbooks/default-delivery.md) |
 | Create or revise a reusable agent skill | [`patpat-skill`](../../patpat-skill/SKILL.md) | [Skill change](../playbooks/skill-change.md) |
 | Test whether a skill triggers and behaves correctly | [`patpat-eval`](../../patpat-eval/SKILL.md) | [Behavioral evaluation](../playbooks/behavioral-eval.md) |
-| Create or maintain a project-specific verification skill | [`patpat-verifier`](../../patpat-verifier/SKILL.md) | [Project verifier](../playbooks/project-verifier.md) |
+| Create or maintain a real-app or user-surface verification skill | [`patpat-verifier`](../../patpat-verifier/SKILL.md) | [Project verifier](../playbooks/project-verifier.md) |
+| Create or maintain a formal verification skill and suite for an invariant, protocol, or bounded property | [`patpat-formal-verify`](../../patpat-formal-verify/SKILL.md) | Choose a suitable verifier, record bounds and code correspondence, and prove the check can fail |
 | Encode a recurring failure or correction into a durable constraint | [`patpat-learn`](../../patpat-learn/SKILL.md) | [Learning](../playbooks/learning.md) |
 | Design or scaffold an external automation for a concrete integration | [`patpat-automation`](../../patpat-automation/SKILL.md) | [Automation design](../playbooks/automation-design.md) |
 | Multi-phase sequencing or several contracts | [`patpat-plan`](../../patpat-plan/SKILL.md) | [Bespoke workflow](../playbooks/bespoke-workflow.md) |
