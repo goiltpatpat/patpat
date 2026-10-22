@@ -230,13 +230,9 @@ def discover_manifest(
         merged = pull_request.get("merged")
         if not isinstance(merged, bool):
             raise DiscoveryError(f"{label}.pullRequest.merged must be a boolean")
-        if (
-            state not in {"OPEN", "CLOSED"}
-            or (state == "OPEN" and merged)
-            or (state == "CLOSED" and not merged)
-        ):
+        if (state, merged) not in {("OPEN", False), ("MERGED", True)}:
             raise DiscoveryError(
-                "stack entries must be open or merged; closed unmerged entries are unsupported"
+                "stack entries must be open or merged with a consistent state"
             )
 
         head_ref = _bounded_string(
@@ -500,7 +496,7 @@ def self_test() -> None:
         },
     )
     first_pr = entries(rebased_suffix_response)[0]["pullRequest"]
-    first_pr.update(state="CLOSED", merged=True, baseRef=None)
+    first_pr.update(state="MERGED", merged=True, baseRef=None)
     rebased_manifest, rebased_receipt = discover_manifest(
         rebased_suffix_response,
         repository="example/project",
@@ -521,7 +517,7 @@ def self_test() -> None:
     all_merged_entries = all_merged_stack["entries"]
     all_merged_entries.update(totalCount=1, nodes=[all_merged_entries["nodes"][0]])
     all_merged_entries["nodes"][0]["pullRequest"].update(
-        state="CLOSED", merged=True, baseRef=None
+        state="MERGED", merged=True, baseRef=None
     )
     try:
         discover_manifest(
@@ -591,9 +587,15 @@ def self_test() -> None:
     )
     rejected(lambda value: member(value, 0).update(headRefOid="short"), "full 40-character")
     rejected(lambda value: member(value, 0)["baseRef"]["target"].update(__typename="Tree"), "must be a commit")
-    rejected(lambda value: member(value, 1).update(state="CLOSED"), "closed unmerged")
+    rejected(lambda value: member(value, 1).update(state="CLOSED"), "consistent state")
     rejected(
         lambda value: member(value, 1).update(state="CLOSED", merged=True, baseRef=None),
+        "consistent state",
+    )
+    rejected(lambda value: member(value, 1).update(state="OPEN", merged=True), "consistent state")
+    rejected(lambda value: member(value, 1).update(state="MERGED"), "consistent state")
+    rejected(
+        lambda value: member(value, 1).update(state="MERGED", merged=True, baseRef=None),
         "must form a prefix",
     )
     rejected(lambda value: member(value, 1).update(headRefName="feature/17"), "head branches must be unique")
