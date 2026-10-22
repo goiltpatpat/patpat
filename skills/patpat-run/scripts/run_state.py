@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -1067,6 +1068,17 @@ def make_test_repository(root: Path) -> None:
     subprocess.run(["git", "-C", str(root), "commit", "-qm", "baseline"], check=True)
 
 
+def symlink_creation_is_unsupported(error: OSError) -> bool:
+    unsupported_errnos = {
+        errno.EACCES,
+        errno.EPERM,
+        errno.ENOSYS,
+        getattr(errno, "ENOTSUP", errno.EOPNOTSUPP),
+        errno.EOPNOTSUPP,
+    }
+    return error.errno in unsupported_errnos or getattr(error, "winerror", None) == 1314
+
+
 def run_self_test() -> bool:
     with (
         tempfile.TemporaryDirectory(prefix="patpat-run-state-") as directory,
@@ -1079,12 +1091,20 @@ def run_self_test() -> bool:
         symlink_probe = evidence_root / "symlink-probe"
         try:
             symlink_probe.symlink_to(symlink_probe_target, target_is_directory=True)
-        except (NotImplementedError, OSError):
+        except NotImplementedError:
+            symlink_supported = False
+        except OSError as error:
+            if not symlink_creation_is_unsupported(error):
+                raise
             symlink_supported = False
         else:
             symlink_probe.unlink()
             symlink_supported = True
         symlink_probe_target.rmdir()
+        if not symlink_creation_is_unsupported(OSError(errno.EPERM, "not permitted")):
+            raise AssertionError("symlink capability errors must permit platform-specific skip")
+        if symlink_creation_is_unsupported(OSError(errno.EIO, "I/O failure")):
+            raise AssertionError("unexpected symlink probe failures must not skip safety assertions")
 
         bounded = evidence_root / "bounded.txt"
         bounded.write_bytes(b"1234")

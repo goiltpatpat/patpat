@@ -164,6 +164,22 @@ FIXTURE_ARTIFACT_NAME = "patpat-codex-fixture-attestation"
 LEGACY_FIXTURE_ARTIFACT_NAME = "patpat-codex-attestation"
 PINNED_BOUNDARY_SENTENCES = (
     (
+        Path("skills/patpat-loop/principles/earned-parallelism.md"),
+        (
+            "The current writable program has passed one plan-specific pilot unit at worker limit 1; earlier representative evidence does not replace this pilot.",
+            "This plan-specific pilot is an integration-owner contract; `program_state.py` does not yet persist or enforce the path-inspection receipt.",
+        ),
+        "current-program pilot boundary contract",
+    ),
+    (
+        Path("skills/patpat-loop/playbooks/autopilot.md"),
+        (
+            "Start the current writable program at worker limit 1.",
+            "At timebox expiry, the owner returns partial evidence and the blocker; elapsed time is not authoritative liveness evidence and does not authorize automatic reassignment.",
+        ),
+        "autopilot pilot and timebox contract",
+    ),
+    (
         Path("skills/patpat-impact/SKILL.md"),
         (
             "Grep callers is not the deliverable.",
