@@ -2816,6 +2816,18 @@ def run_self_test(root: Path) -> list[str]:
             "self-test: bounded assignment-fence pilot failed: "
             f"{assignment_fence_result.stdout}{assignment_fence_result.stderr}"
         )
+    assignment_model = root / "skills" / "patpat-run" / "scripts" / "check_assignment_model.py"
+    assignment_model_result = subprocess.run(
+        [sys.executable, str(assignment_model), "--self-test"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if assignment_model_result.returncode != 0:
+        failures.append(
+            "self-test: assignment-model TLC output contract failed: "
+            f"{assignment_model_result.stdout}{assignment_model_result.stderr}"
+        )
     pr_watcher = root / "skills" / "patpat-ship" / "scripts" / "pr_watch.py"
     watch_result = subprocess.run(
         [sys.executable, str(pr_watcher), "--self-test"],

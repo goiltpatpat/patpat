@@ -184,7 +184,9 @@ def digest_path(digest: Any, root: Path, relative: Path, label: bytes) -> None:
     elif path.is_dir():
         digest.update(b"directory\0")
         for child in sorted(path.rglob("*"), key=lambda item: os.fsencode(item.relative_to(path))):
-            if ".git" in child.relative_to(path).parts or child.is_dir():
+            if ".git" in child.relative_to(path).parts or (
+                child.is_dir() and not child.is_symlink()
+            ):
                 continue
             child_label = label + b"/" + os.fsencode(child.relative_to(path))
             digest_path(digest, root, child.relative_to(root), child_label)
@@ -1065,13 +1067,24 @@ def make_test_repository(root: Path) -> None:
     subprocess.run(["git", "-C", str(root), "commit", "-qm", "baseline"], check=True)
 
 
-def run_self_test() -> None:
+def run_self_test() -> bool:
     with (
         tempfile.TemporaryDirectory(prefix="patpat-run-state-") as directory,
         tempfile.TemporaryDirectory(prefix="patpat-run-evidence-") as evidence_directory,
     ):
         root = Path(directory)
         evidence_root = Path(evidence_directory)
+        symlink_probe_target = evidence_root / "symlink-probe-target"
+        symlink_probe_target.mkdir()
+        symlink_probe = evidence_root / "symlink-probe"
+        try:
+            symlink_probe.symlink_to(symlink_probe_target, target_is_directory=True)
+        except (NotImplementedError, OSError):
+            symlink_supported = False
+        else:
+            symlink_probe.unlink()
+            symlink_supported = True
+        symlink_probe_target.rmdir()
 
         bounded = evidence_root / "bounded.txt"
         bounded.write_bytes(b"1234")
@@ -1603,6 +1616,19 @@ def run_self_test() -> None:
         nested = root / "nested"
         nested.mkdir()
         make_test_repository(nested)
+        symlink_targets = (nested / "target-a", nested / "target-b")
+        for target in symlink_targets:
+            target.mkdir()
+            (target / "payload.txt").write_text("same nested content\n", encoding="utf-8")
+        if symlink_supported:
+            nested_link = nested / "directory-link"
+            nested_link.symlink_to(symlink_targets[0].name, target_is_directory=True)
+            before_nested_symlink_change = current_snapshot(root)
+            nested_link.unlink()
+            nested_link.symlink_to(symlink_targets[1].name, target_is_directory=True)
+            if current_snapshot(root) == before_nested_symlink_change:
+                raise AssertionError("embedded Git repository symlink change bypassed the snapshot")
+
         before_nested_change = current_snapshot(root)
         (nested / "source.txt").write_text("nested dirty state\n", encoding="utf-8")
         if current_snapshot(root) == before_nested_change:
@@ -1610,31 +1636,32 @@ def run_self_test() -> None:
 
         escaped_target = evidence_root / "escaped-run-store"
         escaped_target.mkdir()
-        linked_store = git_store_root(root) / "linked-run"
-        linked_store.parent.mkdir(parents=True, exist_ok=True)
-        linked_store.symlink_to(escaped_target)
-        try:
-            initialize(root, "linked-run", "Reject escaped stores", "owner", [], [], [], [])
-        except RunStateError:
-            pass
-        else:
-            raise AssertionError("symlinked run store escaped Git metadata")
-        if (escaped_target / "state.json").exists():
-            raise AssertionError("symlinked run store wrote outside Git metadata")
+        if symlink_supported:
+            linked_store = git_store_root(root) / "linked-run"
+            linked_store.parent.mkdir(parents=True, exist_ok=True)
+            linked_store.symlink_to(escaped_target)
+            try:
+                initialize(root, "linked-run", "Reject escaped stores", "owner", [], [], [], [])
+            except RunStateError:
+                pass
+            else:
+                raise AssertionError("symlinked run store escaped Git metadata")
+            if (escaped_target / "state.json").exists():
+                raise AssertionError("symlinked run store wrote outside Git metadata")
 
-        guard_directory = run_directory(root, "guard-run")
-        guard_directory.mkdir(parents=True)
-        guard_target = evidence_root / "guard-target"
-        guard_target.write_text("unchanged\n", encoding="utf-8")
-        (guard_directory / ".lock.guard").symlink_to(guard_target)
-        try:
-            initialize(root, "guard-run", "Reject linked guard", "owner", [], [], [], [])
-        except RunStateError:
-            pass
-        else:
-            raise AssertionError("symlinked lock guard was accepted")
-        if guard_target.read_text(encoding="utf-8") != "unchanged\n":
-            raise AssertionError("symlinked lock guard target was modified")
+            guard_directory = run_directory(root, "guard-run")
+            guard_directory.mkdir(parents=True)
+            guard_target = evidence_root / "guard-target"
+            guard_target.write_text("unchanged\n", encoding="utf-8")
+            (guard_directory / ".lock.guard").symlink_to(guard_target)
+            try:
+                initialize(root, "guard-run", "Reject linked guard", "owner", [], [], [], [])
+            except RunStateError:
+                pass
+            else:
+                raise AssertionError("symlinked lock guard was accepted")
+            if guard_target.read_text(encoding="utf-8") != "unchanged\n":
+                raise AssertionError("symlinked lock guard target was modified")
 
         initialize(root, "blocked-run", "Bound retries", "owner", [], [], [], [])
         transition(root, "blocked-run", "INSPECT")
@@ -1686,19 +1713,20 @@ def run_self_test() -> None:
         if atomic_path.read_bytes() != before_failure:
             raise AssertionError("failed atomic write changed authoritative state")
 
-        linked_state_target = atomic_path.with_name("state.real.json")
-        os.replace(atomic_path, linked_state_target)
-        atomic_path.symlink_to(linked_state_target)
-        try:
+        if symlink_supported:
+            linked_state_target = atomic_path.with_name("state.real.json")
+            os.replace(atomic_path, linked_state_target)
+            atomic_path.symlink_to(linked_state_target)
             try:
-                load_state(root, "atomic-run")
-            except RunStateError:
-                pass
-            else:
-                raise AssertionError("symlinked run state was accepted")
-        finally:
-            atomic_path.unlink()
-            os.replace(linked_state_target, atomic_path)
+                try:
+                    load_state(root, "atomic-run")
+                except RunStateError:
+                    pass
+                else:
+                    raise AssertionError("symlinked run state was accepted")
+            finally:
+                atomic_path.unlink()
+                os.replace(linked_state_target, atomic_path)
 
         oversized_state_target = atomic_path.with_name("state.oversized.json")
         os.replace(atomic_path, oversized_state_target)
@@ -1776,17 +1804,18 @@ def run_self_test() -> None:
             raise AssertionError("run owner removed an oversized replacement lock")
         oversized_path.unlink()
 
-        linked_lock_path = run_directory(root, "linked-lock-run") / ".lock"
-        linked_lock_target = evidence_root / "linked-lock-target"
-        linked_lock_target.write_text("unchanged\n", encoding="utf-8")
-        with run_lock(root, "linked-lock-run"):
+        if symlink_supported:
+            linked_lock_path = run_directory(root, "linked-lock-run") / ".lock"
+            linked_lock_target = evidence_root / "linked-lock-target"
+            linked_lock_target.write_text("unchanged\n", encoding="utf-8")
+            with run_lock(root, "linked-lock-run"):
+                linked_lock_path.unlink()
+                linked_lock_path.symlink_to(linked_lock_target)
+            if not linked_lock_path.is_symlink():
+                raise AssertionError("run owner removed a symlinked replacement lock")
+            if linked_lock_target.read_text(encoding="utf-8") != "unchanged\n":
+                raise AssertionError("run owner read or modified a symlinked lock target")
             linked_lock_path.unlink()
-            linked_lock_path.symlink_to(linked_lock_target)
-        if not linked_lock_path.is_symlink():
-            raise AssertionError("run owner removed a symlinked replacement lock")
-        if linked_lock_target.read_text(encoding="utf-8") != "unchanged\n":
-            raise AssertionError("run owner read or modified a symlinked lock target")
-        linked_lock_path.unlink()
 
         malformed = load_state(root, "atomic-run")
         malformed["authorities"] = [{}]
@@ -1805,6 +1834,7 @@ def run_self_test() -> None:
         atomic_write_json(state_path(root, "main-run"), tampered)
         if not validation_errors(root, "main-run"):
             raise AssertionError("identity tamper was accepted")
+        return symlink_supported
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1875,8 +1905,9 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
     if args.self_test:
-        run_self_test()
-        print("Patpat run-state self-test passed.")
+        symlink_checks_passed = run_self_test()
+        symlink_status = "passed" if symlink_checks_passed else "skipped (creation unsupported)"
+        print(f"Patpat run-state self-test passed; symlink assertions {symlink_status}.")
         return 0
     if not args.command:
         parser.error("a command or --self-test is required")
