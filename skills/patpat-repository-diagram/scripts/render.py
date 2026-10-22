@@ -49,6 +49,20 @@ from delta import compare_architecture
 
 TOOL_VERSION = "2.0.0"
 OUTPUT_LOCK_NAME = ".patpat-diagram.lock"
+MAX_PACKAGED_HTML_BYTES = 8_000_000
+MAX_PACKAGED_SVG_BYTES = 8_000_000
+MAX_PACKAGED_RECEIPT_BYTES = 8_000_000
+MAX_TRANSACTION_JOURNAL_BYTES = 64_000
+MAX_BROWSER_CAPTURE_BYTES = 16_000_000
+MAX_TOTAL_BROWSER_CAPTURE_BYTES = 48_000_000
+MAX_BROWSER_RECEIPT_BYTES = 1_000_000
+MAX_BROWSER_CONTACT_SVG_BYTES = 66_000_000
+PACKAGED_ARTIFACT_LIMITS = {
+    "html": MAX_PACKAGED_HTML_BYTES,
+    "source": MAX_SOURCE_JSON_BYTES,
+    "svg": MAX_PACKAGED_SVG_BYTES,
+    "receipt": MAX_PACKAGED_RECEIPT_BYTES,
+}
 _OUTPUT_LOCKS: dict[str, threading.Lock] = {}
 _OUTPUT_LOCKS_GUARD = threading.Lock()
 MIN_CANVAS_WIDTH = 1200.0
@@ -2531,11 +2545,105 @@ def _valid_static_page(page_bytes: bytes, expected_css: str) -> None:
         raise DiagramError("static page content security policy is not restrictive")
 
 
-def _file_sha256(path: Path) -> str:
+def _file_sha256(path: Path, max_bytes: int) -> str:
+    try:
+        expected = path.lstat()
+    except OSError as error:
+        raise DiagramError(f"transaction artifact could not be inspected: {path.name}") from error
+    if not stat.S_ISREG(expected.st_mode):
+        raise DiagramError(f"transaction artifact is not a regular file: {path.name}")
+    if expected.st_size > max_bytes:
+        raise DiagramError(f"transaction artifact exceeds its {max_bytes:,}-byte limit: {path.name}")
+
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise DiagramError(f"transaction artifact could not be read: {path.name}") from error
     digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
+    try:
+        with os.fdopen(descriptor, "rb") as source:
+            opened = os.fstat(source.fileno())
+            identity = (expected.st_dev, expected.st_ino, expected.st_size, expected.st_mtime_ns, expected.st_ctime_ns)
+            if (
+                not stat.S_ISREG(opened.st_mode)
+                or (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns) != identity
+            ):
+                raise DiagramError(f"transaction artifact changed during hashing: {path.name}")
+            total = 0
+            while True:
+                chunk = source.read(min(1024 * 1024, max_bytes - total + 1))
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_bytes:
+                    raise DiagramError(f"transaction artifact exceeds its {max_bytes:,}-byte limit: {path.name}")
+                digest.update(chunk)
+            after = os.fstat(source.fileno())
+            if (
+                total != opened.st_size
+                or (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns)
+                != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+            ):
+                raise DiagramError(f"transaction artifact changed during hashing: {path.name}")
+    except OSError as error:
+        raise DiagramError(f"transaction artifact could not be read: {path.name}") from error
+    return digest.hexdigest()
+
+
+def _copy_file_bounded(source_path: Path, destination_path: Path, max_bytes: int) -> str:
+    try:
+        expected = source_path.lstat()
+    except OSError as error:
+        raise DiagramError(f"transaction artifact could not be inspected: {source_path.name}") from error
+    if not stat.S_ISREG(expected.st_mode):
+        raise DiagramError(f"transaction artifact is not a regular file: {source_path.name}")
+    if expected.st_size > max_bytes:
+        raise DiagramError(f"transaction artifact exceeds its {max_bytes:,}-byte limit: {source_path.name}")
+
+    source_flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    try:
+        source_descriptor = os.open(source_path, source_flags)
+    except OSError as error:
+        raise DiagramError(f"transaction artifact could not be read: {source_path.name}") from error
+
+    digest = hashlib.sha256()
+    try:
+        with os.fdopen(source_descriptor, "rb") as source:
+            opened = os.fstat(source.fileno())
+            identity = (expected.st_dev, expected.st_ino, expected.st_size, expected.st_mtime_ns, expected.st_ctime_ns)
+            if (
+                not stat.S_ISREG(opened.st_mode)
+                or (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns) != identity
+            ):
+                raise DiagramError(f"transaction artifact changed during copy: {source_path.name}")
+
+            destination_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+            destination_descriptor = os.open(destination_path, destination_flags, 0o600)
+            with os.fdopen(destination_descriptor, "wb") as destination:
+                total = 0
+                while True:
+                    chunk = source.read(min(1024 * 1024, max_bytes - total + 1))
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > max_bytes:
+                        raise DiagramError(
+                            f"transaction artifact exceeds its {max_bytes:,}-byte limit: {source_path.name}"
+                        )
+                    digest.update(chunk)
+                    destination.write(chunk)
+                after = os.fstat(source.fileno())
+                if (
+                    total != opened.st_size
+                    or (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns)
+                    != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+                ):
+                    raise DiagramError(f"transaction artifact changed during copy: {source_path.name}")
+                destination.flush()
+                os.fsync(destination.fileno())
+    except OSError as error:
+        raise DiagramError(f"transaction artifact could not be copied: {source_path.name}") from error
     return digest.hexdigest()
 
 
@@ -2589,6 +2697,43 @@ def _transaction_names(kind: str, slug: str) -> set[str]:
     if kind == "finalize-showcase":
         return _transaction_names("diagram", slug) | _transaction_names("browser-showcase", slug)
     raise DiagramError("interrupted output transaction has an unsupported output kind")
+
+
+def _transaction_artifact_limit(filename: str) -> int:
+    if filename.endswith(".browser.receipt.json"):
+        return MAX_BROWSER_RECEIPT_BYTES
+    if filename.endswith(".showcase-contact.svg"):
+        return MAX_BROWSER_CONTACT_SVG_BYTES
+    if filename.endswith(".png"):
+        return MAX_BROWSER_CAPTURE_BYTES
+    if filename.endswith((".diagram.json", ".delta.json")):
+        return MAX_SOURCE_JSON_BYTES
+    if filename.endswith((".receipt.json", ".delta.receipt.json")):
+        return MAX_PACKAGED_RECEIPT_BYTES
+    if filename.endswith(".html"):
+        return MAX_PACKAGED_HTML_BYTES
+    if filename.endswith(".svg"):
+        return MAX_PACKAGED_SVG_BYTES
+    raise DiagramError("transaction artifact has no supported byte limit")
+
+
+def _browser_artifact_limit(filename: str) -> int:
+    try:
+        return _transaction_artifact_limit(filename)
+    except DiagramError as error:
+        raise DiagramError("browser staging artifact has no supported byte limit") from error
+
+
+def _ensure_browser_capture_budget(
+    captures: dict[str, bytes],
+    candidate: bytes,
+    *,
+    limit: int | None = None,
+) -> int:
+    remaining = (MAX_TOTAL_BROWSER_CAPTURE_BYTES if limit is None else limit) - sum(map(len, captures.values()))
+    if len(candidate) > remaining:
+        raise DiagramError("browser screenshots exceed their combined byte limit")
+    return remaining
 
 
 def _validate_transaction(transaction: Any, staging: Path) -> list[dict[str, Any]]:
@@ -2647,6 +2792,23 @@ def _staging_files(staging: Path, entries: list[dict[str, Any]]) -> set[str]:
     return {child.name for child in staging.iterdir()}
 
 
+def _ensure_screenshot_set_budget(paths: list[Path], label: str) -> None:
+    total = 0
+    for path in paths:
+        try:
+            metadata = path.lstat()
+        except FileNotFoundError:
+            continue
+        except OSError as error:
+            raise DiagramError(f"{label} screenshot could not be inspected: {path.name}") from error
+        if not stat.S_ISREG(metadata.st_mode):
+            raise DiagramError(f"{label} screenshot is not a regular file: {path.name}")
+        if metadata.st_size > MAX_BROWSER_CAPTURE_BYTES:
+            raise DiagramError(f"transaction artifact exceeds its {MAX_BROWSER_CAPTURE_BYTES:,}-byte limit: {path.name}")
+        total += metadata.st_size
+        if total > MAX_TOTAL_BROWSER_CAPTURE_BYTES:
+            raise DiagramError(f"{label} screenshots exceed their combined byte limit")
+
 def _remove_staging(staging: Path, allowed_files: set[str]) -> None:
     if staging.is_symlink() or not staging.is_dir():
         raise DiagramError(f"interrupted output transaction staging directory changed: {staging.name}")
@@ -2671,8 +2833,8 @@ def _recover_transaction(
         try:
             if journal_path.is_symlink() or not journal_path.is_file():
                 raise DiagramError(f"interrupted output transaction has no regular recovery journal: {staging.name}")
-            transaction = json.loads(journal_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as error:
+            transaction = json.loads(_read_transaction_journal(journal_path).decode("utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
             raise DiagramError(f"interrupted output transaction has no valid recovery journal: {staging.name}") from error
     entries = _validate_transaction(transaction, staging)
     present = _staging_files(staging, entries)
@@ -2684,14 +2846,43 @@ def _recover_transaction(
         # Targets are untouched until the prepared journal is durable.
         _remove_staging(staging, allowed_files)
         return
+
+    new_screenshots = []
+    for entry in entries:
+        if not entry["name"].endswith(".png"):
+            continue
+        if phase == "committed":
+            new_screenshots.append(output_dir / entry["name"])
+        elif entry["staged"] in present:
+            new_screenshots.append(staging / entry["staged"])
+        else:
+            new_screenshots.append(output_dir / entry["name"])
+    backup_screenshots = [
+        staging / entry["backup"]
+        for entry in entries
+        if entry["name"].endswith(".png") and entry["had_existing"] and entry["backup"] in present
+    ]
+    new_label = "recovery target" if phase == "committed" else "recovery candidate"
+    _ensure_screenshot_set_budget(new_screenshots, new_label)
+    _ensure_screenshot_set_budget(backup_screenshots, "recovery backup")
+
     if phase == "committed":
         for entry in entries:
             target = output_dir / entry["name"]
-            if target.is_symlink() or not target.is_file() or target.stat().st_nlink != 1 or _file_sha256(target) != entry["new_sha256"]:
+            limit = _transaction_artifact_limit(entry["name"])
+            if (
+                target.is_symlink()
+                or not target.is_file()
+                or target.stat().st_nlink != 1
+                or _file_sha256(target, limit) != entry["new_sha256"]
+            ):
                 raise DiagramError(f"committed output does not match its transaction journal: {entry['name']}")
         for entry in entries:
             backup = staging / entry["backup"]
-            if backup.name in present and (not entry["had_existing"] or _file_sha256(backup) != entry["old_sha256"]):
+            limit = _transaction_artifact_limit(entry["name"])
+            if backup.name in present and (
+                not entry["had_existing"] or _file_sha256(backup, limit) != entry["old_sha256"]
+            ):
                 raise DiagramError(f"committed transaction backup failed integrity check: {entry['name']}")
         _remove_staging(staging, allowed_files)
         return
@@ -2701,17 +2892,26 @@ def _recover_transaction(
         target = output_dir / entry["name"]
         staged = staging / entry["staged"]
         backup = staging / entry["backup"]
-        if staged.name in present and _file_sha256(staged) != entry["new_sha256"]:
+        limit = _transaction_artifact_limit(entry["name"])
+        if staged.name in present and _file_sha256(staged, limit) != entry["new_sha256"]:
             raise DiagramError(f"staged output failed integrity check during recovery: {entry['name']}")
         if entry["had_existing"]:
-            if backup.name not in present or _file_sha256(backup) != entry["old_sha256"]:
+            if backup.name not in present or _file_sha256(backup, limit) != entry["old_sha256"]:
                 raise DiagramError(f"previous output backup failed integrity check: {entry['name']}")
-            if target.is_symlink() or target.exists() and (not target.is_file() or target.stat().st_nlink != 1 or _file_sha256(target) not in {entry["old_sha256"], entry["new_sha256"]}):
+            if target.is_symlink() or target.exists() and (
+                not target.is_file()
+                or target.stat().st_nlink != 1
+                or _file_sha256(target, limit) not in {entry["old_sha256"], entry["new_sha256"]}
+            ):
                 raise DiagramError(f"refusing to overwrite a concurrent change during recovery: {entry['name']}")
         else:
             if backup.name in present:
                 raise DiagramError(f"unexpected recovery backup for new output: {entry['name']}")
-            if target.is_symlink() or target.exists() and (not target.is_file() or target.stat().st_nlink != 1 or _file_sha256(target) != entry["new_sha256"]):
+            if target.is_symlink() or target.exists() and (
+                not target.is_file()
+                or target.stat().st_nlink != 1
+                or _file_sha256(target, limit) != entry["new_sha256"]
+            ):
                 raise DiagramError(f"refusing to remove a concurrent change during recovery: {entry['name']}")
             if staged.name not in present and not target.is_file():
                 raise DiagramError(f"new output and staged candidate are both missing: {entry['name']}")
@@ -2735,8 +2935,8 @@ def _recover_output_sets(output_dir: Path) -> None:
         if journal.is_symlink() or not journal.is_file():
             continue
         try:
-            transaction = json.loads(journal.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as error:
+            transaction = json.loads(_read_transaction_journal(journal).decode("utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
             raise DiagramError(f"could not inspect interrupted output transaction {staging.name}") from error
         entries = _validate_transaction(transaction, staging)
         _staging_files(staging, entries)
@@ -3036,11 +3236,24 @@ def _atomic_set_locked(output_dir: Path, files: dict[str, bytes], overwrite: boo
     expected = _transaction_names(kind, slug)
     if not files or (set(files) - expected) or (kind != "browser" and set(files) != expected):
         raise DiagramError("output set does not match its declared transaction kind and slug")
+    screenshot_bytes = 0
+    for name, data in files.items():
+        limit = _transaction_artifact_limit(name)
+        if len(data) > limit:
+            raise DiagramError(f"transaction artifact exceeds its {limit:,}-byte limit: {name}")
+        if name.endswith(".png"):
+            screenshot_bytes += len(data)
+    if screenshot_bytes > MAX_TOTAL_BROWSER_CAPTURE_BYTES:
+        raise DiagramError("browser screenshots exceed their combined byte limit")
     _recover_output_sets(output_dir)
     for name in files:
         if not name or Path(name).name != name or name in {".", ".."}:
             raise DiagramError("output names must be plain filenames")
     targets = {name: output_dir / name for name in files}
+    _ensure_screenshot_set_budget(
+        [target for name, target in targets.items() if name.endswith(".png")],
+        "existing output",
+    )
     existing = {}
     for name, target in targets.items():
         if target.is_symlink():
@@ -3049,7 +3262,7 @@ def _atomic_set_locked(output_dir: Path, files: dict[str, bytes], overwrite: boo
             raise DiagramError(f"output already exists: {target.name}; choose a new name or request overwrite")
         if target.exists() and not target.is_file():
             raise DiagramError(f"output target is not a regular file: {target.name}")
-        existing[name] = _file_sha256(target) if target.exists() else None
+        existing[name] = _file_sha256(target, _transaction_artifact_limit(name)) if target.exists() else None
     staging = Path(tempfile.mkdtemp(prefix=".patpat-diagram-tx-", dir=output_dir))
     entries = [
         {
@@ -3075,8 +3288,11 @@ def _atomic_set_locked(output_dir: Path, files: dict[str, bytes], overwrite: boo
                 os.fsync(output.fileno())
         for entry in entries:
             if entry["had_existing"]:
-                shutil.copyfile(targets[entry["name"]], staging / entry["backup"])
-                if _file_sha256(staging / entry["backup"]) != entry["old_sha256"]:
+                limit = _transaction_artifact_limit(entry["name"])
+                backup_digest = _copy_file_bounded(
+                    targets[entry["name"]], staging / entry["backup"], limit
+                )
+                if backup_digest != entry["old_sha256"]:
                     raise DiagramError(f"output changed while a replacement was staged: {entry['name']}")
         transaction["phase"] = "prepared"
         _write_transaction(journal, transaction)
@@ -3192,28 +3408,60 @@ def _collect_browser_artifacts(staged_browser: Path, name: str, profile: str) ->
     if profile not in {"standard", "showcase"}:
         raise DiagramError("browser quality profile must be standard or showcase")
     expected = _transaction_names("browser-showcase" if profile == "showcase" else "browser", name)
-    entries = list(staged_browser.iterdir())
-    lock_path = staged_browser / OUTPUT_LOCK_NAME
-    if (
-        lock_path.is_symlink()
-        or not lock_path.is_file()
-        or lock_path.stat().st_nlink != 1
-        or lock_path.read_bytes() != b"\0"
-    ):
-        raise DiagramError("browser staging directory has no valid output coordination file")
-    actual = {path.name for path in entries if path.name != OUTPUT_LOCK_NAME}
+    actual: set[str] = set()
+    with os.scandir(staged_browser) as entries:
+        for entry in entries:
+            if entry.name == OUTPUT_LOCK_NAME:
+                continue
+            if entry.name not in expected:
+                raise DiagramError("browser staging directory does not match its declared artifact set")
+            actual.add(entry.name)
+            if len(actual) > len(expected):
+                raise DiagramError("browser staging directory does not match its declared artifact set")
     if actual != expected:
         raise DiagramError("browser staging directory does not match its declared artifact set")
+    lock_path = staged_browser / OUTPUT_LOCK_NAME
+    lock_bytes = _read_bounded_regular_file(
+        lock_path,
+        1,
+        unsafe_message="browser staging directory has no valid output coordination file",
+        read_message="browser staging coordination file could not be read",
+        changed_message="browser staging coordination file changed during validation",
+        too_large_message="browser staging coordination file exceeds its one-byte limit",
+        require_single_link=True,
+    )
+    if lock_bytes != b"\0":
+        raise DiagramError("browser staging directory has no valid output coordination file")
     result: dict[str, bytes] = {}
+    total_capture_bytes = 0
     for filename in sorted(expected):
         path = staged_browser / filename
-        if path.is_symlink() or not path.is_file():
-            raise DiagramError(f"browser staging artifact is not a regular file: {filename}")
-        result[filename] = path.read_bytes()
+        artifact_limit = _browser_artifact_limit(filename)
+        too_large_message = f"browser staging artifact exceeds its byte limit: {filename}"
+        if filename.endswith(".png"):
+            remaining_capture_bytes = MAX_TOTAL_BROWSER_CAPTURE_BYTES - total_capture_bytes
+            if remaining_capture_bytes < artifact_limit:
+                artifact_limit = remaining_capture_bytes
+                too_large_message = "browser staging screenshots exceed their combined byte limit"
+        artifact = _read_bounded_regular_file(
+            path,
+            artifact_limit,
+            unsafe_message=f"browser staging artifact is not a regular file: {filename}",
+            read_message=f"browser staging artifact could not be read: {filename}",
+            changed_message=f"browser staging artifact changed during validation: {filename}",
+            too_large_message=too_large_message,
+        )
+        if filename.endswith(".png"):
+            if len(artifact) > MAX_TOTAL_BROWSER_CAPTURE_BYTES - total_capture_bytes:
+                raise DiagramError("browser staging screenshots exceed their combined byte limit")
+            total_capture_bytes += len(artifact)
+        result[filename] = artifact
     return result
 
 
 def _assert_browser_artifact_collection(output_dir: Path) -> None:
+    global MAX_BROWSER_CAPTURE_BYTES, MAX_TOTAL_BROWSER_CAPTURE_BYTES
+    global MAX_BROWSER_RECEIPT_BYTES, MAX_BROWSER_CONTACT_SVG_BYTES
     for profile in ("standard", "showcase"):
         staging = output_dir / profile
         staging.mkdir(parents=True, exist_ok=True)
@@ -3226,6 +3474,22 @@ def _assert_browser_artifact_collection(output_dir: Path) -> None:
             raise AssertionError(f"{profile} browser collection included transaction metadata or omitted artifacts")
         if any(collected[name] != name.encode("utf-8") for name in expected):
             raise AssertionError(f"{profile} browser collection changed artifact bytes")
+        lock_alias = output_dir / f"{profile}-linked-output-lock"
+        try:
+            os.link(staging / OUTPUT_LOCK_NAME, lock_alias)
+        except OSError:
+            pass
+        else:
+            try:
+                try:
+                    _collect_browser_artifacts(staging, "collection", profile)
+                except DiagramError as error:
+                    if "coordination file" not in str(error):
+                        raise AssertionError(f"hard-linked browser lock failed for the wrong reason: {error}") from error
+                else:
+                    raise AssertionError(f"{profile} browser collection accepted a hard-linked coordination file")
+            finally:
+                lock_alias.unlink()
         unexpected = staging / "unexpected.bin"
         unexpected.write_bytes(b"not part of the declared browser output")
         try:
@@ -3234,6 +3498,63 @@ def _assert_browser_artifact_collection(output_dir: Path) -> None:
             pass
         else:
             raise AssertionError(f"{profile} browser collection accepted an undeclared artifact")
+        unexpected.unlink()
+
+        original_capture_limit = MAX_BROWSER_CAPTURE_BYTES
+        original_total_capture_limit = MAX_TOTAL_BROWSER_CAPTURE_BYTES
+        original_receipt_limit = MAX_BROWSER_RECEIPT_BYTES
+        original_contact_limit = MAX_BROWSER_CONTACT_SVG_BYTES
+        try:
+            for filename in expected:
+                (staging / filename).write_bytes(b"x")
+            oversized_name = next(filename for filename in expected if filename.endswith(".png"))
+            (staging / oversized_name).write_bytes(b"xx")
+            MAX_BROWSER_CAPTURE_BYTES = 1
+            MAX_TOTAL_BROWSER_CAPTURE_BYTES = 1
+            MAX_BROWSER_RECEIPT_BYTES = 1
+            MAX_BROWSER_CONTACT_SVG_BYTES = 1
+            try:
+                _collect_browser_artifacts(staging, "collection", profile)
+            except DiagramError as error:
+                if "byte limit" not in str(error):
+                    raise
+            else:
+                raise AssertionError(f"{profile} browser collection read an oversized artifact")
+        finally:
+            MAX_BROWSER_CAPTURE_BYTES = original_capture_limit
+            MAX_TOTAL_BROWSER_CAPTURE_BYTES = original_total_capture_limit
+            MAX_BROWSER_RECEIPT_BYTES = original_receipt_limit
+            MAX_BROWSER_CONTACT_SVG_BYTES = original_contact_limit
+
+        if profile == "showcase":
+            for filename in expected:
+                (staging / filename).write_bytes(b"x")
+            screenshot_names = [filename for filename in expected if filename.endswith(".png")]
+            if len(screenshot_names) < 2:
+                raise AssertionError("showcase browser collection must include multiple screenshots")
+            MAX_BROWSER_CAPTURE_BYTES = 2
+            MAX_TOTAL_BROWSER_CAPTURE_BYTES = len(screenshot_names) - 1
+            try:
+                _collect_browser_artifacts(staging, "collection", profile)
+            except DiagramError as error:
+                if "combined byte limit" not in str(error):
+                    raise AssertionError(f"aggregate screenshot limit failed for the wrong reason: {error}") from error
+            else:
+                raise AssertionError("showcase browser collection exceeded the aggregate screenshot byte limit")
+            finally:
+                MAX_BROWSER_CAPTURE_BYTES = original_capture_limit
+                MAX_TOTAL_BROWSER_CAPTURE_BYTES = original_total_capture_limit
+
+    available = _ensure_browser_capture_budget({"first": b"ab"}, b"", limit=3)
+    if available != 1:
+        raise AssertionError("browser capture budget did not report the remaining bytes")
+    try:
+        _ensure_browser_capture_budget({"first": b"ab"}, b"cd", limit=3)
+    except DiagramError as error:
+        if "combined byte limit" not in str(error):
+            raise AssertionError(f"browser capture budget failed for the wrong reason: {error}") from error
+    else:
+        raise AssertionError("browser capture budget accepted a post-processing size increase")
 
 
 def _finalize(
@@ -3400,14 +3721,12 @@ def _verified_packaged_artifact(html_path: Path) -> tuple[dict[str, Any], dict[s
         directory / f"{stem}.receipt.json",
     )
     paths = {"html": html_path, "source": source_path, "svg": svg_path, "receipt": receipt_path}
-    for path in paths.values():
-        if path.is_symlink() or not path.is_file():
-            raise DiagramError(f"diagram artifact set is incomplete or unsafe: {path.name}")
-    artifact_bytes = {kind: path.read_bytes() for kind, path in paths.items()}
-    raw = parse_json(artifact_bytes["source"])
+    artifact_bytes = {
+        kind: _read_packaged_artifact(path, kind, PACKAGED_ARTIFACT_LIMITS[kind])
+        for kind, path in paths.items()
+    }
     source_bytes = artifact_bytes["source"]
-    if len(source_bytes) > 1_000_000:
-        raise DiagramError("diagram source JSON exceeds the 1 MB limit")
+    raw = parse_json(source_bytes)
     receipt = parse_json(artifact_bytes["receipt"])
     spec = validate_spec(raw, None)
     if receipt.get("tool") != "patpat-repository-diagram" or receipt.get("schema_version") not in {1, 2}:
@@ -3497,6 +3816,91 @@ def _verified_packaged_artifact(html_path: Path) -> tuple[dict[str, Any], dict[s
         raise DiagramError("diagram source links do not match the verified committed evidence")
     _valid_html_and_svg(artifact_bytes["html"], artifact_bytes["svg"], expected_links)
     return spec, receipt, raw, artifact_bytes
+
+
+def _read_bounded_regular_file(
+    path: Path,
+    max_bytes: int,
+    *,
+    unsafe_message: str,
+    read_message: str,
+    changed_message: str,
+    too_large_message: str,
+    require_single_link: bool = False,
+) -> bytes:
+    try:
+        expected = path.lstat()
+    except OSError as error:
+        raise DiagramError(unsafe_message) from error
+    if not stat.S_ISREG(expected.st_mode) or (require_single_link and expected.st_nlink != 1):
+        raise DiagramError(unsafe_message)
+
+    if expected.st_size > max_bytes:
+        raise DiagramError(too_large_message)
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise DiagramError(read_message) from error
+    try:
+        with os.fdopen(descriptor, "rb") as artifact:
+            opened = os.fstat(artifact.fileno())
+            opened_identity = (
+                opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns
+            )
+            expected_identity = (
+                expected.st_dev, expected.st_ino, expected.st_size, expected.st_mtime_ns, expected.st_ctime_ns
+            )
+            if (
+                not stat.S_ISREG(opened.st_mode)
+                or (require_single_link and opened.st_nlink != 1)
+                or opened_identity != expected_identity
+            ):
+                raise DiagramError(changed_message)
+            if opened.st_size > max_bytes:
+                raise DiagramError(too_large_message)
+            data = artifact.read(max_bytes + 1)
+            after = os.fstat(artifact.fileno())
+            after_identity = (
+                after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns
+            )
+            if len(data) > max_bytes:
+                raise DiagramError(too_large_message)
+            if (
+                len(data) != opened.st_size
+                or (require_single_link and after.st_nlink != 1)
+                or opened_identity != after_identity
+            ):
+                raise DiagramError(changed_message)
+            return data
+    except OSError as error:
+        raise DiagramError(read_message) from error
+
+
+def _read_packaged_artifact(path: Path, kind: str, max_bytes: int) -> bytes:
+    if kind == "source":
+        too_large_message = "diagram source JSON exceeds the 1 MB limit"
+    else:
+        too_large_message = f"diagram {kind.upper()} exceeds the 8 MB artifact limit"
+    return _read_bounded_regular_file(
+        path,
+        max_bytes,
+        unsafe_message=f"diagram artifact set is incomplete or unsafe: {path.name}",
+        read_message=f"diagram artifact could not be read: {path.name}",
+        changed_message=f"diagram artifact changed during checking: {path.name}",
+        too_large_message=too_large_message,
+    )
+
+
+def _read_transaction_journal(path: Path) -> bytes:
+    return _read_bounded_regular_file(
+        path,
+        MAX_TRANSACTION_JOURNAL_BYTES,
+        unsafe_message=f"interrupted output transaction has no regular recovery journal: {path.parent.name}",
+        read_message=f"could not read interrupted output transaction journal: {path.parent.name}",
+        changed_message=f"interrupted output transaction journal changed during checking: {path.parent.name}",
+        too_large_message="diagram transaction journal exceeds the 64 KB limit",
+    )
 
 
 def _comparison_svg(spec: dict[str, Any], repository: dict[str, Any], snapshot: str) -> str:
@@ -3646,15 +4050,68 @@ def _preview_fingerprint(source_path: Path, repo_root: Path | None) -> tuple[str
         }
         error = None
     except (DiagramError, OSError) as failure:
-        source_bytes = source_path.read_bytes() if source_path.is_file() else b"<missing>"
+        source_stat, source_bytes = _preview_invalid_source(source_path)
         material = {
             "source_sha256": hashlib.sha256(source_bytes).hexdigest(),
+            "source_stat": source_stat,
             "repository": context,
             "invalid": str(failure),
         }
         error = str(failure)
     payload = json.dumps(material, sort_keys=True, ensure_ascii=False).encode("utf-8")
     return hashlib.sha256(payload).hexdigest(), error
+
+
+def _preview_invalid_source(source_path: Path) -> tuple[dict[str, Any], bytes]:
+    def stat_material(value: os.stat_result) -> dict[str, int]:
+        return {
+            "mode": value.st_mode,
+            "device": value.st_dev,
+            "inode": value.st_ino,
+            "size": value.st_size,
+            "mtime_ns": value.st_mtime_ns,
+            "ctime_ns": value.st_ctime_ns,
+        }
+
+    try:
+        # Match load_json() semantics: it follows a selected source symlink.
+        expected = source_path.stat()
+    except FileNotFoundError:
+        return {"state": "missing"}, b"<missing>"
+    except OSError as error:
+        return {"state": "unavailable", "errno": error.errno or 0}, b"<unavailable>"
+
+    expected_material = stat_material(expected)
+    if not stat.S_ISREG(expected.st_mode):
+        return {"state": "non-regular", "stat": expected_material}, b"<non-regular>"
+
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NONBLOCK", 0)
+    try:
+        descriptor = os.open(source_path, flags)
+    except OSError as error:
+        return {"state": "unreadable", "stat": expected_material, "errno": error.errno or 0}, b"<unreadable>"
+
+    try:
+        with os.fdopen(descriptor, "rb") as source:
+            opened = os.fstat(source.fileno())
+            if not stat.S_ISREG(opened.st_mode) or stat_material(opened) != expected_material:
+                return {
+                    "state": "changed",
+                    "stat": expected_material,
+                    "opened": stat_material(opened),
+                }, b"<changed>"
+            source_bytes = source.read(MAX_SOURCE_JSON_BYTES + 1)
+            after = os.fstat(source.fileno())
+            after_material = stat_material(after)
+            if after_material != expected_material:
+                return {
+                    "state": "changed",
+                    "stat": expected_material,
+                    "after": after_material,
+                }, source_bytes
+            return {"state": "regular", "stat": expected_material}, source_bytes
+    except OSError as error:
+        return {"state": "unreadable", "stat": expected_material, "errno": error.errno or 0}, b"<unreadable>"
 
 
 def _preview_route(request_target: str, host: str, expected_host: str, name: str) -> tuple[int, str | None]:
@@ -4068,9 +4525,9 @@ def _browser_check(
         raise DiagramError("browser quality profile must be standard or showcase")
     html_path = html_path.resolve(strict=True)
     _check(html_path, repo_root)
-    html_bytes = html_path.read_bytes()
+    html_bytes = _read_packaged_artifact(html_path, "html", MAX_PACKAGED_HTML_BYTES)
     _check(html_path, repo_root)
-    if html_path.read_bytes() != html_bytes:
+    if _read_packaged_artifact(html_path, "html", MAX_PACKAGED_HTML_BYTES) != html_bytes:
         raise DiagramError("HTML changed while browser evidence was being prepared")
     browser_path = Path(browser).resolve() if browser else None
     if browser_path is None:
@@ -4201,12 +4658,25 @@ def _browser_check(
                     raise DiagramError(f"browser CSS viewport is {css_width}×{css_height}px, expected {viewport[0]}×{viewport[1]}px at {view}/{theme}")
                 if scroll_width > css_width:
                     raise DiagramError(f"document overflows horizontally by {scroll_width - css_width}px at {view}/{theme}")
-                png = capture_path.read_bytes()
+                remaining_capture_bytes = _ensure_browser_capture_budget(capture_bytes, b"")
+                capture_limit = min(MAX_BROWSER_CAPTURE_BYTES, remaining_capture_bytes)
+                too_large_message = f"browser screenshot exceeds its {MAX_BROWSER_CAPTURE_BYTES:,}-byte limit at {view}/{theme}"
+                if capture_limit < MAX_BROWSER_CAPTURE_BYTES:
+                    too_large_message = "browser screenshots exceed their combined byte limit"
+                png = _read_bounded_regular_file(
+                    capture_path,
+                    capture_limit,
+                    unsafe_message=f"browser screenshot is not a regular file at {view}/{theme}",
+                    read_message=f"browser screenshot could not be read at {view}/{theme}",
+                    changed_message=f"browser screenshot changed during validation at {view}/{theme}",
+                    too_large_message=too_large_message,
+                )
                 _, _, width, height, _, _ = _png_decode(
                     png, (viewport[0], viewport[1] + chromium_inset)
                 )
                 if chromium_inset:
                     png = _png_crop_bottom(png, viewport[1])
+                _ensure_browser_capture_budget(capture_bytes, png)
                 _, _, width, height, _, _ = _png_decode(png, viewport)
                 capture_bytes[capture_name] = png
                 filename = f"{browser_slug}.browser.png" if view == "desktop" and theme == "light" and browser_slug else f"{browser_slug}.showcase-{capture_name}.png" if browser_slug else None
@@ -4217,7 +4687,7 @@ def _browser_check(
                 })
 
         _check(html_path, repo_root)
-        if html_path.read_bytes() != html_bytes:
+        if _read_packaged_artifact(html_path, "html", MAX_PACKAGED_HTML_BYTES) != html_bytes:
             raise DiagramError("HTML changed during browser evidence capture")
         primary = capture_bytes["desktop-light"]
         primary_record = next(item for item in capture_records if item["viewport_name"] == "desktop" and item["theme"] == "light")
@@ -4675,6 +5145,111 @@ def self_test() -> None:
         subprocess.run(["git", "-C", str(root), "-c", "user.name=Patpat Test", "-c", "user.email=patpat-test@example.invalid", "commit", "--quiet", "-m", "fixture"], check=True)
         subprocess.run(["git", "-C", str(root), "remote", "add", "origin", "https://user:secret@example.invalid/owner/repo.git?token=secret"], check=True)
 
+        initial_revision = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+        ).stdout.strip()
+
+        def commit_symlink_entry(path: str, target: str, message: str) -> str:
+            blob = subprocess.run(
+                ["git", "-C", str(root), "hash-object", "-w", "--stdin"],
+                input=target.encode("utf-8"),
+                check=True,
+                capture_output=True,
+            ).stdout.decode("ascii").strip()
+            subprocess.run(
+                ["git", "-C", str(root), "update-index", "--add", "--cacheinfo", f"120000,{blob},{path}"],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(root), "-c", "user.name=Patpat Test", "-c", "user.email=patpat-test@example.invalid", "commit", "--quiet", "-m", message],
+                check=True,
+            )
+            return subprocess.run(
+                ["git", "-C", str(root), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+            ).stdout.strip()
+
+        original_git_output = diagram_model._git_output
+        git_calls: list[tuple[str, ...]] = []
+
+        def counted_git_output(git_root: Path, *args: str, max_output_bytes: int) -> bytes | None:
+            git_calls.append(args)
+            return original_git_output(git_root, *args, max_output_bytes=max_output_bytes)
+
+        diagram_model._git_output = counted_git_output
+        try:
+            first_digest = diagram_model._committed_evidence_digest(
+                root, initial_revision, "source.txt", diagram_model.MAX_TOTAL_EVIDENCE_SOURCE_BYTES
+            )
+            second_digest = diagram_model._committed_evidence_digest(
+                root, initial_revision, "source.txt", diagram_model.MAX_TOTAL_EVIDENCE_SOURCE_BYTES
+            )
+            if first_digest != second_digest or len(git_calls) != 2:
+                raise AssertionError("repeated committed evidence validation spawned duplicate Git reads")
+            try:
+                diagram_model._committed_evidence_digest(
+                    root, initial_revision, "source.txt", first_digest[1] - 1
+                )
+            except DiagramError as error:
+                if "total source limit" not in str(error):
+                    raise
+            else:
+                raise AssertionError("cached committed bytes bypassed the per-validation aggregate budget")
+        finally:
+            diagram_model._git_output = original_git_output
+
+        try:
+            diagram_model._committed_evidence_snapshot(root, initial_revision, "missing-from-tree.txt", diagram_model.MAX_TOTAL_EVIDENCE_SOURCE_BYTES)
+        except DiagramError as error:
+            raise AssertionError(f"an absent Git path was not represented as an empty tree result: {error}") from error
+        else:
+            if diagram_model._committed_evidence_snapshot(root, initial_revision, "missing-from-tree.txt", diagram_model.MAX_TOTAL_EVIDENCE_SOURCE_BYTES) != (None, 0):
+                raise AssertionError("an absent Git path was not represented as working-tree-only evidence")
+
+        original_git_output = diagram_model._git_output
+
+        def failed_tree_lookup(git_root: Path, *args: str, max_output_bytes: int) -> bytes | None:
+            if args and args[0] == "ls-tree" and args[-1] == "git-error.txt":
+                return None
+            return original_git_output(git_root, *args, max_output_bytes=max_output_bytes)
+
+        diagram_model._git_output = failed_tree_lookup
+        try:
+            try:
+                diagram_model._committed_evidence_snapshot(root, initial_revision, "git-error.txt", diagram_model.MAX_TOTAL_EVIDENCE_SOURCE_BYTES)
+            except DiagramError as error:
+                if "committed source tree could not be read" not in str(error):
+                    raise AssertionError(f"a Git tree error failed for the wrong reason: {error}") from error
+            else:
+                raise AssertionError("a failed Git tree lookup was treated as an absent path")
+        finally:
+            diagram_model._git_output = original_git_output
+
+        committed_symlink = root / "committed-link.txt"
+        committed_link_revision = commit_symlink_entry("committed-link.txt", "source.txt", "symlink fixture")
+        committed_symlink.write_text("source.txt\n", encoding="utf-8")
+        committed_link_spec = _sample_spec("architecture", "Committed symlink is not source")
+        committed_link_spec["evidence"][0].update(
+            {"path": "committed-link.txt", "end_line": 1}
+        )
+        try:
+            validate_spec(committed_link_spec, root)
+        except DiagramError as error:
+            if "committed source path is not a regular file" not in str(error):
+                raise
+        else:
+            raise AssertionError(f"committed Git symlink {committed_link_revision} was accepted after replacing its worktree entry")
+
+        commit_symlink_entry("committed-parent", "target", "symlink parent fixture")
+        committed_parent = root / "committed-parent"
+        committed_parent.mkdir()
+        (committed_parent / "source.py").write_text("working tree only\n", encoding="utf-8")
+        parent_spec = _sample_spec("architecture", "Symlink parent provenance")
+        parent_spec["evidence"][0].update({"path": "committed-parent/source.py", "end_line": 1})
+        parent_result = validate_spec(parent_spec, root)
+        parent_snapshot = parent_result["snapshots"]["S1"]
+        if parent_snapshot.get("snapshot") != "working-tree" or parent_snapshot.get("committed_file_sha256") is not None:
+            raise AssertionError(f"a path below a committed symlink parent was not kept working-tree-only: {parent_snapshot}")
+
         def expect_evidence_rejection(path: str, expected: str) -> None:
             invalid = _sample_spec("architecture", "Rejected evidence path")
             invalid["evidence"][0]["path"] = path
@@ -4739,6 +5314,43 @@ def self_test() -> None:
         finally:
             diagram_model.MAX_TOTAL_EVIDENCE_SOURCE_BYTES = original_total_limit
 
+        committed_source_bytes = (root / "source.txt").read_bytes()
+        committed_revision = git_context(root)["revision"]
+        if not isinstance(committed_revision, str):
+            raise AssertionError("committed evidence budget fixture has no repository revision")
+        original_git_output = diagram_model._git_output
+        committed_blob_reads = []
+
+        def record_committed_blob_read(
+            git_root: Path, *args: str, max_output_bytes: int
+        ) -> bytes | None:
+            if args and args[0] == "cat-file":
+                committed_blob_reads.append(args)
+            return original_git_output(git_root, *args, max_output_bytes=max_output_bytes)
+
+        diagram_model._git_output = record_committed_blob_read
+        diagram_model._committed_evidence_snapshot.cache_clear()
+        try:
+            try:
+                diagram_model._committed_evidence_digest(
+                    root,
+                    committed_revision,
+                    "source.txt",
+                    len(committed_source_bytes) - 1,
+                )
+            except DiagramError as error:
+                if "total source limit" not in str(error):
+                    raise AssertionError(
+                        f"committed evidence budget rejection did not explain the total limit: {error}"
+                    ) from error
+            else:
+                raise AssertionError("committed evidence read exceeded its remaining aggregate budget")
+            if committed_blob_reads:
+                raise AssertionError("committed evidence read a Git blob before enforcing the remaining budget")
+        finally:
+            diagram_model._git_output = original_git_output
+            diagram_model._committed_evidence_snapshot.cache_clear()
+
         specs_dir = root.parent / "specs"
         specs_dir.mkdir()
         oversized_path = specs_dir / "oversized.json"
@@ -4750,6 +5362,92 @@ def self_test() -> None:
                 raise AssertionError("oversized JSON input did not report the source limit") from error
         else:
             raise AssertionError("oversized JSON input was read and parsed past the byte limit")
+        with oversized_path.open("wb") as oversized_source:
+            oversized_source.truncate(64 * 1024 * 1024 + 1)
+        preview_stat, preview_prefix = _preview_invalid_source(oversized_path)
+        if len(preview_prefix) != MAX_SOURCE_JSON_BYTES + 1 or preview_stat.get("stat", {}).get("size") != 64 * 1024 * 1024 + 1:
+            raise AssertionError("oversized preview fingerprint did not preserve size metadata with a bounded prefix")
+        preview_fingerprint, preview_error = _preview_fingerprint(oversized_path, None)
+        repeated_fingerprint, repeated_error = _preview_fingerprint(oversized_path, None)
+        if not preview_error or repeated_error != preview_error or repeated_fingerprint != preview_fingerprint:
+            raise AssertionError("oversized invalid preview source did not produce a stable bounded fingerprint")
+        preview_target = specs_dir / "preview-target.json"
+        preview_link = specs_dir / "preview-link.json"
+        preview_target.write_text('{"a": ,}', encoding="utf-8")
+        try:
+            preview_link.symlink_to(preview_target.name)
+        except OSError:
+            pass
+        else:
+            linked_fingerprint, linked_error = _preview_fingerprint(preview_link, None)
+            preview_target.write_text('{"b": ,}', encoding="utf-8")
+            changed_linked_fingerprint, changed_linked_error = _preview_fingerprint(preview_link, None)
+            if not linked_error or linked_error != changed_linked_error or linked_fingerprint == changed_linked_fingerprint:
+                raise AssertionError("preview fingerprint missed changed bytes behind an invalid source symlink")
+            preview_link.unlink()
+        original_read_bytes = Path.read_bytes
+
+        def reject_oversized_preview_read(path: Path) -> bytes:
+            if path == oversized_path:
+                raise AssertionError("preview fingerprint used an unbounded read for oversized input")
+            return original_read_bytes(path)
+
+        Path.read_bytes = reject_oversized_preview_read
+        try:
+            _preview_fingerprint(oversized_path, None)
+        finally:
+            Path.read_bytes = original_read_bytes
+        oversized_journal_path = root.parent / "oversized-transaction.json"
+        with oversized_journal_path.open("wb") as oversized_journal:
+            oversized_journal.truncate(MAX_TRANSACTION_JOURNAL_BYTES + 1)
+        try:
+            _read_transaction_journal(oversized_journal_path)
+        except DiagramError as error:
+            if "64 KB" not in str(error):
+                raise AssertionError(f"oversized transaction journal did not report its limit: {error}") from error
+        else:
+            raise AssertionError("oversized transaction journal was read past its byte limit")
+        oversized_artifact_path = root.parent / "oversized-recovery.html"
+        with oversized_artifact_path.open("wb") as oversized_artifact:
+            oversized_artifact.truncate(MAX_PACKAGED_HTML_BYTES + 1)
+        oversized_backup_path = root.parent / "oversized-recovery-backup.html"
+        original_os_open = os.open
+
+        def reject_oversized_transaction_open(path: Any, flags: int, *args: Any, **kwargs: Any) -> int:
+            if Path(path) == oversized_artifact_path:
+                raise AssertionError("transaction artifact was opened before its size limit was enforced")
+            return original_os_open(path, flags, *args, **kwargs)
+
+        os.open = reject_oversized_transaction_open
+        try:
+            for label, action in (
+                (
+                    "hash",
+                    lambda: _file_sha256(
+                        oversized_artifact_path,
+                        _transaction_artifact_limit(oversized_artifact_path.name),
+                    ),
+                ),
+                (
+                    "copy",
+                    lambda: _copy_file_bounded(
+                        oversized_artifact_path,
+                        oversized_backup_path,
+                        _transaction_artifact_limit(oversized_artifact_path.name),
+                    ),
+                ),
+            ):
+                try:
+                    action()
+                except DiagramError as error:
+                    if "byte limit" not in str(error):
+                        raise AssertionError(f"oversized transaction {label} failed for the wrong reason: {error}") from error
+                else:
+                    raise AssertionError(f"oversized transaction artifact unexpectedly passed {label}")
+        finally:
+            os.open = original_os_open
+        if oversized_backup_path.exists():
+            raise AssertionError("oversized transaction artifact left a backup copy")
         outputs_dir = root.parent / "outputs"
         outputs_dir.mkdir()
         _assert_windows_output_lock_retry()
@@ -5047,6 +5745,26 @@ def self_test() -> None:
                 pass
             else:
                 raise AssertionError(f"{diagram_type} unexpectedly overwrote an existing artifact")
+        artifact_html = outputs_dir / "architecture.html"
+        for kind, limit in PACKAGED_ARTIFACT_LIMITS.items():
+            artifact_path = outputs_dir / {
+                "html": "architecture.html",
+                "source": "architecture.diagram.json",
+                "svg": "architecture.svg",
+                "receipt": "architecture.receipt.json",
+            }[kind]
+            original_bytes = artifact_path.read_bytes()
+            with artifact_path.open("wb") as oversized:
+                oversized.truncate(limit + 1)
+            try:
+                _check(artifact_html, root)
+            except DiagramError as error:
+                if "limit" not in str(error).lower():
+                    raise AssertionError(f"oversized {kind} artifact did not report its byte limit: {error}") from error
+            else:
+                raise AssertionError(f"oversized {kind} artifact unexpectedly passed packaged-artifact checking")
+            finally:
+                artifact_path.write_bytes(original_bytes)
         if git_context(None)["revision"] is not None:
             raise AssertionError("brief-only diagrams unexpectedly acquired Git provenance")
         if _projected_readability({"width": 5000})["passed"]:
@@ -5351,6 +6069,88 @@ def self_test() -> None:
         else:
             raise AssertionError("architecture delta accepted snapshots without a repository origin")
         if os.name == "posix" and hasattr(os, "geteuid"):
+            oversized_recovery_stage = Path(tempfile.mkdtemp(prefix=".patpat-diagram-tx-budget-", dir=outputs_dir))
+            oversized_recovery_slug = "recovery-budget"
+            oversized_recovery_names = sorted(_transaction_names("browser-showcase", oversized_recovery_slug))
+            oversized_recovery_entries = []
+            for index, filename in enumerate(oversized_recovery_names):
+                target = outputs_dir / filename
+                if filename.endswith(".png"):
+                    with target.open("wb") as oversized_capture:
+                        oversized_capture.truncate(8_000_001)
+                else:
+                    target.write_bytes(b"valid bounded companion artifact")
+                oversized_recovery_entries.append({
+                    "name": filename, "staged": f"new-{index}", "backup": f"old-{index}",
+                    "had_existing": False, "old_sha256": None, "new_sha256": "0" * 64,
+                })
+            oversized_recovery = {
+                "tool": "patpat-repository-diagram", "schema_version": 1, "owner_pid": os.getpid(),
+                "phase": "committed", "kind": "browser-showcase", "slug": oversized_recovery_slug,
+                "entries": oversized_recovery_entries,
+            }
+            original_os_open = os.open
+            recovery_artifact_opens = []
+
+            def record_recovery_artifact_open(path: Any, *args: Any, **kwargs: Any) -> int:
+                recovery_artifact_opens.append(os.fspath(path))
+                return original_os_open(path, *args, **kwargs)
+
+            os.open = record_recovery_artifact_open
+            try:
+                try:
+                    _recover_transaction(
+                        oversized_recovery_stage, outputs_dir, oversized_recovery, trusted_current=True
+                    )
+                except DiagramError as error:
+                    if "recovery target screenshots exceed their combined byte limit" not in str(error):
+                        raise AssertionError(f"oversized recovery set failed for the wrong reason: {error}") from error
+                else:
+                    raise AssertionError("recovery read an aggregate PNG set above its combined byte limit")
+                if recovery_artifact_opens:
+                    raise AssertionError("recovery opened artifacts before enforcing its aggregate PNG limit")
+            finally:
+                os.open = original_os_open
+
+            mixed_recovery_stage = Path(tempfile.mkdtemp(prefix=".patpat-diagram-tx-mixed-", dir=outputs_dir))
+            mixed_recovery_slug = "mixed-recovery"
+            mixed_recovery_names = sorted(_transaction_names("browser-showcase", mixed_recovery_slug))
+            mixed_recovery_entries = []
+            mixed_recovery_old_digests = {}
+            large_capture = b"\0" * MAX_BROWSER_CAPTURE_BYTES
+            png_index = 0
+            for index, filename in enumerate(mixed_recovery_names):
+                target = outputs_dir / filename
+                if filename.endswith(".png"):
+                    old_data = large_capture if png_index < 3 else b""
+                    new_data = b"" if png_index < 3 else large_capture
+                    if png_index < 3:
+                        (mixed_recovery_stage / f"new-{index}").write_bytes(new_data)
+                    png_index += 1
+                else:
+                    old_data, new_data = b"old companion", b"new companion"
+                target.write_bytes(old_data if filename.endswith(".png") and len(old_data) else new_data)
+                (mixed_recovery_stage / f"old-{index}").write_bytes(old_data)
+                mixed_recovery_old_digests[filename] = hashlib.sha256(old_data).hexdigest()
+                mixed_recovery_entries.append({
+                    "name": filename, "staged": f"new-{index}", "backup": f"old-{index}",
+                    "had_existing": True, "old_sha256": hashlib.sha256(old_data).hexdigest(),
+                    "new_sha256": hashlib.sha256(new_data).hexdigest(),
+                })
+            mixed_recovery = {
+                "tool": "patpat-repository-diagram", "schema_version": 1, "owner_pid": os.getpid(),
+                "phase": "prepared", "kind": "browser-showcase", "slug": mixed_recovery_slug,
+                "entries": mixed_recovery_entries,
+            }
+            _recover_transaction(mixed_recovery_stage, outputs_dir, mixed_recovery, trusted_current=True)
+            if mixed_recovery_stage.exists():
+                raise AssertionError("valid mixed old/new screenshot state was not recovered")
+            if any(
+                _file_sha256(outputs_dir / name, _transaction_artifact_limit(name)) != digest
+                for name, digest in mixed_recovery_old_digests.items()
+            ):
+                raise AssertionError("valid mixed old/new screenshot state did not restore previous artifact contents")
+
             recovery_stage = Path(tempfile.mkdtemp(prefix=".patpat-diagram-tx-recovery-", dir=outputs_dir))
             recovery_files = [f"recovery.{suffix}" for suffix in ("diagram.json", "svg", "html", "receipt.json")]
             recovery_entries = []
