@@ -1602,7 +1602,7 @@ def set_gate(
                     invalidate_assignment(state, unit_id, timestamp, advance_generation=True)
             state["gates"]["delivery"] = {
                 "open": False,
-                "reason": "dispatch closed and active assignments revoked",
+                "reason": "dispatch closed and all issued assignments revoked",
                 "updated_at": timestamp,
             }
         timestamp = now()
@@ -2223,6 +2223,13 @@ def run_self_test() -> None:
         assign_unit(
             root, "policy-program", "consumer", "Policy Worker", "worktree-consumer", 0
         )
+        policy_head = git_text(root, "rev-parse", "HEAD")
+        assert policy_head is not None
+        set_head(root, "policy-program", "contract", policy_head, None, 1)
+        append_inbox(
+            root, "policy-program", "worker-update", "blocked worker update", "contract",
+            policy_head, "Policy Worker", "worktree-contract", 1,
+        )
         expect_error(
             lambda: set_unit_state(root, "policy-program", "contract", "pending", 1),
             "worker assignment limit reached",
@@ -2254,9 +2261,11 @@ def run_self_test() -> None:
             "dispatch cutoff reached",
         )
         set_unit_state(root, "policy-program", "consumer", "running", 1)
-        policy_head = git_text(root, "rev-parse", "HEAD")
-        assert policy_head is not None
         set_head(root, "policy-program", "consumer", policy_head, None, 1)
+        append_inbox(
+            root, "policy-program", "worker-update", "completed worker update", "consumer",
+            policy_head, "Policy Worker", "worktree-consumer", 1,
+        )
         policy_evidence = root / "policy-evidence.txt"
         policy_evidence.write_text("work completed after dispatch cutoff\n", encoding="utf-8")
         record_verdict(
@@ -2269,7 +2278,33 @@ def run_self_test() -> None:
         )
         set_unit_state(root, "policy-program", "consumer", "completed", 1)
         assert status(root, "policy-program", brief=True)["active_assignment_count"] == 0
+        blocked_policy_unit = load_state(root, "policy-program")["units"]["contract"]
+        blocked_policy_generation = blocked_policy_unit["assignment"]["generation"]
+        completed_policy_unit = load_state(root, "policy-program")["units"]["consumer"]
+        completed_policy_generation = completed_policy_unit["assignment"]["generation"]
+        assert completed_policy_unit["verification"] is not None
+        assert completed_policy_unit["review"] is not None
         set_gate(root, "policy-program", "dispatch", False, "close expired dispatch")
+        closed_policy_state = load_state(root, "policy-program")
+        for unit_id, generation in (
+            ("contract", blocked_policy_generation),
+            ("consumer", completed_policy_generation),
+        ):
+            closed_policy_unit = closed_policy_state["units"][unit_id]
+            if (
+                closed_policy_unit["state"] != "pending"
+                or closed_policy_unit["verification"] is not None
+                or closed_policy_unit["review"] is not None
+                or assignment_snapshot(closed_policy_unit) is not None
+                or closed_policy_unit["assignment"]["generation"] != generation + 1
+            ):
+                raise AssertionError(
+                    f"dispatch closure must revoke {unit_id} assignment tokens and reset their proof"
+                )
+        if closed_policy_state["inbox"]:
+            raise AssertionError("dispatch closure must clear inbox events for revoked assignments")
+        if closed_policy_state["gates"]["delivery"]["reason"] != "dispatch closed and all issued assignments revoked":
+            raise AssertionError("dispatch closure receipt must report revocation of every issued assignment")
         expect_error(
             lambda: set_gate(
                 root,
@@ -2296,6 +2331,12 @@ def run_self_test() -> None:
         reopened_policy_status = status(root, "policy-program", brief=True)
         assert reopened_policy_status["gates"]["dispatch"]["open"]
         assert not reopened_policy_status["dispatch_cutoff_reached"]
+        expect_error(
+            lambda: set_unit_state(
+                root, "policy-program", "consumer", "running", completed_policy_generation
+            ),
+            "current assignment",
+        )
 
         tampered_receipt = json.loads(json.dumps(parallel_receipt))
         tampered_receipt["plan_digest"] = "f" * 64
