@@ -134,6 +134,22 @@ def bounded_string(value: Any, field: str, maximum: int = MAX_NAME_LENGTH) -> st
     return value
 
 
+def normalized_pull_request_state(raw_state: Any, merged: Any) -> str:
+    state = bounded_string(raw_state, "pullRequest.state").upper()
+    if state not in {"OPEN", "CLOSED", "MERGED"}:
+        raise ObserverError(f"pullRequest.state is unsupported: {state}")
+    if not isinstance(merged, bool):
+        raise ObserverError("pullRequest.merged must be a boolean")
+    normalized = {
+        ("OPEN", False): "open",
+        ("CLOSED", False): "closed",
+        ("MERGED", True): "merged",
+    }.get((state, merged))
+    if normalized is None:
+        raise ObserverError("pullRequest.state conflicts with pullRequest.merged")
+    return normalized
+
+
 def normalize_check(raw: Any, index: int) -> dict[str, str | None]:
     check = mapping(raw, f"checks[{index}]")
     kind = check.get("__typename")
@@ -273,13 +289,8 @@ def observation_document(
     if len(check_names) != len(set(check_names)):
         raise ObserverError("GitHub returned duplicate check names; observation is ambiguous")
 
-    raw_state = bounded_string(pr.get("state"), "pullRequest.state").upper()
     merged = pr.get("merged")
-    if not isinstance(merged, bool):
-        raise ObserverError("pullRequest.merged must be a boolean")
-    state = "merged" if merged else {"OPEN": "open", "CLOSED": "closed"}.get(raw_state)
-    if state is None:
-        raise ObserverError(f"pullRequest.state is unsupported: {raw_state}")
+    state = normalized_pull_request_state(pr.get("state"), merged)
     draft = pr.get("isDraft")
     if not isinstance(draft, bool):
         raise ObserverError("pullRequest.isDraft must be a boolean")
@@ -348,16 +359,16 @@ def observation_document(
 
 
 def provider_base_commit_oid(response: Any) -> tuple[str, str]:
-    """Return the live open-PR base tip or the base OID recorded on a merged PR."""
+    """Return the live unmerged-PR base tip or the base OID recorded on a merged PR."""
     root = mapping(response, "response")
     if root.get("errors"):
         raise ObserverError("GitHub GraphQL returned errors")
     repository = mapping(mapping(root.get("data"), "data").get("repository"), "repository")
     pull_request = mapping(repository.get("pullRequest"), "repository.pullRequest")
-    merged = pull_request.get("merged")
-    if not isinstance(merged, bool):
-        raise ObserverError("pullRequest.merged must be a boolean")
-    if merged:
+    state = normalized_pull_request_state(
+        pull_request.get("state"), pull_request.get("merged")
+    )
+    if state == "merged":
         base_oid = bounded_string(
             pull_request.get("baseRefOid"), "pullRequest.baseRefOid", 40
         ).lower()
@@ -523,6 +534,40 @@ def self_test() -> None:
         "observed_at": "2026-08-29T12:00:00Z",
     }
     document = observation_document(fixture(), **common)
+    closed_fixture = fixture()
+    closed_fixture["data"]["repository"]["pullRequest"].update(
+        state="CLOSED", merged=False
+    )
+    closed_fixture["data"]["repository"]["pullRequest"]["baseRef"] = {
+        "name": "main",
+        "target": {"__typename": "Commit", "oid": "0" * 40},
+    }
+    closed_document = observation_document(closed_fixture, **common)
+    assert closed_document["observation"]["state"] == "closed"
+    assert provider_base_commit_oid(closed_fixture) == (
+        "0" * 40,
+        "live_base_ref_target",
+    )
+    for raw_state, merged in (("CLOSED", True), ("OPEN", True), ("MERGED", False)):
+        inconsistent = fixture()
+        pull_request = inconsistent["data"]["repository"]["pullRequest"]
+        pull_request.update(state=raw_state, merged=merged)
+        try:
+            observation_document(inconsistent, **common)
+        except ObserverError as error:
+            assert "conflicts" in str(error)
+        else:
+            raise AssertionError(
+                f"inconsistent pull request state was accepted: {raw_state}/{merged}"
+            )
+        try:
+            provider_base_commit_oid(inconsistent)
+        except ObserverError as error:
+            assert "conflicts" in str(error)
+        else:
+            raise AssertionError(
+                f"base observation accepted inconsistent pull request state: {raw_state}/{merged}"
+            )
     def base_ref_fixture() -> dict[str, Any]:
         response = fixture()
         response["data"]["repository"]["pullRequest"]["baseRef"] = {
