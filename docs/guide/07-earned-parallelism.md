@@ -6,7 +6,7 @@ Parallel generation multiplies output. It does not multiply trust. Patpat starts
 
 ## Start serial
 
-Run the task through inspection, implementation, verification, and review with one owner. Record the failure modes. Encode recurring failures as constraints or checks. Scale only after the path is repeatably trustworthy.
+Run the task through inspection, implementation, verification, and review with one owner. Record the failure modes. Encode recurring failures as constraints or checks. For every current writable program, keep the worker limit at 1 until one plan-specific pilot unit has fresh verification and review at its current head and the integration owner has inspected its actual changed paths. Earlier representative evidence admits consideration of parallelism but does not replace this pilot. This path-inspection gate is currently an integration-owner contract, not a receipt persisted or enforced by `program_state.py`. Scale only after the path is repeatably trustworthy.
 
 ## Isolate before running concurrently
 
@@ -15,6 +15,7 @@ Writable workers need separate worktrees or host-enforced sandboxes. Each worker
 - one bounded brief;
 - explicit file ownership;
 - a proof surface;
+- a rough unit timebox and a partial-evidence return at expiry;
 - a return contract;
 - no merge authority.
 
@@ -45,7 +46,7 @@ Set `PLAN_DIGEST` to the validated plan digest. The `supporting_evidence` map ha
 
 Workers return typed cards with scope, proof, receipts, objections, reusable parts, verdict, and next frontier. Preserve those artifacts; discard transcript-shaped context.
 
-Pass the returned `worker_limit` as `set-gate dispatch open --worker-limit <n>`. The durable state store enforces the cap over assigned units in `pending` or `running` state; blocked and completed units release their slots. Supply `--deadline <future-UTC-timestamp> --integration-reserve-minutes <n>` together to stop new assignments and reactivations at the derived cutoff while current assignments finish and record proof. If no budget is saved, dispatch without a deadline is unbounded; reopening preserves its saved budget unless `--clear-budget` is passed. Closing dispatch invalidates every issued assignment, including completed units: it advances each generation, clears its assignment, unit inbox, verification, and review, and resets it to pending. Reopening requires fresh assignment calls and fresh proof. This limit covers recorded assignments and does not measure or cap host processes. The plan checks declared ownership overlap but does not inspect future diffs, so the integration owner still compares each candidate's changed paths with its declared files before recording the head.
+Open dispatch for the pilot with `set-gate dispatch open --worker-limit 1`. After the pilot gate passes, raise the limit to the returned `worker_limit`. The durable state store enforces the cap over assigned units in `pending` or `running` state; blocked and completed units release their slots. Supply `--deadline <future-UTC-timestamp> --integration-reserve-minutes <n>` together to stop new assignments and reactivations at the derived cutoff while current assignments finish and record proof. If no budget is saved, dispatch without a deadline is unbounded; reopening preserves its saved budget unless `--clear-budget` is passed. Closing dispatch invalidates every issued assignment, including completed units: it advances each generation, clears its assignment, unit inbox, verification, and review, and resets it to pending. Reopening requires fresh assignment calls and fresh proof. This limit covers recorded assignments and does not measure or cap host processes. The plan checks declared ownership overlap but does not inspect future diffs, so the integration owner still compares each candidate's changed paths with its declared files before recording the head.
 
 Do not use parallelism to hide an unclear contract. Resolve shared shapes and integration boundaries before fan-out.
 

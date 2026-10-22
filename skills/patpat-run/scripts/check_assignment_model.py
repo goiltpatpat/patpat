@@ -10,6 +10,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -20,9 +22,17 @@ BASE_CONFIG = "AssignmentGeneration.cfg"
 MUTANT_CONFIG = "AssignmentGeneration.mutant.cfg"
 REJECTED_WRITE_MUTANT_CONFIG = "AssignmentGeneration.rejected-write-mutant.cfg"
 SUCCESS_MARKER = "No error has been found."
-MUTANT_MARKER = "Invariant NoStaleWrites is violated."
-REJECTED_WRITE_MUTANT_MARKER = "Invariant WritesMatchAcceptedAttempts is violated."
+MUTANT_INVARIANT = "NoStaleWrites"
+REJECTED_WRITE_MUTANT_INVARIANT = "WritesMatchAcceptedAttempts"
 TLC_VERSION_PATTERN = re.compile(r"^TLC2 Version [^\r\n]+", re.MULTILINE)
+TLC_COMPLETION_PATTERN = re.compile(r"^Model checking completed\.", re.MULTILINE)
+TLC_ERROR_PATTERN = re.compile(r"^Error: (.+)$", re.MULTILINE)
+TLC_INVARIANT_PATTERN = re.compile(
+    r"^Error: Invariant ([A-Za-z][A-Za-z0-9_]*) is violated"
+    r"(?: by the initial state)?\.$",
+    re.MULTILINE,
+)
+TLC_TRACE_PATTERN = re.compile(r"^State 1:", re.MULTILINE)
 INITIAL_STATES_PATTERN = re.compile(
     r"^Finished computing initial states:\s*([0-9][0-9,]*)\s+distinct states? generated\b",
     re.MULTILINE,
@@ -33,19 +43,83 @@ STATE_COUNTS_PATTERN = re.compile(
     re.MULTILINE,
 )
 TLC_TIMEOUT_SECONDS = 120
+TLC_OUTPUT_LIMIT_BYTES = 8 * 1024 * 1024
+
+
+@dataclass(frozen=True)
+class TlcResult:
+    returncode: int
+    output: str
+
+
+def normalize_tlc_output(output: str) -> str:
+    return output.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def run_bounded(
+    command: list[str], work_directory: Path, *, output_limit: int
+) -> TlcResult:
+    """Run a command while bounding captured output in memory."""
+    process = subprocess.Popen(
+        command,
+        cwd=work_directory,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    if process.stdout is None:  # pragma: no cover - guaranteed by PIPE
+        process.kill()
+        raise RuntimeError("TLC output pipe was not created")
+
+    output = bytearray()
+    overflow = threading.Event()
+    reader_errors: list[BaseException] = []
+
+    def read_output() -> None:
+        try:
+            while chunk := process.stdout.read(64 * 1024):
+                remaining = output_limit - len(output)
+                if remaining > 0:
+                    output.extend(chunk[:remaining])
+                if len(chunk) > remaining:
+                    overflow.set()
+                    process.kill()
+        except (OSError, ValueError) as error:
+            reader_errors.append(error)
+
+    reader = threading.Thread(target=read_output, name="patpat-tlc-output", daemon=True)
+    reader.start()
+    try:
+        returncode = process.wait(timeout=TLC_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired as error:
+        process.kill()
+        process.wait()
+        reader.join()
+        decoded = output.decode("utf-8", errors="replace")
+        raise subprocess.TimeoutExpired(command, error.timeout, output=decoded) from error
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+    reader.join()
+    process.stdout.close()
+    if reader_errors:
+        raise RuntimeError(f"failed to capture TLC output: {reader_errors[0]}")
+    if overflow.is_set():
+        raise RuntimeError(f"TLC output exceeded the {output_limit}-byte limit")
+    return TlcResult(
+        returncode,
+        normalize_tlc_output(output.decode("utf-8", errors="replace")),
+    )
 
 
 def run_tlc(
     java: str, jar: Path, config_name: str, work_directory: Path
-) -> subprocess.CompletedProcess[str]:
-    command = [java, "-jar", str(jar), "-config", config_name, SPEC_FILE]
-    return subprocess.run(
+) -> TlcResult:
+    command = [java, "-jar", str(jar), "-continue", "-config", config_name, SPEC_FILE]
+    return run_bounded(
         command,
-        cwd=work_directory,
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=TLC_TIMEOUT_SECONDS,
+        work_directory,
+        output_limit=TLC_OUTPUT_LIMIT_BYTES,
     )
 
 
@@ -65,18 +139,67 @@ def resolve_java(java: str) -> str:
     raise FileNotFoundError(f"Java executable does not exist: {java}")
 
 
-def require_counterexample(
-    result: subprocess.CompletedProcess[str], marker: str, label: str
-) -> str:
-    output = result.stdout + result.stderr
-    if result.returncode == 0 or marker not in output:
-        sys.stderr.write(output)
-        raise AssertionError(f"TLC did not find the expected {label} counterexample")
+def require_complete_output(output: str) -> None:
+    if TLC_COMPLETION_PATTERN.search(output) is None:
+        raise RuntimeError("TLC output is missing the model-checking completion marker")
+
+
+def require_clean_baseline(
+    result: TlcResult,
+) -> tuple[str, tuple[int, int, int], re.Match[str]]:
+    output = normalize_tlc_output(result.output)
+    require_complete_output(output)
+    if result.returncode != 0:
+        raise RuntimeError(f"TLC base model exited with status {result.returncode}")
+    errors = TLC_ERROR_PATTERN.findall(output)
+    if errors:
+        raise RuntimeError(f"TLC base model reported an error: {errors[0]}")
+    if SUCCESS_MARKER not in output:
+        raise RuntimeError("TLC base model is missing the success marker")
+    state_counts = require_nonempty_state_space(output)
+    version = TLC_VERSION_PATTERN.search(output)
+    if version is None:
+        raise RuntimeError("TLC version could not be identified")
+    return output, state_counts, version
+
+
+def require_counterexample(result: TlcResult, invariant: str, label: str) -> str:
+    output = normalize_tlc_output(result.output)
+    require_complete_output(output)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"TLC {label} mutant exited abnormally with status {result.returncode}"
+        )
+    violations = TLC_INVARIANT_PATTERN.findall(output)
+    if not violations or set(violations) != {invariant}:
+        raise AssertionError(
+            f"TLC did not report only the expected {label} invariant: {invariant}"
+        )
+    allowed_errors = {
+        f"Invariant {invariant} is violated.",
+        "The behavior up to this point is:",
+    }
+    unexpected_errors = [
+        error for error in TLC_ERROR_PATTERN.findall(output) if error not in allowed_errors
+    ]
+    if unexpected_errors:
+        raise RuntimeError(f"TLC reported an unrelated error: {unexpected_errors[0]}")
+    if TLC_TRACE_PATTERN.search(output) is None:
+        raise RuntimeError("TLC counterexample is missing a nonempty state trace")
+    require_nonempty_state_space(output)
     return output
+
+
+def counterexample_count(output: str, invariant: str) -> int:
+    return sum(
+        found == invariant
+        for found in TLC_INVARIANT_PATTERN.findall(normalize_tlc_output(output))
+    )
 
 
 def require_nonempty_state_space(output: str) -> tuple[int, int, int]:
     """Require nonzero initial, generated, and distinct states in TLC output."""
+    output = normalize_tlc_output(output)
     initial_match = INITIAL_STATES_PATTERN.search(output)
     state_matches = STATE_COUNTS_PATTERN.findall(output)
     if initial_match is None or not state_matches:
@@ -91,12 +214,54 @@ def require_nonempty_state_space(output: str) -> tuple[int, int, int]:
 
 
 def self_test_contract() -> int:
+    valid_baseline_output = (
+        "TLC2 Version test\n"
+        "Finished computing initial states: 1 distinct state generated at 2026-10-22 00:00:00.\n"
+        "12 states generated, 8 distinct states found, 0 states left on queue.\n"
+        "Model checking completed. No error has been found.\n"
+    )
+    require_clean_baseline(TlcResult(0, valid_baseline_output))
+    invalid_baselines = (
+        valid_baseline_output.replace(
+            "Model checking completed.",
+            "Error: Invariant NoStaleWrites is violated.\nModel checking completed.",
+        ),
+        valid_baseline_output.replace(
+            "Model checking completed.",
+            "Error: Parsing or semantic analysis failed.\nModel checking completed.",
+        ),
+    )
+    for output in invalid_baselines:
+        try:
+            require_clean_baseline(TlcResult(0, output))
+        except RuntimeError:
+            continue
+        raise AssertionError("TLC baseline output containing an error was accepted")
+
     valid_output = (
+        "Error: Invariant NoStaleWrites is violated.\n"
+        "Error: The behavior up to this point is:\n"
+        "State 1: <Initial predicate>\n"
         "Finished computing initial states: 1 distinct state generated at 2026-10-22 00:00:00.\n"
         "  12,345 states generated, 6,789 distinct states found, 0 states left on queue.\n"
+        "Model checking completed. No error has been found.\n"
     )
     if require_nonempty_state_space(valid_output) != (1, 12345, 6789):
         raise AssertionError("TLC state-count parser returned incorrect counts")
+    require_counterexample(TlcResult(0, valid_output), MUTANT_INVARIANT, "valid")
+    repeated_output = valid_output.replace(
+        "Model checking completed.",
+        "Error: Invariant NoStaleWrites is violated.\n"
+        "Error: The behavior up to this point is:\n"
+        "State 1: <Initial predicate>\n"
+        "Model checking completed.",
+    )
+    require_counterexample(TlcResult(0, repeated_output), MUTANT_INVARIANT, "repeated")
+    require_counterexample(
+        TlcResult(0, valid_output.replace("\n", "\r\n")),
+        MUTANT_INVARIANT,
+        "CRLF",
+    )
 
     invalid_outputs = (
         "Finished computing initial states: 0 distinct states generated at 2026-10-22 00:00:00.\n"
@@ -113,7 +278,42 @@ def self_test_contract() -> int:
             continue
         raise AssertionError("TLC output without a complete nonempty state space was accepted")
 
-    print("TLC non-vacuity output contract: PASS")
+    invalid_counterexamples = (
+        TlcResult(
+            0,
+            valid_output.replace(
+                "Model checking completed.",
+                "Error: Parsing or semantic analysis failed.\nModel checking completed.",
+            ),
+        ),
+        TlcResult(0, valid_output.replace(MUTANT_INVARIANT, "WrongInvariant")),
+        TlcResult(0, valid_output.replace("State 1: <Initial predicate>\n", "")),
+        TlcResult(
+            0,
+            valid_output.replace("Model checking completed. No error has been found.\n", ""),
+        ),
+        TlcResult(137, valid_output),
+    )
+    for result in invalid_counterexamples:
+        try:
+            require_counterexample(result, MUTANT_INVARIANT, "invalid")
+        except (AssertionError, RuntimeError):
+            continue
+        raise AssertionError("invalid TLC counterexample output was accepted")
+
+    try:
+        run_bounded(
+            [sys.executable, "-c", "import sys; sys.stdout.write('x' * 4096)"],
+            SCRIPT_DIRECTORY,
+            output_limit=64,
+        )
+    except RuntimeError as error:
+        if "output exceeded" not in str(error):
+            raise
+    else:
+        raise AssertionError("oversized TLC output was accepted")
+
+    print("TLC bounded output and counterexample contract: PASS")
     return 0
 
 
@@ -137,32 +337,23 @@ def self_test(jar: Path, java: str) -> int:
             shutil.copy2(MODEL_DIRECTORY / config_name, work_directory / config_name)
 
         baseline = run_tlc(java, jar, BASE_CONFIG, baseline_directory)
-        baseline_output = baseline.stdout + baseline.stderr
-        if baseline.returncode != 0 or SUCCESS_MARKER not in baseline_output:
-            sys.stderr.write(baseline_output)
-            raise RuntimeError("TLC did not prove the bounded base model")
         try:
-            initial_states, generated_states, distinct_states = require_nonempty_state_space(
-                baseline_output
-            )
+            baseline_output, state_counts, version = require_clean_baseline(baseline)
+            initial_states, generated_states, distinct_states = state_counts
         except RuntimeError:
-            sys.stderr.write(baseline_output)
+            sys.stderr.write(baseline.output)
             raise
-        version = TLC_VERSION_PATTERN.search(baseline_output)
-        if version is None:
-            sys.stderr.write(baseline_output)
-            raise RuntimeError("TLC version could not be identified")
 
         generation_mutant = run_tlc(java, jar, MUTANT_CONFIG, mutant_directory)
         generation_mutant_output = require_counterexample(
-            generation_mutant, MUTANT_MARKER, "stale-generation"
+            generation_mutant, MUTANT_INVARIANT, "stale-generation"
         )
         rejected_write_directory = temporary_root / "rejected-write-mutant"
         rejected_write_mutant = run_tlc(
             java, jar, REJECTED_WRITE_MUTANT_CONFIG, rejected_write_directory
         )
         rejected_write_mutant_output = require_counterexample(
-            rejected_write_mutant, REJECTED_WRITE_MUTANT_MARKER, "rejected-write"
+            rejected_write_mutant, REJECTED_WRITE_MUTANT_INVARIANT, "rejected-write"
         )
 
         print("Bounded assignment-generation TLA+ model: PASS")
@@ -179,10 +370,16 @@ def self_test(jar: Path, java: str) -> int:
             f"States: {initial_states} initial, {generated_states} generated, "
             f"{distinct_states} distinct"
         )
-        print("Generation-guard mutant: counterexample found as expected")
-        print(generation_mutant_output)
-        print("Rejected-write mutant: counterexample found as expected")
-        print(rejected_write_mutant_output)
+        print(
+            "Generation-guard mutant: "
+            f"{counterexample_count(generation_mutant_output, MUTANT_INVARIANT)} "
+            "counterexamples found as expected"
+        )
+        print(
+            "Rejected-write mutant: "
+            f"{counterexample_count(rejected_write_mutant_output, REJECTED_WRITE_MUTANT_INVARIANT)} "
+            "counterexamples found as expected"
+        )
     return 0
 
 
@@ -201,8 +398,6 @@ def main(argv: list[str] | None = None) -> int:
         print(f"TLC timed out after {TLC_TIMEOUT_SECONDS} seconds", file=sys.stderr)
         if error.stdout:
             print(error.stdout, file=sys.stderr)
-        if error.stderr:
-            print(error.stderr, file=sys.stderr)
         return 2
     except (AssertionError, FileNotFoundError, OSError, RuntimeError) as error:
         print(f"assignment model check failed: {error}", file=sys.stderr)

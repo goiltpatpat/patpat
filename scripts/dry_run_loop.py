@@ -384,7 +384,7 @@ def route(prompt: str) -> str:
         return "game-builder"
     if GAME_BUILD_EXPLANATION.search(text):
         return "inspect"
-    if "issue-loop" in text or "triage github issues" in text or "benny" in text:
+    if "issue-loop" in text or "triage github issues" in text:
         return "issue-loop"
     if "arena" in text or "competing" in text or "two layouts" in text:
         return "arena"
@@ -1123,6 +1123,8 @@ def run_self_test() -> None:
         "/patpat swarm each package against its check script": "swarm",
         "/patpat autopilot this queue; do not merge": "autopilot",
         "/patpat design an issue-loop for GitHub issues; keep it paused": "issue-loop",
+        "benny": "loop",
+        "please explain benny configuration": "inspect",
         "/patpat pause safely, I am going offline": "pause",
         "/patpat keep this PR moving until checks pass and hand it back at merge-ready": "pr-handoff",
         "/patpat make this PR merge-ready without landing": "pr-handoff",
