@@ -10,6 +10,7 @@ Choose one installation owner and keep updates on that path:
 | --- | --- | --- |
 | Cursor | Native plugin when proven; otherwise project skills | `/patpat` |
 | Codex | Codex plugin marketplace | `$patpat` |
+| Claude Code | Claude Code plugin marketplace | `/patpat:patpat` |
 | Antigravity | Validated local plugin clone | `Use patpat to ...` |
 | Grok CLI | Grok plugin manager | `/patpat` |
 | Portable Agent Skills host | Transactional installer | `Use patpat to ...` |

@@ -24,7 +24,7 @@ Published source: `https://github.com/goiltpatpat/patpat`. Plugin id: `patpat@pa
 | Antigravity from a dirty local tree | stage first, then validate and install the staged path |
 | Agent Plugins 1.0 hosts | `python3 scripts/stage_agent_plugin.py --target /absolute/path/to/patpat-agent-plugin`, validate the artifact, then use the host's documented plugin install path |
 | Cursor | In Customize, choose From GitHub Repository and enter `goiltpatpat/patpat`; then find Patpat, select Install, and choose project or user scope. Patpat's live import, fresh-session invocation, and official marketplace listing remain unverified. The generic multi-host staging output is not a verified local Cursor package. |
-| Other Agent Skills hosts | Prove the project skill directory, then `python3 scripts/install_skills.py --target /absolute/proven/skills-dir --dry-run` |
+| Other Agent Skills hosts | Prove the project skill directory, run `python3 scripts/install_skills.py --target /absolute/proven/skills-dir --dry-run` and inspect the plan, then install with `python3 scripts/install_skills.py --target /absolute/proven/skills-dir` |
 
 ## After install
 
