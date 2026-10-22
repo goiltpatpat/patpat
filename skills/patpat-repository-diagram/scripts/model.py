@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from collections import deque
+from functools import lru_cache
 import hashlib
 import json
 import math
@@ -128,7 +129,7 @@ def _git_output(root: Path, *args: str, max_output_bytes: int) -> bytes | None:
     """Capture a Git result only when its command contract gives it a small or prechecked bound."""
     try:
         result = subprocess.run(
-            ["git", "-C", str(root), "--no-replace-objects", *args],
+            ["git", "--literal-pathspecs", "-C", str(root), "--no-replace-objects", *args],
             check=False,
             capture_output=True,
             timeout=10,
@@ -142,18 +143,36 @@ def _git_output(root: Path, *args: str, max_output_bytes: int) -> bytes | None:
     return result.stdout
 
 
-def _committed_evidence_digest(
-    root: Path,
-    revision: str,
-    relative_path: str,
-    remaining_budget: int,
+@lru_cache(maxsize=512)
+def _committed_evidence_snapshot(
+    root: Path, revision: str, relative_path: str, remaining_budget: int
 ) -> tuple[str | None, int]:
-    """Hash a committed blob after checking its size, keeping Git output bounded."""
-    reference = f"{revision}:{relative_path}"
-    size_bytes = _git_output(root, "cat-file", "-s", reference, max_output_bytes=32)
-    if size_bytes is None:
+    """Read one immutable committed regular-file snapshot with bounded Git output."""
+    entries = _git_output(
+        root,
+        "ls-tree",
+        "-z",
+        "-l",
+        revision,
+        "--",
+        relative_path,
+        max_output_bytes=2048,
+    )
+    if entries is None:
+        raise DiagramError(f"committed source tree could not be read: {relative_path}")
+    if entries == b"":
         return None, 0
-    if not re.fullmatch(rb"[0-9]+\n?", size_bytes):
+    records = entries.split(b"\0")
+    if len(records) != 2 or not records[0]:
+        raise DiagramError("git returned an invalid committed source tree entry")
+    metadata, separator, entry_path = records[0].partition(b"\t")
+    fields = metadata.split()
+    if separator != b"\t" or entry_path != os.fsencode(relative_path) or len(fields) != 4:
+        raise DiagramError("git returned an invalid committed source tree entry")
+    mode, object_type, object_id, size_bytes = fields
+    if mode not in {b"100644", b"100755"} or object_type != b"blob":
+        raise DiagramError(f"committed source path is not a regular file: {relative_path}")
+    if not re.fullmatch(rb"[0-9]+", size_bytes):
         raise DiagramError("git returned an invalid committed source size")
     size = int(size_bytes)
     if size > MAX_EVIDENCE_SOURCE_BYTES:
@@ -168,12 +187,24 @@ def _committed_evidence_digest(
         root,
         "cat-file",
         "blob",
-        reference,
-        max_output_bytes=MAX_EVIDENCE_SOURCE_BYTES,
+        object_id.decode("ascii"),
+        max_output_bytes=min(MAX_EVIDENCE_SOURCE_BYTES, remaining_budget),
     )
     if contents is None or len(contents) != size:
         raise DiagramError(f"committed source snapshot could not be read: {relative_path}")
     return hashlib.sha256(contents).hexdigest(), size
+
+
+def _committed_evidence_digest(
+    root: Path,
+    revision: str,
+    relative_path: str,
+    remaining_budget: int,
+) -> tuple[str | None, int]:
+    """Return a cached commit/path digest while enforcing this validation's byte budget."""
+    return _committed_evidence_snapshot(
+        root.resolve(strict=True), revision, relative_path, remaining_budget
+    )
 
 
 def _object(value: Any, name: str, required: set[str], optional: set[str] = frozenset()) -> dict[str, Any]:
