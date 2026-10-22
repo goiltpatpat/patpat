@@ -230,9 +230,9 @@ def discover_manifest(
         merged = pull_request.get("merged")
         if not isinstance(merged, bool):
             raise DiscoveryError(f"{label}.pullRequest.merged must be a boolean")
-        if (state, merged) not in {("OPEN", False), ("MERGED", True)}:
+        if not ((state == "OPEN" and not merged) or (state == "MERGED" and merged)):
             raise DiscoveryError(
-                "stack entries must be open or merged with a consistent state"
+                "stack entries must be open or merged; closed states are unsupported"
             )
 
         head_ref = _bounded_string(
@@ -587,13 +587,12 @@ def self_test() -> None:
     )
     rejected(lambda value: member(value, 0).update(headRefOid="short"), "full 40-character")
     rejected(lambda value: member(value, 0)["baseRef"]["target"].update(__typename="Tree"), "must be a commit")
-    rejected(lambda value: member(value, 1).update(state="CLOSED"), "consistent state")
+    rejected(lambda value: member(value, 1).update(state="CLOSED"), "closed states")
     rejected(
-        lambda value: member(value, 1).update(state="CLOSED", merged=True, baseRef=None),
-        "consistent state",
+        lambda value: member(value, 1).update(state="CLOSED", merged=True),
+        "closed states",
     )
-    rejected(lambda value: member(value, 1).update(state="OPEN", merged=True), "consistent state")
-    rejected(lambda value: member(value, 1).update(state="MERGED"), "consistent state")
+    rejected(lambda value: member(value, 1).update(state="MERGED"), "must be open or merged")
     rejected(
         lambda value: member(value, 1).update(state="MERGED", merged=True, baseRef=None),
         "must form a prefix",
