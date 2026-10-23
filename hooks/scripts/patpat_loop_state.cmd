@@ -24,17 +24,25 @@ if not exist "%_PATPAT_SYSTEM32%\where.exe" (
 )
 cd /d "%_PATPAT_SYSTEM32%" || exit /b 3
 set "_PATPAT_PY="
-for /f "delims=" %%P in ('"%_PATPAT_SYSTEM32%\where.exe" py.exe 2^>nul') do if not defined _PATPAT_PY set "_PATPAT_PY=%%~fP"
-if defined _PATPAT_PY (
-  "%_PATPAT_PY%" -3 -c "import sys; raise SystemExit(0 if sys.version_info >= (3,11) else 1)" >nul 2>nul
-  if not errorlevel 1 goto run_py
+for /f "delims=" %%P in ('"%_PATPAT_SYSTEM32%\where.exe" py.exe 2^>nul') do (
+  "%%~fP" -3 -c "import sys; raise SystemExit(0 if sys.version_info >= (3,11) else 1)" >nul 2>nul
+  if not errorlevel 1 (
+    set "_PATPAT_PY=%%~fP"
+    goto run_py
+  )
 )
 :check_python
 set "_PATPAT_PY="
-for /f "delims=" %%P in ('"%_PATPAT_SYSTEM32%\where.exe" python.exe 2^>nul') do if not defined _PATPAT_PY set "_PATPAT_PY=%%~fP"
-if not defined _PATPAT_PY goto no_runtime
-"%_PATPAT_PY%" -c "import sys; raise SystemExit(0 if sys.version_info >= (3,11) else 1)" >nul 2>nul
-if not errorlevel 1 goto run_python
+set "_PATPAT_FOUND="
+for /f "delims=" %%P in ('"%_PATPAT_SYSTEM32%\where.exe" python.exe 2^>nul') do (
+  set "_PATPAT_FOUND=1"
+  "%%~fP" -c "import sys; raise SystemExit(0 if sys.version_info >= (3,11) else 1)" >nul 2>nul
+  if not errorlevel 1 (
+    set "_PATPAT_PY=%%~fP"
+    goto run_python
+  )
+)
+if not defined _PATPAT_FOUND goto no_runtime
 echo Patpat hook error: Python 3.11 or newer is required. 1>&2
 exit /b 3
 :run_py
