@@ -17,6 +17,12 @@ Classify the oracle as repository, runtime, independent reference, or lockstep. 
 
 Bind durable evidence to the exact revision or snapshot it checked, the relevant inputs and environment, and the oracle used. A material change to any binding makes the evidence stale; recollect it instead of carrying a green result forward.
 
+## Close the deliverable set
+
+Reconcile each required deliverable and provider or destination against the actual output before claiming completion. Inspect each output in its intended form; for a user-facing image, interactive artifact, or web page, inspect the rendered or live surface when a suitable viewer is available. File existence alone is not proof.
+
+Report evidence separately for each output. Use `partially verified` when an output exists but required evidence could not be checked. If a required output is missing or failed, report the task as incomplete and name that output; success elsewhere must not hide it.
+
 Do not treat compilation, test success, file timestamps, cached output, or an agent summary as proof of a different claim.
 
 Delivery receipts prove delivery only. When the requested outcome depends on post-delivery behavior, inspect that surface within existing authority or name the pending observation and responsible handoff. Keep the overall outcome partially verified until that evidence exists; do not infer permission to deploy or mutate production to obtain it.

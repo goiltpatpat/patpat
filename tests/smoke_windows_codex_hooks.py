@@ -199,6 +199,23 @@ def main() -> int:
             (plugin_data / "patpat-loop" / "sessions" / f"{py_binding}.json").unlink()
             (plugin_data / "patpat-loop" / "receipts" / f"{py_binding}.json").unlink()
 
+            decoy_py_directory = base / "Unsupported Py Launcher"
+            decoy_py_directory.mkdir()
+            shutil.copy2(whoami, decoy_py_directory / "py.exe")
+            later_py_environment = environment.copy()
+            later_py_environment["PATH"] = os.pathsep.join(
+                (str(decoy_py_directory), str(Path(py_launcher).resolve().parent), str(system32))
+            )
+            later_py_result = invoke(
+                payload("UserPromptSubmit", "later-py", prompt="/patpat verify later py launcher"),
+                env=later_py_environment,
+            )
+            if later_py_result.returncode != 0 or "sticky receipt" not in output(later_py_result):
+                raise SmokeError("launcher did not try a supported later py.exe candidate")
+            later_py_binding = hashlib.sha256(b"later-py").hexdigest()
+            (plugin_data / "patpat-loop" / "sessions" / f"{later_py_binding}.json").unlink()
+            (plugin_data / "patpat-loop" / "receipts" / f"{later_py_binding}.json").unlink()
+
         activation = successful(payload("UserPromptSubmit", session, prompt="/patpat verify Windows hooks"))
         if "sticky receipt" not in output(activation):
             raise SmokeError("activation context was not emitted")
@@ -290,6 +307,22 @@ def main() -> int:
         )
         if fallback.returncode != 0 or "sticky receipt" not in output(fallback):
             raise SmokeError("python.exe fallback did not run the hook")
+
+        decoy_directory = base / "Unsupported Python"
+        decoy_directory.mkdir()
+        shutil.copy2(whoami, decoy_directory / "python.exe")
+        later_runtime_environment = environment.copy()
+        later_runtime_environment["PATH"] = os.pathsep.join(
+            (str(decoy_directory), python_directory, system32)
+        )
+        if shutil.which("py.exe", path=later_runtime_environment["PATH"]):
+            raise SmokeError("could not isolate ordered python.exe candidates from py.exe")
+        later_runtime = invoke(
+            payload("UserPromptSubmit", "later-python", prompt="/patpat verify later Python candidate"),
+            env=later_runtime_environment,
+        )
+        if later_runtime.returncode != 0 or "sticky receipt" not in output(later_runtime):
+            raise SmokeError("launcher did not try a supported later python.exe candidate")
 
         malformed = invoke(None, raw_input=b"not-json\n")
         if malformed.returncode == 0 or b"JSON object" not in malformed.stderr:
