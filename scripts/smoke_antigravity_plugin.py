@@ -35,6 +35,15 @@ def run(command: list[str], environment: dict[str, str]) -> str:
     return result.stdout
 
 
+def plugin_entries(output: str) -> list[object]:
+    listing = json.loads(output)
+    if isinstance(listing, list):
+        return listing
+    if isinstance(listing, dict) and isinstance(listing.get("imports"), list):
+        return listing["imports"]
+    raise SmokeError("Antigravity plugin list returned an unsupported JSON contract")
+
+
 def main() -> int:
     agy = shutil.which("agy")
     if not agy:
@@ -66,9 +75,8 @@ def main() -> int:
         if file_inventory(installed_path) != staged_inventory:
             raise SmokeError("installed artifact inventory differs from the staged distribution")
 
-        listing = json.loads(run([agy, "plugin", "list"], environment))
-        imports = listing.get("imports", []) if isinstance(listing, dict) else []
-        if not any(isinstance(item, dict) and item.get("name") == "patpat" for item in imports):
+        entries = plugin_entries(run([agy, "plugin", "list", "--json"], environment))
+        if not any(isinstance(item, dict) and item.get("name") == "patpat" for item in entries):
             raise SmokeError("installed Patpat plugin was absent from Antigravity plugin list")
 
         readme = staged_source / "README.md"
@@ -86,8 +94,8 @@ def main() -> int:
         run([agy, "plugin", "uninstall", "patpat"], environment)
         if installed_path.exists():
             raise SmokeError("Antigravity uninstall left the staged plugin behind")
-        final_listing = run([agy, "plugin", "list"], environment).strip()
-        if final_listing != "No imported plugins.":
+        final_entries = plugin_entries(run([agy, "plugin", "list", "--json"], environment))
+        if final_entries:
             raise SmokeError("Antigravity uninstall left a plugin registry entry")
 
     print("Patpat Antigravity plugin smoke test passed.")
