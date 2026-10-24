@@ -29,9 +29,13 @@ def main() -> int:
 
     source = Path(__file__).resolve().parents[1]
     source_manifest = source / "hooks" / "hooks.json"
-    root_mirror = source / "hooks.json"
-    if source_manifest.read_bytes() != root_mirror.read_bytes():
-        raise SmokeError("root and plugin hook manifests differ")
+    antigravity_manifest = json.loads(
+        (source / "hooks.json").read_text(encoding="utf-8")
+    )
+    if antigravity_manifest != {}:
+        raise SmokeError(
+            "Antigravity root hooks must remain empty until a native hook adapter is verified"
+        )
     manifest = json.loads(source_manifest.read_text(encoding="utf-8"))
     windows_commands: list[str] = []
     for event in ("SessionStart", "UserPromptSubmit", "SessionEnd"):

@@ -926,13 +926,14 @@ def validate_hooks(root: Path, parsed: dict[str, dict[str, object]], errors: lis
     if "hooks" in parsed.get("antigravity", {}):
         errors.append("Antigravity manifest must not claim packaged hooks")
     codex_hooks = root / "hooks" / "hooks.json"
-    root_mirror = root / "hooks.json"
+    # Antigravity auto-discovers root hooks.json, so keep its separate native
+    # surface empty until a verified Antigravity hook adapter exists.
+    root_antigravity_hooks = root / "hooks.json"
     if not codex_hooks.is_file():
         errors.append(f"{codex_hooks}: missing default Codex plugin hooks")
-    if not root_mirror.is_file():
-        errors.append(f"{root_mirror}: missing mirrored hook manifest")
-    elif codex_hooks.is_file() and root_mirror.read_bytes() != codex_hooks.read_bytes():
-        errors.append("Root and plugin hook manifests must remain identical")
+    antigravity_hooks = validate_json(root_antigravity_hooks, errors)
+    if antigravity_hooks:
+        errors.append("Antigravity root hooks must remain empty until a native hook adapter is verified")
     if codex_hooks.is_file():
         try:
             hook_data = json.loads(codex_hooks.read_text(encoding="utf-8"))
@@ -2339,6 +2340,10 @@ def run_self_test(root: Path) -> list[str]:
         data["logo"] = "assets/logo.png"
         manifest.write_text(json.dumps(data), encoding="utf-8")
 
+    def add_unverified_antigravity_hooks(fixture: Path) -> None:
+        root_hooks = fixture / "hooks.json"
+        root_hooks.write_bytes((fixture / "hooks" / "hooks.json").read_bytes())
+
     def add_logo_to_codex(fixture: Path) -> None:
         manifest = fixture / ".codex-plugin" / "plugin.json"
         data = json.loads(manifest.read_text(encoding="utf-8"))
@@ -2462,6 +2467,11 @@ def run_self_test(root: Path) -> list[str]:
             ("cyclic ontology prerequisites", create_ontology_cycle, "dependency graph contains a cycle"),
             ("workspace mapper verifier command drift", drift_workspace_mapper_verifier_command, "verification_cmd must invoke its bundled verifier"),
             ("missing SKILL.md", remove_skill_file, "immediate skill directory is missing SKILL.md"),
+            (
+                "unverified Antigravity root hooks",
+                add_unverified_antigravity_hooks,
+                "Antigravity root hooks must remain empty",
+            ),
             ("missing Codex smoke", remove_codex_smoke, "missing isolated Codex marketplace smoke test"),
             ("missing Antigravity smoke", remove_antigravity_smoke, "missing isolated Antigravity plugin smoke test"),
             ("missing Grok smoke", remove_grok_smoke, "missing isolated Grok plugin and hook smoke test"),
