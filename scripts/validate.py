@@ -366,6 +366,22 @@ PINNED_BOUNDARY_SENTENCES = (
         ),
         "anti-thrashing boundary pause contract",
     ),
+    (
+        Path("skills/patpat-run/SKILL.md"),
+        (
+            "For a checked multi-unit plan or writable fan-out, read [program coordination](references/program-coordination.md)",
+            "Single durable runs do not load that reference.",
+        ),
+        "program-coordination progressive disclosure contract",
+    ),
+    (
+        Path("skills/patpat-run/references/program-coordination.md"),
+        (
+            "The program store coordinates state only",
+            "The recommendation and receipt never grant authority.",
+        ),
+        "program-coordination authority boundary contract",
+    ),
 )
 UNADMITTED_COMPONENT_PATHS = {
     ".cursor",
@@ -1975,6 +1991,18 @@ def run_self_test(root: Path) -> list[str]:
             encoding="utf-8",
         )
 
+    def strip_program_coordination_link(fixture: Path) -> None:
+        skill = fixture / "skills" / "patpat-run" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        skill.write_text(
+            text.replace(
+                "For a checked multi-unit plan or writable fan-out, read [program coordination](references/program-coordination.md)",
+                "For a checked multi-unit plan or writable fan-out, infer program coordination from context",
+                1,
+            ),
+            encoding="utf-8",
+        )
+
 
     def strip_judgment_failure_contract(fixture: Path) -> None:
         playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "behavioral-eval.md"
@@ -2445,6 +2473,7 @@ def run_self_test(root: Path) -> list[str]:
             ("risk-scaled start ceremony drift", strip_risk_scaled_start, "missing risk-scaled start ceremony contract"),
             ("diagnostic delta drift", strip_diagnostic_delta, "missing anti-thrashing diagnostic delta contract"),
             ("boundary pause drift", strip_boundary_pause, "missing anti-thrashing boundary pause contract"),
+            ("program coordination progressive disclosure drift", strip_program_coordination_link, "missing program-coordination progressive disclosure contract"),
             ("judgment-failure instruction-contract drift", strip_judgment_failure_contract, "missing judgment-failure instruction-contract"),
             ("evidence-feasibility preflight drift", strip_evidence_preflight_boundary, "missing evidence-feasibility preflight contract"),
             ("preflight-only stop drift", strip_preflight_only_stop, "missing preflight-only stop contract"),
