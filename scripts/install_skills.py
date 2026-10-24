@@ -280,7 +280,10 @@ def run_self_test(source: Path, skills: list[Path]) -> int:
         )
         unreadable_target = root / "unreadable"
         unreadable_target.mkdir()
-        (unreadable_target / INVENTORY_NAME).write_text("{}\n", encoding="utf-8")
+        (unreadable_target / INVENTORY_NAME).write_text(
+            '{"plugin": "patpat", "schema": 1, "mode": "copy", "skills": {}}\n',
+            encoding="utf-8",
+        )
         checks["unreadable status"] = (
             inspect_installation(source, unreadable_target, skills)["integrity"] == "unreadable"
         )

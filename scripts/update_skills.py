@@ -156,6 +156,7 @@ def validate_owned_skill(path: Path, expected_name: str) -> dict[str, str]:
 
 
 def source_provenance(source: Path) -> dict[str, str | bool | None]:
+    source = source.resolve()
     repository = source.parent.resolve()
     package_version: str | None = None
     manifest = repository / ".codex-plugin" / "plugin.json"
@@ -192,8 +193,11 @@ def source_provenance(source: Path) -> dict[str, str | bool | None]:
                         "-C",
                         str(repository),
                         "status",
-                        "--porcelain",
-                        "--untracked-files=normal",
+                        "--porcelain=v1",
+                        "-z",
+                        "--no-renames",
+                        "--untracked-files=all",
+                        "--ignored=matching",
                         "--",
                         source.name,
                         ".codex-plugin/plugin.json",
@@ -203,7 +207,17 @@ def source_provenance(source: Path) -> dict[str, str | bool | None]:
                     text=True,
                 )
                 if status.returncode == 0:
-                    dirty = bool(status.stdout)
+                    source_relative = source.relative_to(repository)
+                    dirty = any(
+                        not (
+                            Path(entry[3:].rstrip("/")) != Path(".codex-plugin/plugin.json")
+                            and is_ignored(
+                                Path(entry[3:].rstrip("/")).relative_to(source_relative)
+                            )
+                        )
+                        for entry in status.stdout.split("\0")
+                        if entry
+                    )
     except OSError:
         pass
     return {"package_version": package_version, "revision": revision, "dirty": dirty}
@@ -271,8 +285,8 @@ def load_ownership_document(target: Path) -> dict[str, Any] | None:
     if mode not in {"copy", "symlink"}:
         raise UpdateError(f"inventory marker has an unsupported install mode: {marker}")
     skills = value.get("skills")
-    if not isinstance(skills, dict):
-        raise UpdateError(f"inventory marker has no skill inventory: {marker}")
+    if not isinstance(skills, dict) or not skills:
+        raise UpdateError(f"inventory marker has no non-empty skill inventory: {marker}")
     normalized: dict[str, dict[str, str]] = {}
     for name, files in skills.items():
         if not isinstance(name, str) or SKILL_NAME.fullmatch(name) is None or not isinstance(files, dict):
@@ -802,11 +816,22 @@ def run_self_test() -> None:
         create_test_skill(provenance_source, "patpat-alpha", "source")
         provenance_manifest.parent.mkdir()
         provenance_manifest.write_text('{"version": "1.0.0"}\n', encoding="utf-8")
+        ancillary = provenance_source / "patpat-alpha" / "ancillary.txt"
+        ancillary.write_text("tracked\n", encoding="utf-8")
+        ignored_cache = provenance_source / "patpat-alpha" / "__pycache__"
+        ignored_cache.mkdir()
+        tracked_ignored = ignored_cache / "one.pyc"
+        tracked_ignored.write_text("tracked ignored\n", encoding="utf-8")
+        (provenance_repository / ".gitignore").write_text(
+            "skills/*/local.secret\nskills/*/__pycache__/\n",
+            encoding="utf-8",
+        )
         for command in (
             ["git", "init"],
             ["git", "config", "user.name", "Patpat Self-Test"],
             ["git", "config", "user.email", "patpat-self-test@example.invalid"],
             ["git", "add", "."],
+            ["git", "add", "-f", "skills/patpat-alpha/__pycache__/one.pyc"],
             ["git", "commit", "-m", "fixture"],
         ):
             completed = subprocess.run(
@@ -825,6 +850,25 @@ def run_self_test() -> None:
         dirty_provenance = source_provenance(provenance_source)
         if dirty_provenance["package_version"] != "1.0.1" or dirty_provenance["dirty"] is not True:
             raise UpdateError("manifest-only source change was not marked dirty")
+        provenance_manifest.write_text('{"version": "1.0.0"}\n', encoding="utf-8")
+        ignored_payload = provenance_source / "patpat-alpha" / "local.secret"
+        ignored_payload.write_text("local\n", encoding="utf-8")
+        if source_provenance(provenance_source)["dirty"] is not True:
+            raise UpdateError("ignored installable source file was not marked dirty")
+        ignored_payload.unlink()
+        for old, new in (
+            (ancillary, ignored_cache / "two.pyc"),
+            (tracked_ignored, ignored_cache / "three.pyc"),
+        ):
+            renamed = subprocess.run(
+                ["git", "mv", "-f", str(old), str(new)],
+                cwd=provenance_repository,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if renamed.returncode != 0 or source_provenance(provenance_source)["dirty"] is not True:
+                raise UpdateError("renamed source provenance is incorrect")
 
         source = root / "source"
         target = root / "skills"
