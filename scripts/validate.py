@@ -339,10 +339,32 @@ PINNED_BOUNDARY_SENTENCES = (
         Path("skills/patpat-loop/SKILL.md"),
         (
             "First activation alone must not force a full protocol read.",
-            "Do not open a mandatory todo list.",
-            "Do not require a numbered checklist.",
+            "These are internal routing shapes, not user-selectable modes.",
+            "File count is weak evidence after callers and contracts are inspected",
+            "Any Tier 2 signal overrides lower-tier hints.",
+            "externality alone does not imply `patpat-architect`.",
+            "Do not open a mandatory todo list or require a numbered checklist.",
         ),
         "risk-scaled start ceremony contract",
+    ),
+    (
+        Path("skills/patpat-loop/references/execution-graph.md"),
+        (
+            "After the second consecutive failure, stop before any third execution and record one compact `Diagnostic Delta`",
+            "It must state `Expected`, `Actual`, `Changed`, `Hypothesis`, and `Next`",
+            "a changed snapshot alone does not break the streak when successive fixes preserve the same failed premise.",
+            "A third attempt is allowed only when `Next` changes at least one of the hypothesis, implementation, verifier, environment, or available evidence.",
+            "If the discriminating action crosses the approved task boundary or requires new authority, follow [pause safely]",
+        ),
+        "anti-thrashing diagnostic delta contract",
+    ),
+    (
+        Path("skills/patpat-loop/playbooks/pause-safely.md"),
+        (
+            "when a diagnosed recovery requires scope or authority outside the approved task",
+            "Do not start the out-of-scope recovery as part of checkpointing.",
+        ),
+        "anti-thrashing boundary pause contract",
     ),
 )
 UNADMITTED_COMPONENT_PATHS = {
@@ -1922,8 +1944,32 @@ def run_self_test(root: Path) -> list[str]:
         text = skill.read_text(encoding="utf-8")
         skill.write_text(
             text.replace(
-                "First activation alone must not force a full protocol read.",
-                "First activation alone forces a full protocol read.",
+                "Any Tier 2 signal overrides lower-tier hints.",
+                "File count always selects the lower tier.",
+                1,
+            ),
+            encoding="utf-8",
+        )
+
+    def strip_diagnostic_delta(fixture: Path) -> None:
+        graph = fixture / "skills" / "patpat-loop" / "references" / "execution-graph.md"
+        text = graph.read_text(encoding="utf-8")
+        graph.write_text(
+            text.replace(
+                "After the second consecutive failure, stop before any third execution and record one compact `Diagnostic Delta`",
+                "After the second consecutive failure, repeat the same command once more.",
+                1,
+            ),
+            encoding="utf-8",
+        )
+
+    def strip_boundary_pause(fixture: Path) -> None:
+        playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "pause-safely.md"
+        text = playbook.read_text(encoding="utf-8")
+        playbook.write_text(
+            text.replace(
+                "Do not start the out-of-scope recovery as part of checkpointing.",
+                "Start the out-of-scope recovery while checkpointing.",
                 1,
             ),
             encoding="utf-8",
@@ -2397,6 +2443,8 @@ def run_self_test(root: Path) -> list[str]:
             ("delivery-intent default-delivery drift", strip_delivery_intent_default_delivery, "missing delivery-intent default-delivery contract"),
             ("capability-map delivery-intent drift", strip_capability_map_delivery_intent, "missing capability-map delivery-intent contract"),
             ("risk-scaled start ceremony drift", strip_risk_scaled_start, "missing risk-scaled start ceremony contract"),
+            ("diagnostic delta drift", strip_diagnostic_delta, "missing anti-thrashing diagnostic delta contract"),
+            ("boundary pause drift", strip_boundary_pause, "missing anti-thrashing boundary pause contract"),
             ("judgment-failure instruction-contract drift", strip_judgment_failure_contract, "missing judgment-failure instruction-contract"),
             ("evidence-feasibility preflight drift", strip_evidence_preflight_boundary, "missing evidence-feasibility preflight contract"),
             ("preflight-only stop drift", strip_preflight_only_stop, "missing preflight-only stop contract"),
