@@ -21,9 +21,13 @@ Classify the task first from signals: reversibility, uncertainty, blast radius, 
 
 Scale start from that classification:
 
-1. Clear, bounded, reversible, and local (including on first activation): lightweight start. Begin with the cheapest useful observation. Read only the matched playbook and the principles it links. Do not open a mandatory todo list. Do not require a numbered checklist. Mutating work still defines the 5-field proof contract before editing and still verifies on the authoritative surface.
-2. Ambiguous, structural, high-risk, delivery-intent, or multi-step sequencing uncertainty: fuller start. Read the [operating protocol](references/operating-protocol.md) in full when needed, skim the principle index, and keep a compact checklist with a verify check per step when sequencing earns it. A skipped step stays listed with `skip: <reason>`.
-3. Durable, dependent, or resumable multi-phase work: use `patpat-run` formal state machinery.
+| Internal routing shape | Positive signals | Execution |
+| --- | --- | --- |
+| 0, fast-track | One clearly scoped, reversible, non-behavioral artifact; no contract, runtime, security, permission, migration, or delivery effect | Begin with the cheapest useful observation. Read only the matched playbook and principles. Make the bounded change and run the narrowest authoritative static check. Do not open a mandatory todo list or require a numbered checklist. |
+| 1, bounded | Clear localized behavior or defect with a small understood caller set and no high-risk boundary | Use the matched change or debug route, the 5-field proof contract, and targeted behavioral verification. |
+| 2, design-gated | Any ambiguity, architecture, schema, migration, public contract, auth, security, billing, secret, cross-cutting behavior, or unresolved multi-step dependency | Resolve the design boundary through `patpat-architect`; use fuller protocol and verification checkpoints before mutation. Use `patpat-run` when the work is durable, dependent, or resumable. |
+
+These are internal routing shapes, not user-selectable modes. File count is weak evidence after callers and contracts are inspected: one security-sensitive file is design-gated, while several independent prose-only files may remain fast-track. Any Tier 2 signal overrides lower-tier hints. A clear delivery or other external effect uses its existing specialist route and fuller authority gates; externality alone does not imply `patpat-architect`. Mutating work in every shape still defines the 5-field proof contract before editing and verifies on the authoritative surface.
 
 Inspect, execute, or measure before asking. Ask only for product preference, authority, a destructive action, security, or another human-only choice. Do not expose named user-selectable modes.
 
@@ -83,7 +87,7 @@ LAND? -> MERGE a green reviewed PR only with explicit land or merge
 
 A proof contract names Claim, Surface, Action, Expect, and Cleanup. Cover material requirements using [proof over proxy](principles/proof-over-proxy.md). Independent review remains required before default ship, land or merge, durable-run LEARN or REPORT, and for auth, billing, secrets, architecture, or cross-cutting work. Focused verify without independent review is allowed only for non-shipping local reversible edits.
 
-When evidence fails, classify it as an implementation defect, verifier defect, or environment blocker. Return to the earliest invalid state. After three failures from the same unchanged blocker, stop and name the evidence required to continue.
+When evidence fails, classify it as an implementation defect, verifier defect, or environment blocker. Return to the earliest invalid state and follow the [bounded retry and Diagnostic Delta contract](references/execution-graph.md#bounded-retry-and-diagnostic-delta). After three failures from the same unchanged blocker, stop and name the evidence required to continue.
 
 Enter `LEARN?` only for a recurring failure worth encoding.
 

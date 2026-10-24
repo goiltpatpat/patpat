@@ -16,7 +16,8 @@ from pathlib import Path
 
 from update_skills import (
     INVENTORY_NAME,
-    SCHEMA,
+    build_ownership_document,
+    inspect_installation,
     inventory,
     load_recorded_inventory,
 )
@@ -117,11 +118,10 @@ def install_paths(source: Path, target: Path, skills: list[Path], mode: str, dry
 
         marker_contents = (
             json.dumps(
-                {
-                    "plugin": "patpat",
-                    "schema": SCHEMA,
-                    "mode": mode,
-                    "skills": {
+                build_ownership_document(
+                    source,
+                    mode,
+                    {
                         skill.name: (
                             inventory(staged_paths[skill.name])
                             if mode == "copy"
@@ -129,7 +129,7 @@ def install_paths(source: Path, target: Path, skills: list[Path], mode: str, dry
                         )
                         for skill in skills
                     },
-                },
+                ),
                 indent=2,
                 sort_keys=True,
             )
@@ -224,6 +224,74 @@ def run_self_test(source: Path, skills: list[Path]) -> int:
             for skill in skills
         }
         checks["symlink ownership inventory"] = (link_target / INVENTORY_NAME).is_file()
+        copy_status = inspect_installation(source, copy_target, skills)
+        link_status = inspect_installation(source, link_target, skills)
+        checks["copy status"] = (
+            copy_status["integrity"] == "intact"
+            and copy_status["source_alignment"] == "current"
+            and copy_status["mode"] == "copy"
+        )
+        checks["symlink status"] = (
+            link_status["integrity"] == "intact"
+            and link_status["source_alignment"] == "current"
+            and link_status["mode"] == "symlink"
+        )
+        legacy_marker = json.loads((link_target / INVENTORY_NAME).read_text(encoding="utf-8"))
+        legacy_marker.pop("source")
+        (link_target / INVENTORY_NAME).write_text(
+            json.dumps(legacy_marker, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        legacy_status = inspect_installation(source, link_target, skills)
+        checks["legacy marker status"] = (
+            legacy_status["integrity"] == "intact"
+            and legacy_status["installed_provenance"] is None
+        )
+        (copy_target / skills[0].name / "SKILL.md").write_text(
+            "tampered\n",
+            encoding="utf-8",
+        )
+        tampered_status = inspect_installation(source, copy_target, skills)
+        checks["tampered status"] = (
+            tampered_status["integrity"] == "tampered"
+            and tampered_status["catalog"]["changed"] == [skills[0].name]
+        )
+        comparison_skill = root / skills[0].name
+        shutil.copytree(skills[0], comparison_skill)
+        (comparison_skill / "SKILL.md").write_text("different source\n", encoding="utf-8")
+        comparison_skills = [
+            comparison_skill if skill.name == comparison_skill.name else skill
+            for skill in skills
+        ]
+        different_source_status = inspect_installation(source, link_target, comparison_skills)
+        checks["different source status"] = (
+            different_source_status["integrity"] == "intact"
+            and different_source_status["source_alignment"] == "different"
+        )
+        (link_target / skills[0].name).unlink()
+        (link_target / skills[0].name).symlink_to(comparison_skill, target_is_directory=True)
+        checks["tampered symlink status"] = (
+            inspect_installation(source, link_target, skills)["integrity"] == "tampered"
+        )
+        untracked_target = root / "untracked"
+        untracked_target.mkdir()
+        checks["untracked status"] = (
+            inspect_installation(source, untracked_target, skills)["integrity"] == "untracked"
+        )
+        unreadable_target = root / "unreadable"
+        unreadable_target.mkdir()
+        (unreadable_target / INVENTORY_NAME).write_text(
+            '{"plugin": "patpat", "schema": 1, "mode": "copy", "skills": {}}\n',
+            encoding="utf-8",
+        )
+        checks["unreadable status"] = (
+            inspect_installation(source, unreadable_target, skills)["integrity"] == "unreadable"
+        )
+        linked_root = root / "linked-root"
+        linked_root.symlink_to(link_target, target_is_directory=True)
+        checks["symlink root refusal"] = (
+            inspect_installation(source, linked_root, skills)["integrity"] == "unreadable"
+        )
 
         original_copytree = shutil.copytree
 
@@ -386,12 +454,22 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument(
+        "--status",
+        action="store_true",
+        help="Inspect a recorded portable installation without changing it.",
+    )
+    parser.add_argument(
         "--verify-ready",
         action="store_true",
         help="Verify host, /patpat discovery, hook status, and core route presence.",
     )
-    parser.add_argument("--json", action="store_true", help="Print verification as JSON.")
+    parser.add_argument("--json", action="store_true", help="Print status or verification as JSON.")
     args = parser.parse_args()
+
+    if args.status and args.verify_ready:
+        parser.error("--status and --verify-ready cannot be combined")
+    if args.status and (args.self_test or args.dry_run):
+        parser.error("--status cannot be combined with --self-test or --dry-run")
 
     root = Path(__file__).resolve().parents[1]
     if args.verify_ready:
@@ -416,8 +494,26 @@ def main() -> int:
     if args.target is None:
         parser.error("--target is required unless --self-test or --verify-ready is used")
 
-    target = args.target.expanduser().resolve()
-    return install_paths(source, target, skills, args.mode, args.dry_run)
+    target = args.target.expanduser().absolute()
+    if args.status:
+        status = inspect_installation(source, target, skills)
+        if args.json:
+            print(json.dumps(status, indent=2, sort_keys=True))
+        else:
+            catalog = status["catalog"]
+            print(f"target: {status['target']}")
+            print(f"integrity: {status['integrity']}")
+            print(f"mode: {status['mode']}")
+            print(f"source alignment: {status['source_alignment']}")
+            print(
+                "catalog: "
+                f"{catalog['present']}/{catalog['recorded']} present, "
+                f"{len(catalog['missing'])} missing, {len(catalog['changed'])} changed"
+            )
+            if "error" in status:
+                print(f"error: {status['error']}")
+        return 0 if status["integrity"] == "intact" else 2
+    return install_paths(source, target.resolve(), skills, args.mode, args.dry_run)
 
 
 if __name__ == "__main__":

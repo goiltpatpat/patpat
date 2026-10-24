@@ -50,7 +50,21 @@ LEARN?
 
 Stop at an approval gate when the next transition would delete data, alter production, weaken a safety boundary, change billing or permissions, force-push, publish a package, or deploy. Explicit Patpat activation authorizes the loop, proof, and verify; default commit-and-PR still requires delivery intent. Merge still requires explicit land or merge language and green checks. Overnight, going to bed, and don't-stop language are delivery intent and stop at merge-ready.
 
-Use a bounded loop. A retry must add evidence or change the hypothesis, implementation, verifier, or environment. After three failures caused by the same unchanged blocker, report the blocker and the evidence required to continue.
+## Bounded retry and Diagnostic Delta
+
+Identify a repeated failure by the same proof step and stable blocker or error signature. Record the relevant candidate snapshot for each failure, but a changed snapshot alone does not break the streak when successive fixes preserve the same failed premise. A retry must add evidence or change the hypothesis, implementation, verifier, or environment; command spelling alone is not a change.
+
+After the second consecutive failure, stop before any third execution and record one compact `Diagnostic Delta`. It must state `Expected`, `Actual`, `Changed`, `Hypothesis`, and `Next`:
+
+```text
+Expected: <predeclared observation>
+Actual: <observed result and stable error signature>
+Changed: <evidence or variable changed since the prior attempt, or none>
+Hypothesis: <falsifiable causal explanation>
+Next: <one discriminating action>
+```
+
+A third attempt is allowed only when `Next` changes at least one of the hypothesis, implementation, verifier, environment, or available evidence. Never rerun the same command against the same relevant state merely to seek a different result. If the discriminating action crosses the approved task boundary or requires new authority, follow [pause safely](../playbooks/pause-safely.md): preserve the current safe state and report the delta, boundary, and exact evidence or authority needed. After three failures caused by the same unchanged blocker, report the blocker and the evidence required to continue; durable runs enter `BLOCKED`.
 
 `patpat-run` persists only the mutating path through this graph. Read-only answers and diagnosis-only blockers report directly without creating durable run state.
 
