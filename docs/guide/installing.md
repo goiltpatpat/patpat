@@ -130,6 +130,17 @@ python3 scripts/install_skills.py \
 
 The installer performs a new copy or development symlink installation. It records exact ownership for copied skills and symlink targets but does not overwrite an existing installation. Never point it at a guessed home directory or a directory containing another Patpat installation.
 
+Inspect a recorded portable installation without changing it:
+
+```bash
+python3 scripts/install_skills.py \
+  --status \
+  --target /absolute/path/to/project/.agents/skills \
+  --json
+```
+
+`integrity` reports whether the recorded installed files or links remain intact. `source_alignment` separately reports whether they match the current checkout (`current`, `different`, or `unknown`); a different source revision does not make an otherwise intact installation corrupt. New markers include the package version, Git revision, and dirty state when those values can be proven. Markers created by older Patpat versions remain valid and report unknown installed provenance.
+
 ## Update
 
 Use the owner of the installed state. After every update, inspect the installed catalog and start a fresh task or session before checking discovery.

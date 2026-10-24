@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import stat
+import subprocess
 import sys
 import tempfile
 import time
@@ -27,6 +28,7 @@ IGNORED_NAMES = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
 NAME_LINE = re.compile(r"^name:\s*['\"]?([^'\"\s]+)['\"]?\s*$")
 SKILL_NAME = re.compile(r"^(?:patpat(?:-[a-z0-9]+)*|00-workspace-mapper)$")
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
+GIT_REVISION = re.compile(r"^[0-9a-f]{40}$")
 UPDATE_LOCK_NAME = ".patpat-update.lock"
 UPDATE_LOCK_TIMEOUT_SECONDS = 5.0
 
@@ -153,11 +155,80 @@ def validate_owned_skill(path: Path, expected_name: str) -> dict[str, str]:
     return inventory(path)
 
 
+def source_provenance(source: Path) -> dict[str, str | bool | None]:
+    repository = source.parent.resolve()
+    package_version: str | None = None
+    manifest = repository / ".codex-plugin" / "plugin.json"
+    try:
+        value = json.loads(manifest.read_text(encoding="utf-8"))
+        candidate = value.get("version") if isinstance(value, dict) else None
+        if isinstance(candidate, str) and candidate:
+            package_version = candidate
+    except (OSError, json.JSONDecodeError):
+        pass
+
+    revision: str | None = None
+    dirty: bool | None = None
+    try:
+        top = subprocess.run(
+            ["git", "-C", str(repository), "rev-parse", "--show-toplevel"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        head = subprocess.run(
+            ["git", "-C", str(repository), "rev-parse", "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if top.returncode == 0 and head.returncode == 0 and Path(top.stdout.strip()).resolve() == repository:
+            candidate = head.stdout.strip().lower()
+            if GIT_REVISION.fullmatch(candidate):
+                revision = candidate
+                status = subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        str(repository),
+                        "status",
+                        "--porcelain",
+                        "--untracked-files=normal",
+                        "--",
+                        source.name,
+                        ".codex-plugin/plugin.json",
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                if status.returncode == 0:
+                    dirty = bool(status.stdout)
+    except OSError:
+        pass
+    return {"package_version": package_version, "revision": revision, "dirty": dirty}
+
+
+def build_ownership_document(
+    source: Path,
+    mode: str,
+    skills: dict[str, dict[str, str]],
+) -> dict[str, Any]:
+    return {
+        "plugin": "patpat",
+        "schema": SCHEMA,
+        "mode": mode,
+        "source": source_provenance(source),
+        "skills": skills,
+    }
+
+
 def load_recorded_inventory(target: Path) -> dict[str, dict[str, str]] | None:
-    record = load_ownership_record(target)
-    if record is None:
+    document = load_ownership_document(target)
+    if document is None:
         return None
-    mode, skills = record
+    mode = document["mode"]
+    skills = document["skills"]
     if mode != "copy":
         raise UpdateError(
             f"inventory marker does not describe a copy installation: {target / INVENTORY_NAME}"
@@ -165,7 +236,7 @@ def load_recorded_inventory(target: Path) -> dict[str, dict[str, str]] | None:
     return skills
 
 
-def load_ownership_record(target: Path) -> tuple[str, dict[str, dict[str, str]]] | None:
+def load_ownership_document(target: Path) -> dict[str, Any] | None:
     marker = target / INVENTORY_NAME
     if not marker.exists() and not marker.is_symlink():
         return None
@@ -177,6 +248,25 @@ def load_ownership_record(target: Path) -> tuple[str, dict[str, dict[str, str]]]
         raise UpdateError(f"inventory marker is unreadable: {marker}") from error
     if not isinstance(value, dict) or value.get("schema") != SCHEMA or value.get("plugin") != "patpat":
         raise UpdateError(f"inventory marker has an unsupported contract: {marker}")
+    provenance = value.get("source")
+    if provenance is not None:
+        valid_provenance = (
+            isinstance(provenance, dict)
+            and set(provenance) == {"package_version", "revision", "dirty"}
+            and (
+                provenance["package_version"] is None
+                or isinstance(provenance["package_version"], str)
+                and bool(provenance["package_version"])
+            )
+            and (
+                provenance["revision"] is None
+                or isinstance(provenance["revision"], str)
+                and GIT_REVISION.fullmatch(provenance["revision"]) is not None
+            )
+            and (provenance["dirty"] is None or isinstance(provenance["dirty"], bool))
+        )
+        if not valid_provenance:
+            raise UpdateError(f"inventory marker has invalid source provenance: {marker}")
     mode = value.get("mode", "copy")
     if mode not in {"copy", "symlink"}:
         raise UpdateError(f"inventory marker has an unsupported install mode: {marker}")
@@ -205,7 +295,102 @@ def load_ownership_record(target: Path) -> tuple[str, dict[str, dict[str, str]]]
         if not valid_copy_files and not valid_symlink:
             raise UpdateError(f"inventory marker has an invalid file entry: {marker}")
         normalized[name] = dict(files)
-    return mode, normalized
+    return {"mode": mode, "skills": normalized, "source": provenance}
+
+
+def load_ownership_record(target: Path) -> tuple[str, dict[str, dict[str, str]]] | None:
+    document = load_ownership_document(target)
+    if document is None:
+        return None
+    return document["mode"], document["skills"]
+
+
+def inspect_installation(source: Path, target: Path, skills: list[Path]) -> dict[str, Any]:
+    source = source.resolve()
+    target = target.expanduser().absolute()
+    result: dict[str, Any] = {
+        "target": str(target),
+        "integrity": "unreadable",
+        "mode": "unknown",
+        "catalog": {"recorded": 0, "present": 0, "missing": [], "changed": []},
+        "source_alignment": "unknown",
+        "installed_provenance": None,
+        "comparison_source": source_provenance(source),
+    }
+    if not target.is_dir() or target.is_symlink():
+        result["error"] = "target must be an existing real directory"
+        return result
+    try:
+        document = load_ownership_document(target)
+    except UpdateError as error:
+        result["error"] = str(error)
+        return result
+    if document is None:
+        result["integrity"] = "untracked"
+        result["error"] = f"missing {INVENTORY_NAME}"
+        return result
+
+    mode = document["mode"]
+    recorded = document["skills"]
+    result["mode"] = mode
+    result["installed_provenance"] = document["source"]
+    missing: list[str] = []
+    changed: list[str] = []
+    present = 0
+    for name, entry in recorded.items():
+        destination = target / name
+        exists = destination.exists() or destination.is_symlink()
+        if exists:
+            present += 1
+        else:
+            missing.append(name)
+            continue
+        try:
+            if mode == "copy":
+                if validate_owned_skill(destination, name) != entry:
+                    changed.append(name)
+            else:
+                expected_target = Path(entry["target"])
+                if (
+                    not destination.is_symlink()
+                    or path_identity(symlink_target(destination)) != path_identity(expected_target)
+                    or not expected_target.is_dir()
+                    or declared_skill_name(expected_target) != name
+                ):
+                    changed.append(name)
+        except (OSError, UpdateError):
+            changed.append(name)
+
+    result["catalog"] = {
+        "recorded": len(recorded),
+        "present": present,
+        "missing": sorted(missing),
+        "changed": sorted(changed),
+    }
+    if missing or changed:
+        result["integrity"] = "tampered"
+        return result
+
+    result["integrity"] = "intact"
+    source_by_name = {skill.name: skill for skill in skills}
+    if set(source_by_name) != set(recorded):
+        result["source_alignment"] = "different"
+    elif mode == "copy":
+        try:
+            current = {name: inventory(path) for name, path in source_by_name.items()}
+            result["source_alignment"] = "current" if current == recorded else "different"
+        except (OSError, UpdateError):
+            result["source_alignment"] = "unknown"
+    else:
+        result["source_alignment"] = (
+            "current"
+            if all(
+                path_identity(Path(recorded[name]["target"])) == path_identity(source_by_name[name])
+                for name in recorded
+            )
+            else "different"
+        )
+    return result
 
 
 def write_json(path: Path, value: dict[str, Any]) -> None:
@@ -441,12 +626,7 @@ def update_copy_installation(
 
         write_json(
             staged / INVENTORY_NAME,
-            {
-                "plugin": "patpat",
-                "schema": SCHEMA,
-                "mode": "copy",
-                "skills": source_inventory,
-            },
+            build_ownership_document(source, "copy", source_inventory),
         )
         for name in old_inventory:
             os.replace(target / name, backup_work / name)
@@ -535,12 +715,7 @@ def update_symlink_installation(
     try:
         write_json(
             staged / INVENTORY_NAME,
-            {
-                "plugin": "patpat",
-                "schema": SCHEMA,
-                "mode": "symlink",
-                "skills": source_inventory,
-            },
+            build_ownership_document(source, "symlink", source_inventory),
         )
         for name in moved_names:
             os.replace(target / name, backup_work / name)
@@ -621,6 +796,36 @@ def create_test_skill(root: Path, name: str, version: str) -> None:
 def run_self_test() -> None:
     with tempfile.TemporaryDirectory(prefix="patpat-updater-test-") as directory:
         root = Path(directory)
+        provenance_repository = root / "provenance-repository"
+        provenance_source = provenance_repository / "skills"
+        provenance_manifest = provenance_repository / ".codex-plugin" / "plugin.json"
+        create_test_skill(provenance_source, "patpat-alpha", "source")
+        provenance_manifest.parent.mkdir()
+        provenance_manifest.write_text('{"version": "1.0.0"}\n', encoding="utf-8")
+        for command in (
+            ["git", "init"],
+            ["git", "config", "user.name", "Patpat Self-Test"],
+            ["git", "config", "user.email", "patpat-self-test@example.invalid"],
+            ["git", "add", "."],
+            ["git", "commit", "-m", "fixture"],
+        ):
+            completed = subprocess.run(
+                command,
+                cwd=provenance_repository,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if completed.returncode != 0:
+                raise UpdateError(f"provenance fixture failed: {' '.join(command)}")
+        clean_provenance = source_provenance(provenance_source)
+        if clean_provenance["package_version"] != "1.0.0" or clean_provenance["dirty"] is not False:
+            raise UpdateError("clean source provenance is incorrect")
+        provenance_manifest.write_text('{"version": "1.0.1"}\n', encoding="utf-8")
+        dirty_provenance = source_provenance(provenance_source)
+        if dirty_provenance["package_version"] != "1.0.1" or dirty_provenance["dirty"] is not True:
+            raise UpdateError("manifest-only source change was not marked dirty")
+
         source = root / "source"
         target = root / "skills"
         source.mkdir()
