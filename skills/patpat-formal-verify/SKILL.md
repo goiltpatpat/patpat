@@ -36,9 +36,10 @@ Create a durable project-local formal-verification skill and suite when later ch
 1. Define states, actions, guards, safety invariants, and any liveness properties. State fairness assumptions only when the environment justifies them.
 2. Map every modeled state variable, action, guard, and property to code a reviewer can open. Treat actor identity, authorization, atomicity, and external effects as assumptions unless the covered implementation actually enforces them.
 3. Run the unchanged candidate first. Inspect tool identity, process status, explored states or bounds, and all counterexamples. A checker error, skipped property, empty state space, missing input, or surviving mutant is not a pass.
-4. Require both the property-specific mutant and, when code correspondence is claimed, the isolated source mutant to produce their expected failures. Restore or discard each scratch mutation and rerun the unchanged check.
-5. If a counterexample exposes a product defect, preserve it in the report and route the fix through `patpat-debug` or `patpat-change`. Do not weaken the invariant or change product code unless the user asks.
-6. Keep model results, implementation tests, source-mutation evidence, and runtime observations as separate evidence layers. A passing model proves only that model within its bounds.
+4. Translate each material counterexample into the shortest available numbered action path using terms its consumer can observe. For every step, name the model action, mapped code location, and expected observable state or effect. Replay that path through a real entry point when implementation correspondence is claimed. If no implementation exists or safe replay is unavailable, label the path `model-only` or `replay-inconclusive`; never present it as a reproduced product defect.
+5. Require both the property-specific mutant and, when code correspondence is claimed, the isolated source mutant to produce their expected failures. Restore or discard each scratch mutation and rerun the unchanged check.
+6. If a counterexample exposes a product defect, preserve it in the report and route the fix through `patpat-debug` or `patpat-change`. Do not weaken the invariant or change product code unless the user asks.
+7. Keep model results, implementation tests, source-mutation evidence, and runtime observations as separate evidence layers. A passing model proves only that model within its bounds.
 
 ## Maintain the check
 
@@ -55,7 +56,7 @@ Advance the sync commit only after reviewing the mapped code at that committed r
 
 ## Report
 
-Return the invariant and harm, code and model locations, checker version and artifact hash, bounds and assumptions, result and counterexample, model-to-code evidence, source-mutation result, sync commit, cleanup, and uncovered behavior. Say plainly which layer passed and which remains unproven.
+Return the invariant and harm, code and model locations, checker version and artifact hash, bounds and assumptions, result and numbered counterexample path, replay status, model-to-code evidence, source-mutation result, sync commit, cleanup, and uncovered behavior. Say plainly which layer passed and which remains unproven.
 
 ## Proof closure
 

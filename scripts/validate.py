@@ -382,6 +382,16 @@ PINNED_BOUNDARY_SENTENCES = (
         ),
         "program-coordination authority boundary contract",
     ),
+    (
+        Path("skills/patpat-formal-verify/SKILL.md"),
+        (
+            "Translate each material counterexample into the shortest available numbered action path using terms its consumer can observe.",
+            "name the model action, mapped code location, and expected observable state or effect.",
+            "label the path `model-only` or `replay-inconclusive`",
+            "never present it as a reproduced product defect.",
+        ),
+        "formal counterexample handoff contract",
+    ),
 )
 UNADMITTED_COMPONENT_PATHS = {
     ".cursor",
@@ -2003,6 +2013,18 @@ def run_self_test(root: Path) -> list[str]:
             encoding="utf-8",
         )
 
+    def strip_formal_counterexample_handoff(fixture: Path) -> None:
+        skill = fixture / "skills" / "patpat-formal-verify" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        skill.write_text(
+            text.replace(
+                "Translate each material counterexample into the shortest available numbered action path using terms its consumer can observe.",
+                "Summarize each material counterexample.",
+                1,
+            ),
+            encoding="utf-8",
+        )
+
 
     def strip_judgment_failure_contract(fixture: Path) -> None:
         playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "behavioral-eval.md"
@@ -2474,6 +2496,7 @@ def run_self_test(root: Path) -> list[str]:
             ("diagnostic delta drift", strip_diagnostic_delta, "missing anti-thrashing diagnostic delta contract"),
             ("boundary pause drift", strip_boundary_pause, "missing anti-thrashing boundary pause contract"),
             ("program coordination progressive disclosure drift", strip_program_coordination_link, "missing program-coordination progressive disclosure contract"),
+            ("formal counterexample handoff drift", strip_formal_counterexample_handoff, "missing formal counterexample handoff contract"),
             ("judgment-failure instruction-contract drift", strip_judgment_failure_contract, "missing judgment-failure instruction-contract"),
             ("evidence-feasibility preflight drift", strip_evidence_preflight_boundary, "missing evidence-feasibility preflight contract"),
             ("preflight-only stop drift", strip_preflight_only_stop, "missing preflight-only stop contract"),
