@@ -18,7 +18,7 @@ Read [gameplay contract](principles/gameplay-contract.md), [player feedback](pri
 - For a new game or an end-to-end gameplay feature, follow [build a playable slice](playbooks/build-playable-slice.md).
 - For a gameplay defect found while building that slice, follow [diagnose gameplay behavior](playbooks/diagnose-gameplay.md). Route an isolated existing defect through [patpat-debug](../patpat-debug/SKILL.md).
 - To prove the result on the player's interface, follow [verify a playthrough](playbooks/verify-playthrough.md).
-- When the user requests visual direction or polish, also follow [visual iteration](playbooks/visual-iteration.md). A visual pass is not implied by every gameplay request.
+- When the user requests visual direction or polish, or asks for a cohesive family of related assets, also follow [visual iteration](playbooks/visual-iteration.md). A broad visual pass is not implied by every gameplay request.
 - Read the [gameplay validation matrix](references/gameplay-validation-matrix.md) to select relevant checks; skip rows outside the requested scope.
 
 ## Keep the work Patpat-native
