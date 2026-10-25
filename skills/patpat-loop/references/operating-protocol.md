@@ -58,6 +58,8 @@ Confirm the target exists when possible. Prefer deterministic reads before write
 
 Each skill declares a Patpat-owned ontology string in `metadata.patpat.ontology`. Treat it as a compact routing hint, not proof, permission, or runtime enforcement.
 
+When Patpat is explicitly active, apply its proof-before-edit, verification, independent-review, and honest-reporting gates only where permitted by the instruction priority above. A higher-priority user instruction may narrow or waive a Patpat-specific gate unless a system or developer instruction still requires it; respect the exception's scope and retain compatible Patpat behavior. Interpret a clear request to disable Patpat by its meaning; do not require an exact phrase. When the proof-before-edit gate applies, before the first repository mutation in an active run, emit a proof contract in the current turn with labeled `Claim`, `Surface`, `Action`, `Expect`, and `Cleanup` fields. When that gate applies, a missing field is a hard stop.
+
 Classify `READ_ONLY` as no target mutation, `LOCAL_MUTATION` as a bounded workspace change, and `DESTRUCTIVE` as data-loss or externally durable effects such as commit, push, pull-request writes, publish, merge, or deploy.
 
 Before a skill runs:

@@ -43,6 +43,20 @@ OPERATING_PRIORITY_CONTRACT = """## Priority
 5. Local repository evidence
 6. Memory Bank when the consuming repo uses it
 7. Prior assumptions"""
+ACTIVE_PATPAT_GATE_CONTRACT = (
+    "When Patpat is explicitly active, apply its proof-before-edit, verification, independent-review, and honest-reporting gates only where permitted by the instruction priority above.",
+    "A higher-priority user instruction may narrow or waive a Patpat-specific gate unless a system or developer instruction still requires it; respect the exception's scope and retain compatible Patpat behavior.",
+    "Interpret a clear request to disable Patpat by its meaning; do not require an exact phrase.",
+    "When the proof-before-edit gate applies, before the first repository mutation in an active run, emit a proof contract in the current turn with labeled `Claim`, `Surface`, `Action`, `Expect`, and `Cleanup` fields.",
+    "When that gate applies, a missing field is a hard stop.",
+)
+FORMAL_SNAPSHOT_BINDING_CONTRACT = (
+    "A snapshot binding is `PASS` only when the candidate is tied to independently reproducible bytes:",
+    "For a clean committed candidate, record the exact `HEAD` and `git status --short --untracked-files=all` showing no changes.",
+    "For a dirty candidate, record its base, a SHA-256 digest of `git diff --binary <base>`, and paths plus content hashes for every untracked candidate file. Include the command or receipt so a reviewer can reproduce the binding.",
+    "If identifiers or a self-reported digest cannot be reproduced from the candidate, mark the binding `INCONCLUSIVE`; supplied identifiers alone never earn `PASS`.",
+    "Bind any ignored or external input that affects the check separately. If such an input cannot be identified or bound, name the gap and mark the affected claim `INCONCLUSIVE`.",
+)
 ANTIGRAVITY_PLUGIN_SCHEMA = "https://antigravity.google/schemas/v1/plugin.json"
 AGENT_PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
 AGENT_PLUGIN_FIELDS = {
@@ -1428,12 +1442,32 @@ def validate_root(root: Path) -> list[str]:
             errors.append(f"{operating_protocol}: missing candor contract")
         if OPERATING_PRIORITY_CONTRACT not in protocol_text:
             errors.append(f"{operating_protocol}: instruction priority contract is out of order")
+        operational_protocol = operational_markdown(protocol_text)
+        active_gate_section = re.search(
+            r"(?ms)^## Skill state and mutation gate\s*\n(.*?)(?=^## |\Z)",
+            operational_protocol,
+        )
+        if active_gate_section is None or any(
+            sentence not in active_gate_section.group(1)
+            for sentence in ACTIVE_PATPAT_GATE_CONTRACT
+        ):
+            errors.append(f"{operating_protocol}: missing active Patpat gate contract")
 
     eval_skill = root / "skills" / "patpat-eval" / "SKILL.md"
     if eval_skill.is_file():
         eval_operational = operational_markdown(eval_skill.read_text(encoding="utf-8"))
         if EVAL_VERDICT_CONTRACT not in eval_operational:
             errors.append(f"{eval_skill}: missing fail-closed eval verdict contract")
+
+    formal_skill = root / "skills" / "patpat-formal-verify" / "SKILL.md"
+    if formal_skill.is_file():
+        formal_operational = operational_markdown(formal_skill.read_text(encoding="utf-8"))
+        formal_report = re.search(r"(?ms)^## Report\s*\n(.*?)(?=^## |\Z)", formal_operational)
+        if formal_report is None or any(
+            sentence not in formal_report.group(1)
+            for sentence in FORMAL_SNAPSHOT_BINDING_CONTRACT
+        ):
+            errors.append(f"{formal_skill}: missing reproducible snapshot-binding contract")
 
     workflow = root / ".github" / "workflows" / "validate.yml"
     if workflow.is_file():
@@ -2234,6 +2268,54 @@ def run_self_test(root: Path) -> list[str]:
             encoding="utf-8",
         )
 
+    def remove_active_patpat_gate_contract(fixture: Path) -> None:
+        protocol = fixture / "skills" / "patpat-loop" / "references" / "operating-protocol.md"
+        text = protocol.read_text(encoding="utf-8")
+        for sentence in ACTIVE_PATPAT_GATE_CONTRACT:
+            text = text.replace(sentence, "", 1)
+        protocol.write_text(text, encoding="utf-8")
+
+    def comment_active_patpat_gate_contract(fixture: Path) -> None:
+        protocol = fixture / "skills" / "patpat-loop" / "references" / "operating-protocol.md"
+        text = protocol.read_text(encoding="utf-8")
+        for sentence in ACTIVE_PATPAT_GATE_CONTRACT:
+            text = text.replace(sentence, f"<!--{sentence}-->", 1)
+        protocol.write_text(text, encoding="utf-8")
+
+    def relocate_active_patpat_gate_contract(fixture: Path) -> None:
+        protocol = fixture / "skills" / "patpat-loop" / "references" / "operating-protocol.md"
+        text = protocol.read_text(encoding="utf-8")
+        for sentence in ACTIVE_PATPAT_GATE_CONTRACT:
+            text = text.replace(sentence, "", 1)
+        heading = "## Git and ship\n"
+        assert heading in text
+        relocated = "\n".join(ACTIVE_PATPAT_GATE_CONTRACT)
+        protocol.write_text(text.replace(heading, f"{heading}{relocated}\n\n", 1), encoding="utf-8")
+
+    def remove_formal_snapshot_binding_contract(fixture: Path) -> None:
+        skill = fixture / "skills" / "patpat-formal-verify" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        for sentence in FORMAL_SNAPSHOT_BINDING_CONTRACT:
+            text = text.replace(sentence, "", 1)
+        skill.write_text(text, encoding="utf-8")
+
+    def comment_formal_snapshot_binding_contract(fixture: Path) -> None:
+        skill = fixture / "skills" / "patpat-formal-verify" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        for sentence in FORMAL_SNAPSHOT_BINDING_CONTRACT:
+            text = text.replace(sentence, f"<!--{sentence}-->", 1)
+        skill.write_text(text, encoding="utf-8")
+
+    def relocate_formal_snapshot_binding_contract(fixture: Path) -> None:
+        skill = fixture / "skills" / "patpat-formal-verify" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        for sentence in FORMAL_SNAPSHOT_BINDING_CONTRACT:
+            text = text.replace(sentence, "", 1)
+        heading = "## Proof closure\n"
+        assert heading in text
+        relocated = "\n".join(FORMAL_SNAPSHOT_BINDING_CONTRACT)
+        skill.write_text(text.replace(heading, f"{heading}{relocated}\n\n", 1), encoding="utf-8")
+
     def remove_eval_verdict_contract(fixture: Path) -> None:
         skill = fixture / "skills" / "patpat-eval" / "SKILL.md"
         text = skill.read_text(encoding="utf-8")
@@ -2500,6 +2582,12 @@ def run_self_test(root: Path) -> list[str]:
             ("project-verifier readiness drift", strip_project_verifier_readiness, "missing project-verifier readiness and recovery contract"),
             ("risk-scaled judgment drift", strip_risk_scaled_judgment, "missing risk-scaled judgment contract"),
             ("instruction priority inversion", invert_instruction_priority, "instruction priority contract is out of order"),
+            ("missing active Patpat gate contract", remove_active_patpat_gate_contract, "missing active Patpat gate contract"),
+            ("commented active Patpat gate contract", comment_active_patpat_gate_contract, "missing active Patpat gate contract"),
+            ("relocated active Patpat gate contract", relocate_active_patpat_gate_contract, "missing active Patpat gate contract"),
+            ("missing formal snapshot binding", remove_formal_snapshot_binding_contract, "missing reproducible snapshot-binding contract"),
+            ("commented formal snapshot binding", comment_formal_snapshot_binding_contract, "missing reproducible snapshot-binding contract"),
+            ("relocated formal snapshot binding", relocate_formal_snapshot_binding_contract, "missing reproducible snapshot-binding contract"),
             ("delivery-intent default-delivery drift", strip_delivery_intent_default_delivery, "missing delivery-intent default-delivery contract"),
             ("capability-map delivery-intent drift", strip_capability_map_delivery_intent, "missing capability-map delivery-intent contract"),
             ("risk-scaled start ceremony drift", strip_risk_scaled_start, "missing risk-scaled start ceremony contract"),
