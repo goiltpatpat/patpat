@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Unslop"
+  short_description: "Remove superficial patterns from engineering work"
+policy:
+  allow_implicit_invocation: false

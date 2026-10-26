@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Engineer"
+  short_description: "Implement one bounded delegated task"
+policy:
+  allow_implicit_invocation: false

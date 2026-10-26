@@ -482,6 +482,24 @@ def parse_frontmatter(path: Path) -> tuple[dict[str, object], str]:
     return data, "\n".join(lines[end + 1 :]).strip()
 
 
+def has_explicit_only_codex_policy(text: str) -> bool:
+    policies = list(
+        re.finditer(
+            r"(?m)^policy:[ \t]*\r?\n(?P<body>(?:[ \t]+[^\r\n]*(?:\r?\n|$))*)",
+            text,
+        )
+    )
+    if len(policies) != 1:
+        return False
+    entries = re.findall(
+        r"(?m)^([ \t]+)allow_implicit_invocation:[ \t]*(.*?)[ \t]*$",
+        policies[0].group("body"),
+    )
+    if len(entries) != 1 or entries[0][0] != "  ":
+        return False
+    return re.fullmatch(r"false(?:[ \t]+#.*)?", entries[0][1]) is not None
+
+
 def validate_skill_ontology(
     frontmatter: dict[str, object],
     path: Path,
@@ -1388,15 +1406,17 @@ def validate_root(root: Path) -> list[str]:
         if ontology is not None:
             ontology_records[skill.name] = (ontology, skill_file)
         validate_skill_state_gate(skill_file, body, errors)
-        if name in MODE_SKILLS:
+        if name in MODE_SKILLS or frontmatter.get("disable-model-invocation") == "true":
             openai_config = skill / "agents" / "openai.yaml"
             try:
                 config_text = openai_config.read_text(encoding="utf-8")
             except OSError:
                 errors.append(f"{openai_config}: missing explicit-invocation policy")
             else:
-                if "allow_implicit_invocation: false" not in config_text:
-                    errors.append(f"{openai_config}: Patpat entry skills must disable implicit invocation")
+                if not has_explicit_only_codex_policy(config_text):
+                    errors.append(
+                        f"{openai_config}: explicit-only skills must disable implicit invocation"
+                    )
         if name != skill.name:
             errors.append(f"{skill_file}: name must match folder {skill.name}")
         if not NAME_PATTERN.fullmatch(name):
@@ -1729,6 +1749,31 @@ def run_self_test(root: Path) -> list[str]:
         skill = fixture / "skills" / "patpat-inspect" / "SKILL.md"
         text = skill.read_text(encoding="utf-8")
         skill.write_text(text.replace("name: patpat-inspect", "name: broken-name", 1), encoding="utf-8")
+
+    def remove_explicit_skill_codex_policy(fixture: Path) -> None:
+        (fixture / "skills" / "patpat-interrogate" / "agents" / "openai.yaml").unlink()
+
+    def enable_implicit_invocation_for_explicit_skill(fixture: Path) -> None:
+        config = fixture / "skills" / "patpat-interrogate" / "agents" / "openai.yaml"
+        text = config.read_text(encoding="utf-8")
+        expected = "allow_implicit_invocation: false"
+        if expected not in text:
+            raise ValueError(f"missing expected explicit-only policy in {config}")
+        config.write_text(text.replace(expected, "allow_implicit_invocation: true", 1), encoding="utf-8")
+
+    def nest_false_codex_policy_under_true(fixture: Path) -> None:
+        config = fixture / "skills" / "patpat-interrogate" / "agents" / "openai.yaml"
+        text = config.read_text(encoding="utf-8")
+        expected = "policy:\n  allow_implicit_invocation: false"
+        replacement = (
+            "policy:\n"
+            "  nested:\n"
+            "    allow_implicit_invocation: false\n"
+            "  allow_implicit_invocation: true"
+        )
+        if expected not in text:
+            raise ValueError(f"missing expected explicit-only policy in {config}")
+        config.write_text(text.replace(expected, replacement, 1), encoding="utf-8")
 
     def remove_skill_state_gate(fixture: Path) -> None:
         skill = fixture / "skills" / "patpat-change" / "SKILL.md"
@@ -2540,6 +2585,21 @@ def run_self_test(root: Path) -> list[str]:
     cases.extend(
         [
             ("skill-name mismatch", break_name, "name must match folder patpat-inspect"),
+            (
+                "missing Codex explicit-only policy",
+                remove_explicit_skill_codex_policy,
+                "missing explicit-invocation policy",
+            ),
+            (
+                "Codex explicit-only policy enabled implicitly",
+                enable_implicit_invocation_for_explicit_skill,
+                "explicit-only skills must disable implicit invocation",
+            ),
+            (
+                "Codex explicit-only policy nested under conflicting value",
+                nest_false_codex_policy_under_true,
+                "explicit-only skills must disable implicit invocation",
+            ),
             ("direct skill state gate drift", remove_skill_state_gate, "missing direct skill state and mutation gate"),
             ("inert skill state gate marker", replace_skill_state_gate_with_inert_marker, "missing direct skill state and mutation gate"),
             ("invalid ontology mutation level", invalidate_ontology_mutation_level, "invalid ontology mutation_level"),

@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Setup"
+  short_description: "Install and validate Patpat on a host"
+policy:
+  allow_implicit_invocation: false

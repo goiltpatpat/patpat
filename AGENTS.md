@@ -39,6 +39,6 @@ Explicit `/patpat`, `/patpat-loop`, `$patpat`, or `$patpat-loop` activation auth
 | Codex | `$patpat` or `$patpat-loop` |
 | Claude Code | `/patpat:patpat` |
 | Portable / generic | `Use patpat to ...` |
-| Antigravity | host UI or `Use patpat to ...` |
+| Antigravity | Use `/patpat` when the installed skill is exposed as a slash command; otherwise invoke it from the host UI or use `Use patpat to ...`. Verify fresh-session discovery and invocation. |
 
 Report host, scope, exact destination or marketplace, conflicts, command receipts, discovered skill count, invocation result, and removal path. Classify package validation separately from prompt-time discovery.

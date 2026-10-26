@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Interrogate"
+  short_description: "Challenge designs and changes from multiple angles"
+policy:
+  allow_implicit_invocation: false
