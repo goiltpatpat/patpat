@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Arena"
+  short_description: "Compare isolated attempts against one brief"
+policy:
+  allow_implicit_invocation: false

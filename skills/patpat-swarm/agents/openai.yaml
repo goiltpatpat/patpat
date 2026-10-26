@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Swarm"
+  short_description: "Coordinate isolated engineering work"
+policy:
+  allow_implicit_invocation: false

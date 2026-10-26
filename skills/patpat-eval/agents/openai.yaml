@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Eval"
+  short_description: "Evaluate skill triggers and behavior"
+policy:
+  allow_implicit_invocation: false

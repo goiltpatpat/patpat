@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Verifier"
+  short_description: "Build or maintain real-surface verification"
+policy:
+  allow_implicit_invocation: false

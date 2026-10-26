@@ -181,7 +181,7 @@ Explicit invocation authorizes the Patpat loop, proof, and verify. Default commi
 | Codex | `$patpat` or `$patpat-loop` |
 | Claude Code | `/patpat:patpat` |
 | Portable / generic Agent Skills | `Use patpat to ...` |
-| Antigravity | host UI or `Use patpat to ...` |
+| Antigravity | Use `/patpat` when the installed skill is exposed as a slash command; otherwise invoke it from the host UI or use `Use patpat to ...`. Verify fresh-session discovery and invocation. |
 
 ## Verification
 
