@@ -16,7 +16,7 @@ grok plugin list --json
 grok plugin details patpat
 ```
 
-`--trust` is required for hooks. Start a new session, then invoke `/patpat`. Package list output does not prove prompt-time discovery. Remove with `grok plugin uninstall patpat --confirm`. Validate isolated installation and hook execution with `python3 scripts/smoke_grok_plugin.py` when Grok CLI is available.
+`--trust` is required for hooks. Start a new session, then invoke `/patpat`. Grok ignores output from passive hook events and does not add output from an allowing `UserPromptSubmit` hook to model context, so Patpat cannot restore sticky context through its current Grok adapter; invoke `/patpat` again after resuming. Package list output does not prove prompt-time discovery. Remove with `grok plugin uninstall patpat --confirm`. When Grok CLI is available, `python3 scripts/smoke_grok_plugin.py` checks isolated installation, hook discovery, and direct command behavior. It does not prove that Grok delivers hook output to the model; see the [xAI hook contract](https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-pager/docs/user-guide/10-hooks.md).
 
 ## Codex
 
@@ -45,7 +45,7 @@ codex plugin marketplace add /absolute/path/to/patpat-dist
 codex plugin add patpat@patpat
 ```
 
-Do not `marketplace add` a dirty checkout. Start a new task after installation and invoke `$patpat`. Package installation and prompt-time discovery are separate checks.
+Do not `marketplace add` a dirty checkout. Start a new task after installation and invoke `$patpat`. Codex does not run bundled plugin hooks until the user reviews and trusts the current hook definition; confirm that trust before relying on resume continuity. Package installation and prompt-time discovery are separate checks. See [OpenAI's plugin hook guidance](https://developers.openai.com/plugins/build/plugins).
 
 Update through Codex so its marketplace and cache remain consistent:
 

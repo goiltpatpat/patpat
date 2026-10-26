@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke-test Patpat installation and hook execution in an isolated Grok home."""
+"""Smoke-test Grok install, hook discovery, and direct hook-command behavior."""
 
 from __future__ import annotations
 
@@ -109,7 +109,8 @@ def execute_hook(command: str, environment: dict[str, str], payload: dict[str, A
     return result.stdout.strip()
 
 
-def smoke_manifest_commands(source: Path) -> None:
+def smoke_manifest_command_contracts(source: Path) -> None:
+    """Run manifest commands with synthetic payloads, without testing host dispatch."""
     payload = {
         "hook_event_name": "UserPromptSubmit",
         "session_id": "manifest-command-smoke",
@@ -163,7 +164,7 @@ def smoke_manifest_commands(source: Path) -> None:
                     },
                 )
                 if startup or missing_resume:
-                    raise SmokeError(f"{host} healthy SessionStart no-op emitted context")
+                    raise SmokeError(f"{host} SessionStart command emitted unexpected output")
                 for source_name in ("resume", "compact"):
                     resumed = execute_hook(
                         command,
@@ -176,7 +177,7 @@ def smoke_manifest_commands(source: Path) -> None:
                         },
                     )
                     if "Patpat Loop is active" not in resumed:
-                        raise SmokeError(f"{host} SessionStart {source_name} did not restore context")
+                        raise SmokeError(f"{host} SessionStart command {source_name} returned no mode context")
                 ended = execute_hook(
                     command,
                     environment,
@@ -212,7 +213,7 @@ def smoke_manifest_commands(source: Path) -> None:
 def main() -> int:
     source = Path(__file__).resolve().parents[1]
     if "--commands-only" in sys.argv:
-        smoke_manifest_commands(source)
+        smoke_manifest_command_contracts(source)
         print("Patpat hook manifest command smoke test passed.")
         return 0
 
@@ -273,13 +274,13 @@ def main() -> int:
         }
         activated = execute_hook(command, hook_environment, payload)
         if "sticky receipt" not in activated:
-            raise SmokeError("Grok native hook environment did not activate Patpat Loop")
+            raise SmokeError("installed Grok hook command did not activate Patpat Loop")
         if len(list(plugin_data.rglob("*.json"))) != 2:
             raise SmokeError("activation did not persist both state and receipt")
 
         continued = execute_hook(command, hook_environment, {**payload, "prompt": "continue"})
         if "Patpat Loop is active" not in continued:
-            raise SmokeError("subsequent Grok turn did not retain Patpat Loop")
+            raise SmokeError("repeated hook-command invocation did not return active mode context")
 
         for source_name in ("resume", "compact"):
             resumed = execute_hook(
@@ -293,7 +294,7 @@ def main() -> int:
                 },
             )
             if "Patpat Loop is active" not in resumed:
-                raise SmokeError(f"Grok SessionStart {source_name} did not restore Patpat Loop")
+                raise SmokeError(f"Grok SessionStart command {source_name} returned no mode context")
         ended = execute_hook(
             command,
             hook_environment,
@@ -324,7 +325,7 @@ def main() -> int:
         )
         compatible = execute_hook(command, compatibility_environment, payload)
         if "sticky receipt" not in compatible or len(list(compatibility_data.rglob("*.json"))) != 2:
-            raise SmokeError("Grok compatibility hook environment did not activate Patpat Loop")
+            raise SmokeError("hook command did not activate Patpat Loop with compatibility environment variables")
         execute_hook(command, compatibility_environment, {**payload, "prompt": "disable /patpat"})
 
         fail_closed_environment = hook_environment.copy()
@@ -346,7 +347,7 @@ def main() -> int:
         if any(item.get("name") == "patpat" for item in remaining):
             raise SmokeError("Grok uninstall left a plugin registry entry")
 
-    print("Patpat Grok plugin and hook smoke test passed.")
+    print("Patpat Grok install, discovery, and direct hook-command smoke test passed.")
     return 0
 
 

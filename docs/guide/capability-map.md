@@ -68,6 +68,19 @@ Every capability in this section is `gated` and remains fail closed until its ad
 
 The canonical behavior lives in `skills/`. A host manifest, command wrapper, hook, or reviewer adapter may expose that behavior only within capabilities the host can prove. Installation does not prove prompt-time discovery; discovery does not prove execution; execution does not prove sticky state, mutation, delivery, or live evaluation. Record host claims with the host name, Patpat revision, lifecycle stage, and receipt.
 
+### Sticky-mode hook status
+
+These statuses describe Patpat's hook integration, not each host's general hook capability.
+
+| Host | Patpat status | Evidence and boundary |
+| --- | --- | --- |
+| Codex | `PARTIALLY VERIFIED` | The hook output matches Codex's context contract and the Windows launcher has native smoke coverage. The Codex dispatcher has not been exercised end to end here. Codex requires the user to review and trust the current bundled hook definition before it runs. |
+| Grok CLI | `UNSUPPORTED` | xAI ignores stdout from passive events such as `SessionStart` and discards allowing `UserPromptSubmit` output, so the current adapter cannot restore model context. Direct command tests prove only the command's behavior, not context delivery. See the [xAI hook contract](https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-pager/docs/user-guide/10-hooks.md). |
+| Claude Code | `UNVERIFIED` | The shared hook command recognizes Claude plugin environment variables, but Claude installation and lifecycle dispatch have not been verified. |
+| Cursor, Antigravity, and portable Agent Plugins | `UNSUPPORTED` | Patpat leaves these hook surfaces disabled or excludes hooks because a compatible lifecycle and context-output contract is not verified. |
+
+Codex's bundled hook trust requirement is documented by [OpenAI](https://developers.openai.com/plugins/build/plugins). A green launcher smoke is not host-dispatch evidence.
+
 ## Deliberate non-goals
 
 These surfaces are `outside core`. Patpat does not own generic teaching or technical writing, personas, model presets, chat-history preference mining, generic memory, simulator maintenance, or host-specific bot interfaces and schedulers. Read-only engineering style linters (`patpat-unslop`) and adversarial review (`patpat-interrogate`) exist solely as bounded software-engineering quality gates to prevent model-generated artifact degradation and sycophancy. Keep other surfaces as ordinary agent capabilities or project/host extensions unless a repeated engineering failure demonstrates a Patpat-specific control need.
