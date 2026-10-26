@@ -60,7 +60,7 @@ Grok CLI, from this repository:
 grok plugin install goiltpatpat/patpat --trust
 ```
 
-Start a new session, then invoke `/patpat`. The trusted hook path is covered by an isolated install-and-execution smoke test.
+Start a new session, then invoke `/patpat`. Grok does not deliver output from passive hooks or an allowing `UserPromptSubmit` hook to the model, so Patpat cannot restore sticky mode there. Invoke `/patpat` again after resuming. The isolated smoke checks installation, hook discovery, and direct command behavior, not context delivery.
 
 Antigravity, from a clone that does not contain local development state:
 
@@ -108,7 +108,7 @@ That is enough. Explicit activation authorizes the Patpat loop, proof, and verif
 
 ## Usage
 
-[`/patpat`](skills/patpat/SKILL.md) is the default entry point. It reads the request, tracks the matched playbook, and routes through inspection, proof, implementation, verification, and review. Codex and Grok hooks persist the mode across resume. The Cursor adapter does not currently persist the mode across resumes because a compatible state-storage path has not been verified; without a hook receipt the mode still applies for the rest of the current session.
+[`/patpat`](skills/patpat/SKILL.md) is the default entry point. It reads the request, tracks the matched playbook, and routes through inspection, proof, implementation, verification, and review. Hook continuity is host-specific. Codex supports the context-output contract after its bundled hook is trusted, though end-to-end dispatch is not verified here. Grok does not deliver passive-hook or allowing `UserPromptSubmit` output to the model, so invoke `/patpat` again after resuming. The Cursor adapter does not currently persist mode across resumes. See the [capability map](docs/guide/capability-map.md#sticky-mode-hook-status) for current evidence by host.
 
 ```text
 FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY
