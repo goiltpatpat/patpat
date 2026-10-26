@@ -64,7 +64,7 @@ Hypothesis: <falsifiable causal explanation>
 Next: <one discriminating action>
 ```
 
-A third attempt is allowed only when `Next` changes at least one of the hypothesis, implementation, verifier, environment, or available evidence. Never rerun the same command against the same relevant state merely to seek a different result. If the discriminating action crosses the approved task boundary or requires new authority, follow [pause safely](../playbooks/pause-safely.md): preserve the current safe state and report the delta, boundary, and exact evidence or authority needed. After three failures caused by the same unchanged blocker, report the blocker and the evidence required to continue; durable runs enter `BLOCKED`.
+A third attempt is allowed only when `Next` changes at least one of the hypothesis, implementation, verifier, environment, or available evidence. Never rerun the same command against the same relevant state merely to seek a different result. If the discriminating action crosses the approved task boundary or requires new authority, follow [pause safely](../playbooks/pause-safely.md): preserve the current safe state and report the delta, boundary, and exact evidence or authority needed. After three consecutive failures with the same blocker key, failure class, and proof step, report the blocker and the evidence required to continue; durable runs enter `BLOCKED`.
 
 `patpat-run` persists only the mutating path through this graph. Read-only answers and diagnosis-only blockers report directly without creating durable run state.
 

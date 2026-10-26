@@ -87,7 +87,7 @@ LAND? -> MERGE a green reviewed PR only with explicit land or merge
 
 A proof contract names Claim, Surface, Action, Expect, and Cleanup. Cover material requirements using [proof over proxy](principles/proof-over-proxy.md). Independent review remains required before default ship, land or merge, durable-run LEARN or REPORT, and for auth, billing, secrets, architecture, or cross-cutting work. Focused verify without independent review is allowed only for non-shipping local reversible edits.
 
-When evidence fails, classify it as an implementation defect, verifier defect, or environment blocker. Return to the earliest invalid state and follow the [bounded retry and Diagnostic Delta contract](references/execution-graph.md#bounded-retry-and-diagnostic-delta). After three failures from the same unchanged blocker, stop and name the evidence required to continue.
+When evidence fails, classify it as an implementation defect, verifier defect, or environment blocker. Return to the earliest invalid state and follow the [bounded retry and Diagnostic Delta contract](references/execution-graph.md#bounded-retry-and-diagnostic-delta). After three consecutive failures from the same unresolved blocker, stop and name the evidence required to continue. In durable runs, the blocker key, failure class, and graph node define the streak; a changed snapshot alone does not clear it.
 
 Enter `LEARN?` only for a recurring failure worth encoding.
 
