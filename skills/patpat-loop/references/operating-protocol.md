@@ -110,7 +110,7 @@ Patpat work progresses through four strict gates:
 Enforcement boundaries:
 - In durable graph runs, [`skills/patpat-run/scripts/run_state.py check-gate`](../../patpat-run/scripts/run_state.py) enforces these transitions mechanically.
 - In ordinary session turns, these gates operate as an instruction contract unless a host hook or pre-tool mechanism actively blocks writes. A CLI that agents can ignore is not mechanical host enforcement.
-- After 3 failures on the same unchanged blocker, stop and classify the failure into: `implementation defect`, `verifier defect`, or `environment blocker`.
+- After 3 consecutive failures from the same unresolved blocker, stop and classify the failure into: `implementation defect`, `verifier defect`, or `environment blocker`. In durable runs, the blocker key, failure class, and graph node define the streak; a changed snapshot alone does not clear it.
 
 ## Evidence
 

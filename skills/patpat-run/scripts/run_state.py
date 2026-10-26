@@ -863,14 +863,13 @@ def record_failure(
             raise RunStateError(f"cannot record into terminal node {state['node']}")
         snapshot = current_snapshot(root)
         previous = state["last_failure"]
-        unchanged = (
+        same_failure_sequence = (
             isinstance(previous, dict)
             and previous.get("key") == blocker_key
             and previous.get("failure_class") == failure_class
-            and previous.get("snapshot") == snapshot
             and previous.get("node") == state["node"]
         )
-        count = int(previous["count"]) + 1 if unchanged else 1
+        count = int(previous["count"]) + 1 if same_failure_sequence else 1
         state["last_failure"] = {
             "key": blocker_key,
             "failure_class": failure_class,
@@ -1693,16 +1692,45 @@ def run_self_test() -> bool:
             raise AssertionError("invalid failure class was accepted")
         record_failure(root, "blocked-run", "Same blocker", "missing-runtime", failure_class="environment")
         (root / "new.txt").write_text("new evidence\n", encoding="utf-8")
-        record_failure(root, "blocked-run", "Changed snapshot", "missing-runtime", failure_class="environment")
-        if load_state(root, "blocked-run")["last_failure"]["count"] != 1:
-            raise AssertionError("blocker count did not reset after snapshot change")
-        for _ in range(2):
-            record_failure(root, "blocked-run", "Same blocker", "missing-runtime", failure_class="environment")
+        changed_snapshot = current_snapshot(root)
+        changed_state = record_failure(
+            root, "blocked-run", "Same blocker after snapshot change", "missing-runtime", failure_class="environment"
+        )
+        if changed_state["last_failure"]["count"] != 2:
+            raise AssertionError("same blocker count did not continue after snapshot change")
+        if (
+            changed_state["last_failure"]["snapshot"] != changed_snapshot
+            or changed_state["events"][-1]["snapshot"] != changed_snapshot
+        ):
+            raise AssertionError("failure did not retain its current snapshot evidence")
+        record_failure(root, "blocked-run", "Third same blocker", "missing-runtime", failure_class="environment")
         blocked_state = load_state(root, "blocked-run")
         if blocked_state["node"] != "BLOCKED":
-            raise AssertionError("third unchanged blocker did not stop the run")
+            raise AssertionError("third same blocker did not stop the run")
+        if blocked_state["last_failure"]["count"] != 3:
+            raise AssertionError("blocked streak did not retain its failure count")
         if "[environment]" not in str(blocked_state.get("blocked_reason")):
             raise AssertionError("blocked reason omitted failure class")
+
+        initialize(root, "streak-boundaries-run", "Reset changed failure identity", "owner", [], [], [], [])
+        transition(root, "streak-boundaries-run", "INSPECT")
+        record_failure(root, "streak-boundaries-run", "First failure", "shared-key", failure_class="environment")
+        changed_class = record_failure(
+            root, "streak-boundaries-run", "Changed failure class", "shared-key", failure_class="implementation"
+        )
+        if changed_class["last_failure"]["count"] != 1:
+            raise AssertionError("blocker count did not reset after failure class changed")
+        transition(root, "streak-boundaries-run", "PROOF_CONTRACT")
+        changed_node = record_failure(
+            root, "streak-boundaries-run", "Changed graph node", "shared-key", failure_class="implementation"
+        )
+        if changed_node["last_failure"]["count"] != 1:
+            raise AssertionError("blocker count did not reset after graph node changed")
+        changed_blocker = record_failure(
+            root, "streak-boundaries-run", "Changed blocker key", "different-key", failure_class="implementation"
+        )
+        if changed_blocker["last_failure"]["count"] != 1:
+            raise AssertionError("blocker count did not reset after blocker changed")
 
         try:
             initialize(root, "conflict-run", "Reject conflicts", "owner", ["deploy"], ["deploy"], [], [])
