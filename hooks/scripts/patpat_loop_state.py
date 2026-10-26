@@ -36,10 +36,10 @@ DISABLE = re.compile(
     re.IGNORECASE,
 )
 STICKY_CONTEXT = (
-    "Patpat Loop is active for this session. Apply /patpat (`patpat-loop`) for this turn. "
-    "Follow the operating protocol. Explicit activation authorizes the loop, proof, and verify; default commit-and-PR still requires delivery intent. "
-    "A higher-priority repository rule or opt-out still blocks delivery. Merge only on explicit land or merge language. "
-    "Do not deploy, force-push, or publish a package by implication."
+    "Patpat Loop is active this session. Use the Patpat Loop skill for this turn; follow the operating protocol. "
+    "Activation authorizes the loop, proof, and verification; default commit/PR needs delivery intent. "
+    "Higher-priority repository rules or opt-out block delivery. Merge requires explicit \"land\" or \"merge\". "
+    "Do not deploy, force-push, or publish packages by implication."
 )
 PLUGIN_DATA_ENV_KEYS = ("PLUGIN_DATA", "GROK_PLUGIN_DATA", "CLAUDE_PLUGIN_DATA")
 
@@ -631,6 +631,25 @@ def run_self_test() -> None:
         )
         if not continued or "Patpat Loop is active" not in json.dumps(continued):
             raise AssertionError("later turn did not keep sticky mode")
+        required_sticky_context = (
+            "Use the Patpat Loop skill for this turn",
+            "follow the operating protocol",
+            "Activation authorizes the loop, proof, and verification",
+            "default commit/PR needs delivery intent",
+            "Higher-priority repository rules or opt-out block delivery",
+            'Merge requires explicit "land" or "merge"',
+            "Do not deploy, force-push, or publish packages by implication",
+        )
+        hook_output = continued.get("hookSpecificOutput")
+        if not isinstance(hook_output, dict) or hook_output.get("hookEventName") != "UserPromptSubmit":
+            raise AssertionError("sticky mode did not populate host-facing hook output")
+        sticky_text = hook_output.get("additionalContext")
+        if continued.get("additional_context") != sticky_text:
+            raise AssertionError("host-facing and compatibility context diverged")
+        if not isinstance(sticky_text, str) or any(
+            requirement not in sticky_text for requirement in required_sticky_context
+        ):
+            raise AssertionError("sticky mode dropped an activation or delivery boundary")
         setup = handle_hook(
             {**payload, "prompt": "use $patpat-setup on this host"},
             plugin_data=plugin_data,
