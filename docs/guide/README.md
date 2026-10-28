@@ -1,6 +1,6 @@
 # The Patpat Guide
 
-Patpat is an engineering control loop for work that must be proven. Give it the outcome, the constraints, and the observation that would count as success. Patpat chooses the narrowest playbook that can close that loop.
+Patpat is an evidence-driven work loop. Give it the outcome, constraints, and evidence that would count as success. Its engineering workflows cover repository work; general-task guidance adapts the approach to other deliverables while retaining the relevant safety boundaries. Host discovery and behavior must be verified separately.
 
 Read these pages in order once. Return to a page when its decision becomes relevant.
 

@@ -142,6 +142,7 @@ ONTOLOGY_TARGET_ENTITIES = {
     "EngineeringTask",
     "GitRepository",
     "PullRequest",
+    "Task",
     "Workspace",
 }
 ONTOLOGY_ROOT_STATES = {"workspace-root-open"}

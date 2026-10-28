@@ -7,7 +7,7 @@
 
 **A little more proof. A lot less guesswork.**
 
-Patpat gives AI coding agents practical engineering workflows: understand the problem, make a focused change, and check the result against evidence. Give it a bug, a design question, or a larger project; Patpat helps the agent keep the goal, boundaries, and proof in view.
+Patpat gives agents an evidence-driven work loop: understand the problem, make a focused change, and check the result against evidence. Its engineering workflows support code and repository work; its general-task guidance also addresses other deliverables and mixed work. Host discovery and behavior for each task type still need to be verified on the selected host.
 
 The mascot is friendly. The questions are quite persistent.
 
