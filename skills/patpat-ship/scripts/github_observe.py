@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -16,6 +17,9 @@ from typing import Any
 SCHEMA_VERSION = 5
 MAX_API_BYTES = 1024 * 1024
 MAX_CHECKS = 100
+MAX_REVIEW_PAGES = 10
+MAX_REVIEW_THREADS = MAX_REVIEW_PAGES * 100
+MAX_FETCH_SECONDS = 30
 MAX_NAME_LENGTH = 128
 MERGE_STATE_STATUSES = {
     "BEHIND",
@@ -32,7 +36,7 @@ REPOSITORY = re.compile(
 )
 SHA = re.compile(r"^[0-9a-f]{40}$")
 GRAPHQL_QUERY = """
-query($owner: String!, $name: String!, $number: Int!) {
+query($owner: String!, $name: String!, $number: Int!, $after: String) {
   repository(owner: $owner, name: $name) {
     nameWithOwner
     pullRequest(number: $number) {
@@ -74,8 +78,9 @@ query($owner: String!, $name: String!, $number: Int!) {
           pageInfo { hasNextPage endCursor }
         }
       }
-      reviewThreads(first: 100) {
-        nodes { isResolved }
+      reviewThreads(first: 100, after: $after) {
+        totalCount
+        nodes { id isResolved }
         pageInfo { hasNextPage endCursor }
       }
       commits(last: 1) {
@@ -111,13 +116,13 @@ def mapping(value: Any, field: str) -> dict[str, Any]:
     return value
 
 
-def nodes(value: Any, field: str) -> list[Any]:
+def nodes(value: Any, field: str, maximum: int = MAX_CHECKS) -> list[Any]:
     connection = mapping(value, field)
     page_info = mapping(connection.get("pageInfo"), f"{field}.pageInfo")
     if page_info.get("hasNextPage") is not False:
-        raise ObserverError(f"{field} exceeds the bounded first 100 entries")
+        raise ObserverError(f"{field} exceeds the complete bounded observation")
     result = connection.get("nodes")
-    if not isinstance(result, list) or len(result) > MAX_CHECKS:
+    if not isinstance(result, list) or len(result) > maximum:
         raise ObserverError(f"{field}.nodes must be a bounded array")
     return result
 
@@ -266,7 +271,7 @@ def observation_document(
         raise ObserverError("pull request head is not a full commit SHA")
     provider_base = bounded_string(pr.get("baseRefName"), "pullRequest.baseRefName")
 
-    thread_nodes = nodes(pr.get("reviewThreads"), "pullRequest.reviewThreads")
+    thread_nodes = nodes(pr.get("reviewThreads"), "pullRequest.reviewThreads", MAX_REVIEW_THREADS)
     unresolved_threads = 0
     for index, thread in enumerate(thread_nodes):
         resolved = mapping(thread, f"reviewThreads[{index}]").get("isResolved")
@@ -392,7 +397,9 @@ def provider_base_commit_oid(response: Any) -> tuple[str, str]:
     return base_oid, source
 
 
-def github_command(executable: str, repository: str, pull_request: int) -> list[str]:
+def github_command(
+    executable: str, repository: str, pull_request: int, after: str | None = None
+) -> list[str]:
     owner, name = repository.split("/", 1)
     return [
         executable,
@@ -408,30 +415,117 @@ def github_command(executable: str, repository: str, pull_request: int) -> list[
         f"number={pull_request}",
         "-f",
         f"query={GRAPHQL_QUERY}",
-    ]
+    ] + (["-f", f"after={after}"] if after is not None else [])
 
 
 def fetch_github(repository: str, pull_request: int) -> Any:
     executable = shutil.which("gh")
     if executable is None:
         raise ObserverError("GitHub CLI is required")
-    try:
-        result = subprocess.run(
-            github_command(executable, repository, pull_request),
-            check=False,
-            capture_output=True,
-            timeout=30,
-        )
-    except (OSError, subprocess.TimeoutExpired) as error:
-        raise ObserverError(f"GitHub observation failed: {error}") from error
-    if result.returncode != 0:
-        raise ObserverError(f"GitHub CLI exited with status {result.returncode}")
-    if len(result.stdout) > MAX_API_BYTES:
-        raise ObserverError("GitHub observation exceeds the byte limit")
-    try:
-        return json.loads(result.stdout.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as error:
-        raise ObserverError("GitHub returned invalid bounded JSON") from error
+    deadline = time.monotonic() + MAX_FETCH_SECONDS
+    response_bytes = 0
+    expected_metadata: dict[str, Any] | None = None
+    expected_total: int | None = None
+
+    def read_page(after: str | None) -> dict[str, Any]:
+        nonlocal response_bytes
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise ObserverError("GitHub observation exceeds the time limit")
+        try:
+            result = subprocess.run(
+                github_command(executable, repository, pull_request, after),
+                check=False,
+                capture_output=True,
+                timeout=remaining,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise ObserverError("GitHub observation request failed or timed out") from error
+        if time.monotonic() >= deadline:
+            raise ObserverError("GitHub observation exceeds the time limit")
+        if result.returncode != 0:
+            raise ObserverError(f"GitHub CLI exited with status {result.returncode}")
+        response_bytes += len(result.stdout)
+        if response_bytes > MAX_API_BYTES:
+            raise ObserverError("GitHub observation exceeds the cumulative byte limit")
+        try:
+            response = mapping(json.loads(result.stdout.decode("utf-8")), "response")
+        except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as error:
+            raise ObserverError("GitHub returned invalid bounded JSON") from error
+        if response.get("errors"):
+            raise ObserverError("GitHub GraphQL returned errors")
+        return response
+
+    def collect() -> tuple[dict[str, Any], list[dict[str, Any]], int]:
+        nonlocal expected_metadata, expected_total
+        after = None
+        cursors: set[str] = set()
+        thread_ids: set[str] = set()
+        threads: list[dict[str, Any]] = []
+        for page_index in range(MAX_REVIEW_PAGES):
+            response = read_page(after)
+            repo = mapping(mapping(response.get("data"), "data").get("repository"), "repository")
+            pr = mapping(repo.get("pullRequest"), "repository.pullRequest")
+            if (
+                bounded_string(repo.get("nameWithOwner"), "repository.nameWithOwner", 256).lower() != repository.lower()
+                or type(pr.get("number")) is not int or pr["number"] != pull_request
+            ):
+                raise ObserverError("GitHub observation identity changed or mismatched")
+            metadata = {key: value for key, value in pr.items() if key != "reviewThreads"}
+            if expected_metadata is not None and metadata != expected_metadata:
+                raise ObserverError("GitHub pull request metadata changed during pagination")
+            expected_metadata = metadata
+            connection = mapping(pr.get("reviewThreads"), "pullRequest.reviewThreads")
+            total = connection.get("totalCount")
+            if type(total) is not int or not 0 <= total <= MAX_REVIEW_THREADS:
+                raise ObserverError("reviewThreads.totalCount exceeds the bounded integer range")
+            if expected_total is not None and total != expected_total:
+                raise ObserverError("reviewThreads count changed during pagination")
+            expected_total = total
+            page_info = mapping(connection.get("pageInfo"), "reviewThreads.pageInfo")
+            more = page_info.get("hasNextPage")
+            if type(more) is not bool:
+                raise ObserverError("reviewThreads.hasNextPage must be a boolean")
+            raw_threads = connection.get("nodes")
+            if not isinstance(raw_threads, list) or len(raw_threads) > 100:
+                raise ObserverError("reviewThreads.nodes must be a bounded page")
+            if more and not raw_threads:
+                raise ObserverError("reviewThreads contains an empty intermediate page")
+            for raw in raw_threads:
+                thread = mapping(raw, "reviewThreads.node")
+                thread_id = bounded_string(thread.get("id"), "reviewThreads.id", 256)
+                if type(thread.get("isResolved")) is not bool:
+                    raise ObserverError("reviewThreads.isResolved must be a boolean")
+                if thread_id in thread_ids:
+                    raise ObserverError("reviewThreads contains duplicate thread IDs")
+                thread_ids.add(thread_id)
+                threads.append({"id": thread_id, "isResolved": thread["isResolved"]})
+            if len(threads) > total or (more and len(threads) >= total):
+                raise ObserverError("reviewThreads count conflicts with pagination")
+            if not more:
+                if len(threads) != total:
+                    raise ObserverError("reviewThreads count is incomplete")
+                return response, threads, page_index + 1
+            after = bounded_string(page_info.get("endCursor"), "reviewThreads.endCursor", 1024)
+            if after in cursors:
+                raise ObserverError("reviewThreads cursor repeated during pagination")
+            cursors.add(after)
+        raise ObserverError("reviewThreads exceeds the page limit")
+
+    response, threads, page_count = collect()
+    if page_count > 1:
+        # Detect observable drift, not an atomic snapshot or changes after this read.
+        response, repeated_threads, _ = collect()
+        if threads != repeated_threads:
+            raise ObserverError("reviewThreads changed between pagination passes")
+    if time.monotonic() >= deadline:
+        raise ObserverError("GitHub observation exceeds the time limit")
+    response["data"]["repository"]["pullRequest"]["reviewThreads"] = {
+        "totalCount": len(threads),
+        "nodes": threads,
+        "pageInfo": {"hasNextPage": False, "endCursor": None},
+    }
+    return response
 
 
 def validate_arguments(args: argparse.Namespace) -> None:
@@ -516,6 +610,181 @@ def fixture() -> dict[str, Any]:
             }
         }
     }
+
+
+def pagination_self_test(common: dict[str, Any]) -> None:
+    from copy import deepcopy
+    from unittest.mock import patch
+    from pr_watch import evaluate
+
+    def page(start: int, stop: int, total: int = 101) -> dict[str, Any]:
+        response = fixture()
+        pr = response["data"]["repository"]["pullRequest"]
+        pr["baseRef"] = {
+            "name": "main", "target": {"__typename": "Commit", "oid": "0" * 40},
+            "branchProtectionRule": None,
+            "rules": {"nodes": [], "pageInfo": {"hasNextPage": False, "endCursor": None}},
+        }
+        pr["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["contexts"]["nodes"][1]["state"] = "SUCCESS"
+        pr["reviewThreads"] = {
+            "totalCount": total,
+            "nodes": [{"id": f"thread-{index}", "isResolved": index != 100} for index in range(start, stop)],
+            "pageInfo": {"hasNextPage": stop < total, "endCursor": f"cursor-{stop}"},
+        }
+        return response
+
+    def fetch_pages(pages: list[Any], *, expected_cursors: list[str | None] | None = None) -> Any:
+        commands: list[list[str]] = []
+
+        def run(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
+            assert kwargs["timeout"] > 0 and kwargs["timeout"] <= 30
+            assert len(commands) < len(pages), "unexpected extra provider request"
+            response = pages[len(commands)]
+            commands.append(command)
+            return subprocess.CompletedProcess(command, 0, json.dumps(response).encode(), b"")
+
+        with patch.object(shutil, "which", return_value="gh"), patch.object(subprocess, "run", side_effect=run):
+            response = fetch_github("example/project", 17)
+        assert len(commands) == len(pages)
+        if expected_cursors is not None:
+            assert [next((arg[6:] for arg in command if arg.startswith("after=")), None) for command in commands] == expected_cursors
+            assert all(command[:5] == ["gh", "api", "graphql", "--hostname", "github.com"] for command in commands)
+        return response
+
+    def refuse(pages: list[Any], message: str) -> None:
+        try:
+            fetch_pages(pages)
+        except ObserverError as error:
+            assert message in str(error), str(error)
+        else:
+            raise AssertionError(f"unsafe pagination accepted: {message}")
+
+    first, last = page(0, 100), page(100, 101)
+    response = fetch_pages([first, last, first, last], expected_cursors=[None, "cursor-100", None, "cursor-100"])
+    document = observation_document(response, **common)
+    assert document["observation"]["unresolved_threads"] == 1
+    verdict = evaluate(document, evaluated_at=common["observed_at"])
+    assert verdict["verdict"] != "ready"
+    assert any(reason["code"] == "unresolved_review_threads" for reason in verdict["reasons"])
+    resolved_last = deepcopy(last)
+    resolved_last["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"][0]["isResolved"] = True
+    ready = observation_document(fetch_pages([first, resolved_last, first, resolved_last]), **common)
+    assert evaluate(ready, evaluated_at=common["observed_at"])["verdict"] == "ready"
+    for count in (0, 1, 100):
+        fetch_pages([page(0, count, count)], expected_cursors=[None])
+    maximum = [page(index, index + 100, 1000) for index in range(0, 1000, 100)]
+    assert len(fetch_pages(maximum + maximum)["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"]) == 1000
+
+    for cursor in (None, "", 3, "x" * 1025):
+        bad = deepcopy(first)
+        bad["data"]["repository"]["pullRequest"]["reviewThreads"]["pageInfo"]["endCursor"] = cursor
+        refuse([bad], "endCursor")
+    for field, value, message in (
+        ("totalCount", True, "totalCount"),
+        ("totalCount", 1001, "totalCount"),
+        ("totalCount", 100, "count"),
+        ("nodes", [], "empty"),
+        ("nodes", [{"id": "one", "isResolved": "false"}], "isResolved"),
+    ):
+        bad = deepcopy(first)
+        bad["data"]["repository"]["pullRequest"]["reviewThreads"][field] = value
+        refuse([bad], message)
+    bad = deepcopy(first)
+    bad["data"]["repository"]["pullRequest"]["reviewThreads"]["pageInfo"]["hasNextPage"] = 1
+    refuse([bad], "hasNextPage")
+    for field, value, message in (("totalCount", 102, "count"), ("nodes", [], "count")):
+        bad = deepcopy(last)
+        bad["data"]["repository"]["pullRequest"]["reviewThreads"][field] = value
+        refuse([first, bad], message)
+    bad = deepcopy(last)
+    bad["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"][0]["id"] = "thread-0"
+    refuse([first, bad], "duplicate")
+    for field, value in (("headRefOid", "b" * 40), ("baseRefName", "other"), ("baseRefOid", "c" * 40), ("reviewDecision", "CHANGES_REQUESTED")):
+        bad = deepcopy(last)
+        bad["data"]["repository"]["pullRequest"][field] = value
+        refuse([first, bad], "changed")
+    bad = deepcopy(last)
+    bad["data"]["repository"]["pullRequest"]["baseRef"]["target"]["oid"] = "d" * 40
+    refuse([first, bad], "changed")
+    for field, value in (("nameWithOwner", "other/project"), ("pullRequest", {"number": 18})):
+        bad = deepcopy(first)
+        bad["data"]["repository"][field] = value
+        refuse([bad], "identity")
+    refuse([first, {"errors": [{"message": "partial failure"}], **last}], "GraphQL")
+    for field, value in (("id", "replacement"), ("isResolved", True)):
+        bad = deepcopy(last)
+        bad["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"][0][field] = value
+        refuse([first, last, first, bad], "changed")
+    loop_pages = [page(0, 1, 3), page(1, 2, 3)]
+    loop_pages[1]["data"]["repository"]["pullRequest"]["reviewThreads"]["pageInfo"]["endCursor"] = "cursor-1"
+    refuse(loop_pages, "cursor")
+    refuse([page(i, i + 1, 11) for i in range(10)], "page limit")
+    # The byte limit applies to all responses, including the consistency pass.
+    with patch.dict(globals(), MAX_API_BYTES=len(json.dumps(first).encode()) + len(json.dumps(last).encode()) + 1):
+        refuse([first, last, first], "byte limit")
+    # Each request consumes the same deadline, rather than receiving a fresh 30s.
+    with patch.object(time, "monotonic", side_effect=[0, 0, 31]):
+        refuse([first], "time limit")
+    with patch.object(time, "monotonic", side_effect=[0, 0, 1, 31]):
+        refuse([first], "time limit")
+    with patch.object(shutil, "which", return_value="gh"):
+        for raw in (b"not-json", b"\xff", b"null"):
+            with patch.object(subprocess, "run", return_value=subprocess.CompletedProcess([], 0, raw, b"")):
+                try:
+                    fetch_github("example/project", 17)
+                except ObserverError:
+                    pass
+                else:
+                    raise AssertionError("invalid provider response accepted")
+        with patch.object(subprocess, "run", side_effect=subprocess.TimeoutExpired("gh", 1)):
+            try:
+                fetch_github("example/project", 17)
+            except ObserverError as error:
+                assert "timed out" in str(error)
+            else:
+                raise AssertionError("provider timeout accepted")
+    for connection in ("checks", "rules"):
+        bad = deepcopy(response)
+        pr = bad["data"]["repository"]["pullRequest"]
+        if connection == "checks":
+            pr["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["contexts"]["pageInfo"]["hasNextPage"] = True
+        else:
+            pr["reviewDecision"] = None
+            pr["baseRef"] = {"name": "main", "branchProtectionRule": None, "rules": {"nodes": [], "pageInfo": {"hasNextPage": True}}}
+        try:
+            observation_document(bad, **common)
+        except ObserverError:
+            pass
+        else:
+            raise AssertionError(f"truncated {connection} accepted")
+
+    # The CLI must timestamp before fetch, so slow observations can expire.
+    import io
+    from contextlib import redirect_stdout
+    from datetime import timedelta
+
+    start = datetime.fromisoformat(common["observed_at"].replace("Z", "+00:00"))
+    current = [start]
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz: Any = None) -> datetime:
+            return current[0]
+
+    def slow_fetch(*_: Any) -> Any:
+        current[0] += timedelta(seconds=10)
+        return page(0, 100, 100)
+
+    output = io.StringIO()
+    argv = ["github_observe.py", "--repository", "example/project", "--pull-request", "17",
+            "--expected-head", "a" * 40, "--expected-base", "main", "--required-check", "tests",
+            "--max-attempts", "1", "--max-observation-age-seconds", "1", "--deadline", common["deadline"]]
+    with patch.object(sys, "argv", argv), patch.dict(globals(), datetime=Clock, fetch_github=slow_fetch), redirect_stdout(output):
+        assert main() == 0
+    expired = evaluate(json.loads(output.getvalue()), evaluated_at=current[0])
+    assert expired["verdict"] == "blocked"
+    assert expired["reasons"][0]["code"] == "observation_expired"
+    print("GitHub review pagination self-test passed.")
 
 
 def self_test() -> None:
@@ -845,6 +1114,7 @@ def self_test() -> None:
             f"{no_check_result['verdict']}"
         )
     assert no_check_result["reasons"][0]["code"] == "required_checks_unproven"
+    pagination_self_test(common)
     print("GitHub PR observer self-test passed.")
 
 
@@ -877,8 +1147,8 @@ def main() -> int:
         )
     try:
         validate_arguments(args)
-        response = fetch_github(args.repository, args.pull_request)
         observed_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        response = fetch_github(args.repository, args.pull_request)
         document = observation_document(
             response,
             repository=args.repository,

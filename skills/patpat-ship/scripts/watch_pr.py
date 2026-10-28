@@ -104,7 +104,7 @@ def run_watch(
             return _exit_code(verdict)
 
         response = fetch(args.repository, args.pull_request)
-        observed_at = _rfc3339(now())
+        observed_at = _rfc3339(current)
         last_document = github_observe.observation_document(
             response,
             repository=args.repository,
@@ -304,6 +304,23 @@ def self_test() -> None:
     assert status == 2
     assert attempt_results[0]["verdict"] == "blocked"
     assert attempt_results[0]["reasons"][-1]["code"] == "attempt_limit_reached"
+
+    current[0] = start
+    expired_args = _fixture_args(deadline=start + timedelta(minutes=1), max_attempts=1)
+    expired_args.max_observation_age_seconds = 1
+    expired_results: list[dict[str, Any]] = []
+
+    def slow_fetch(_: str, __: int) -> Any:
+        current[0] += timedelta(seconds=10)
+        return _ready_fixture()
+
+    assert run_watch(
+        expired_args, fetch=slow_fetch, now=lambda: current[0],
+        sleep=lambda _: (_ for _ in ()).throw(AssertionError("expired watch must stop")),
+        emit=expired_results.append,
+    ) == 2
+    assert expired_results[0]["verdict"] == "blocked"
+    assert expired_results[0]["reasons"][0]["code"] == "observation_expired"
 
 
 def parser() -> argparse.ArgumentParser:

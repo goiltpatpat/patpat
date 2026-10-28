@@ -4,6 +4,7 @@ Read [repository truth](../principles/repository-truth.md), [shape before logic]
 
 1. Name the behavior, affected contract, and proof contract.
 2. Inspect repository rules, current state, nearby implementation, callers, and focused tests.
+   If a target may have changed since inspection, re-read its current contents before a write that could replace them. Reconcile the intended edit with intervening changes using an unambiguous target; do not guess from repeated text. Preserve both sets of changes when safe. Stop and report when the current contents cannot be read or the changes cannot be reconciled safely. A re-read alone is not an atomic write guarantee.
 3. Identify the smallest safe change and its blast radius.
 4. Implement one coherent patch without unrelated refactoring.
 5. Run targeted checks, then exercise the authoritative artifact or surface.

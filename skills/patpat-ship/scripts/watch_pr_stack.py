@@ -416,7 +416,7 @@ def run_watch(
                 attempt=attempts[index],
                 max_observation_age_seconds=max_age,
                 deadline=args.deadline,
-                observed_at=_rfc3339(now()),
+                observed_at=_rfc3339(current),
             )
             observed_base_sha, base_oid_source = github_observe.provider_base_commit_oid(response)
             target["_last_observed_base_sha"] = observed_base_sha
@@ -749,6 +749,25 @@ def self_test() -> None:
         for row in emitted[-1]["pull_requests"]
     )
 
+    current[0] = start
+    expired_args = argparse.Namespace(**vars(args))
+    expired_args.max_attempts_per_pr = 1
+    expired_args.max_observation_age_seconds = 1
+    expired_events: list[dict[str, Any]] = []
+    expired_document = _fixture_manifest()
+
+    def slow_fetch(_: str, __: int) -> Any:
+        current[0] += timedelta(seconds=10)
+        return _fixture_response(expired_document["pull_requests"][0])
+
+    assert run_watch(
+        expired_args, expired_document, fetch=slow_fetch, now=lambda: current[0],
+        sleep=lambda _: (_ for _ in ()).throw(AssertionError("expired stack must stop")),
+        emit=expired_events.append,
+    ) == 2
+    assert expired_events[0]["pr_verdict"]["verdict"] == "blocked"
+    assert expired_events[0]["pr_verdict"]["reasons"][0]["code"] == "observation_expired"
+
     rebase_after_merge = _fixture_manifest()
     rebase_events: list[dict[str, Any]] = []
     rebase_calls: list[int] = []
@@ -950,11 +969,11 @@ def self_test() -> None:
     }
 
     crossing_deadline = start + timedelta(seconds=10)
-    clock_calls = [0]
+    current[0] = start
 
-    def crossing_clock() -> datetime:
-        clock_calls[0] += 1
-        return crossing_deadline + timedelta(seconds=1) if clock_calls[0] >= 4 else start
+    def fetch_crossing_deadline(_: str, __: int) -> Any:
+        current[0] = crossing_deadline + timedelta(seconds=1)
+        return _fixture_response(attempt_document["pull_requests"][0])
 
     deadline_events: list[dict[str, Any]] = []
     deadline_args = argparse.Namespace(
@@ -967,8 +986,8 @@ def self_test() -> None:
     deadline_status = run_watch(
         deadline_args,
         attempt_document,
-        fetch=lambda _repo, _number: _fixture_response(attempt_document["pull_requests"][0]),
-        now=crossing_clock,
+        fetch=fetch_crossing_deadline,
+        now=lambda: current[0],
         sleep=lambda _: None,
         emit=deadline_events.append,
     )
