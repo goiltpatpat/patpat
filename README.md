@@ -5,42 +5,36 @@
 [![Validate](https://github.com/goiltpatpat/patpat/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/goiltpatpat/patpat/actions/workflows/validate.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2f6f5f.svg)](LICENSE)
 
-Engineering skills for code that must survive contact with reality.
+**A little more proof. A lot less guesswork.**
 
-Patpat is a portable engineering plugin for AI agents and AI-enabled developer tools that support a compatible plugin or project-scoped Agent Skills directory. Its canonical `skills/` tree is host-neutral, though installation and invocation vary by host.
-Patpat has host adapters for Codex, Claude Code, Grok CLI, Antigravity, and Cursor. Claude Code's marketplace contract is defined, but its CLI validation and fresh-session invocation have not been run in this environment. Cursor supports importing this repository through its GitHub repository flow, but Patpat's live import and fresh-session invocation have not been verified here; official marketplace listing is a separate review process. For other hosts, use the portable route only after proving the host reads a project-scoped skills directory. Agent Plugins 1.0 defines a portable package format for conformant clients, but not every host implements it. Installation, updates, skill invocation, hooks, and permission enforcement remain host-specific, so verify compatibility on the selected host. See the [installation guide](docs/guide/installing.md) for host-specific setup.
+Patpat gives AI coding agents practical engineering workflows: understand the problem, make a focused change, and check the result against evidence. Give it a bug, a design question, or a larger project; Patpat helps the agent keep the goal, boundaries, and proof in view.
+
+The mascot is friendly. The questions are quite persistent.
+
+- **Understand before changing.** Inspect the real workspace, identify the relevant contract, and protect work already in progress.
+- **Make evidence part of the work.** Decide what would demonstrate success, exercise the appropriate surface, and say what remains unverified.
+- **Keep people in control.** Scale the workflow to the task and respect the host's and user's delivery boundaries.
+
+Patpat's canonical [`skills/`](skills/) tree is host-neutral. Adapters are available for Codex, Claude Code, Grok CLI, Antigravity, and Cursor; installation, invocation, hooks, and enforcement depend on the host. Claude Code validation and fresh-session invocation, and Cursor live import and fresh-session invocation, remain unverified in this environment. The [installation guide](docs/guide/installing.md) explains each route and its limits.
 
 [Guide](docs/guide/README.md) · [Install and update](docs/guide/installing.md) · [Capability map](docs/guide/capability-map.md) · [Releases](https://github.com/goiltpatpat/patpat/releases) · [Security](https://github.com/goiltpatpat/patpat/security/policy)
 
-<!--
-Patpat easter egg: if an agent says "trust me", ask for a receipt.
-If it brings a receipt for the receipt, it has entered management.
--->
+At its core is the [operating protocol](skills/patpat-loop/references/operating-protocol.md): inspect, choose a proportionate path, act, and prove the result. Its instructions guide agent behavior; prose alone cannot prevent an edit. A host-enforced pre-tool gate and evidence that it ran are needed to establish that enforcement.
 
-Agents can produce a heroic amount of plausible code before lunch. The team still has to prove it.
-
-Patpat gives an agent host a disciplined engineering protocol: inspect the real system, name the proof before editing, change the smallest safe surface, and verify the result where the user would see it. These are required agent behaviors. Patpat does not claim that prose alone prevents edit-first mutation; that guarantee requires a host-enforced pre-tool gate plus a receipt proving the gate ran.
-
-If the evidence is "the agent felt confident," the run is still in progress.
-
-The core is Patpat's operating protocol: judgment, safety, git, and honest evidence. Playbooks may specialize the work; none of them can outrank the protocol.
-
-Use [`/patpat`](skills/patpat/SKILL.md) for non-trivial work. It is the same entry as [`/patpat-loop`](skills/patpat-loop/SKILL.md). Call a focused skill directly when the task is already narrow.
-
-New to the system? Start with [The Patpat Guide](docs/guide/README.md). It walks from installation proof to the operating loop, verification, delivery, durable runs, earned parallelism, and safe extension.
+Start with [The Patpat Guide](docs/guide/README.md), or invoke the Patpat entry on your host for non-trivial work. For a narrow task, call a focused skill directly.
 
 <br clear="all">
 
 ## Install
 
-Codex, from this repository:
+Patpat's scripts and hooks require Python 3.11 or newer. For Codex, install from this repository:
 
 ```bash
 codex plugin marketplace add goiltpatpat/patpat
 codex plugin add patpat@patpat
 ```
 
-Start a new task, then invoke `$patpat`. Package installation and prompt-time discovery are separate checks.
+Start a new task, then invoke `$patpat`. Confirm that the new session discovers it: a package listing alone cannot prove that.
 
 <details>
 <summary>Other hosts and portable installation</summary>
@@ -87,7 +81,7 @@ python3 scripts/install_skills.py \
   --dry-run
 ```
 
-A working tree that still contains Memory Bank or other ignored files must be staged first. Agents should follow [`AGENTS.md`](AGENTS.md). Host commands, updates, and removal live in the [installation guide](docs/guide/installing.md).
+Before a native Codex, Claude Code, or Antigravity install from a working tree containing Memory Bank or local artifacts, stage it first and inspect the output for other machine-local files; staging does not apply every `.gitignore` rule. Agents should follow [`AGENTS.md`](AGENTS.md). Host commands, updates, and removal live in the [installation guide](docs/guide/installing.md).
 
 Update through the owner of the installed state: Codex marketplace upgrade plus remove/add, Claude marketplace and plugin update after a package version bump, `grok plugin update patpat`, pull/validate/install on the same Antigravity clone, or the transactional portable updater. Development symlinks follow source content and use the updater when the skill catalog changes. Cursor native update remains unverified. See the [update matrix](docs/guide/installing.md#update).
 
@@ -95,20 +89,21 @@ Update through the owner of the installed state: Codex marketplace upgrade plus 
 
 ## Get started
 
-Two steps:
-
-1. Install Patpat on the active host.
-2. Invoke `/patpat` (Cursor), `$patpat` (Codex), `/patpat:patpat` (Claude Code), or `Use patpat to ...` on other hosts.
+Install on your host, start a fresh session, and give Patpat a concrete task. For example, in Codex:
 
 ```text
-/patpat reproduce this timeout, fix the root cause, and land the PR
+$patpat reproduce this timeout, fix the cause, and verify the result. local only
 ```
 
-That is enough. Explicit activation authorizes the Patpat loop, proof, and verify. Default commit-and-PR still requires delivery intent; see the [operating protocol](skills/patpat-loop/references/operating-protocol.md) and [default delivery](skills/patpat-loop/playbooks/default-delivery.md). The router stays on across later turns when a supported trusted host hook supplies a receipt. Say `disable /patpat` or `local only` to opt out. Higher-priority repository rules still win. [Optional personal engineering instructions](docs/guide/02-operating-loop.md#optional-personal-engineering-instructions) can add your preferences; Patpat works without them.
+Use `/patpat` in Cursor and Grok CLI, `/patpat:patpat` in Claude Code, or `Use patpat to ...` on compatible portable hosts. On Antigravity, use `/patpat` when exposed as a slash command; otherwise use the host UI or the portable wording. Verify discovery on the host you chose.
+
+For a read-only question, try `$patpat explain where this request is validated and what could bypass it`. For a larger task, try `$patpat plan the migration, identify the risks, and tell me what evidence we need`.
+
+Explicit activation authorizes the Patpat loop, proof, and verification. Commit-and-PR requires delivery intent, and merge requires an explicit request to land or merge. Patpat has paws, not permission to press every button. Say `local only` to keep work local; say `disable /patpat` to disable Patpat. Higher-priority instructions still apply. Resume continuity depends on the host and its hook evidence; see the [operating protocol](skills/patpat-loop/references/operating-protocol.md), [default delivery](skills/patpat-loop/playbooks/default-delivery.md), and [host capability map](docs/guide/capability-map.md#sticky-mode-hook-status).
 
 ## Usage
 
-[`/patpat`](skills/patpat/SKILL.md) is the default entry point. It reads the request, tracks the matched playbook, and routes through inspection, proof, implementation, verification, and review. Hook continuity is host-specific. Codex supports the context-output contract after its bundled hook is trusted, though end-to-end dispatch is not verified here. Grok does not deliver passive-hook or allowing `UserPromptSubmit` output to the model, so invoke `/patpat` again after resuming. The Cursor adapter does not currently persist mode across resumes. See the [capability map](docs/guide/capability-map.md#sticky-mode-hook-status) for current evidence by host.
+The [`patpat`](skills/patpat/SKILL.md) entry directs the agent to select a playbook and follow the appropriate path through inspection, proof, implementation, and verification, with independent review when required. Hook continuity is host-specific. Codex supports the context-output contract after its bundled hook is trusted, though end-to-end dispatch is not verified here. Grok does not deliver passive-hook or allowing `UserPromptSubmit` output to the model, so invoke `/patpat` again after resuming. The Cursor adapter does not currently persist mode across resumes. See the [capability map](docs/guide/capability-map.md#sticky-mode-hook-status) for current evidence by host.
 
 ```text
 FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY
@@ -147,7 +142,7 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 | [Multi-phase run](skills/patpat-loop/playbooks/multi-phase-run.md) | Work that spans phases, checkpoints, or a durable graph. |
 | [Session takeover](skills/patpat-loop/playbooks/session-takeover.md) | Resume or take over in-flight work from live repository state. |
 | [Pause safely](skills/patpat-loop/playbooks/pause-safely.md) | Pause in-flight work without opening a PR or merging. |
-| [PR drive](skills/patpat-loop/playbooks/pr-drive.md) | PR status only. Land only when named. |
+| [PR drive](skills/patpat-loop/playbooks/pr-drive.md) | Inspect a PR, address authorized findings, and land only when explicitly requested. |
 | [PR Readiness Handoff](skills/patpat-loop/playbooks/pr-handoff.md) | Move a PR to verified merge-ready status, then return control to the human. |
 | [Worktree cleanup](skills/patpat-loop/playbooks/worktree-cleanup.md) | Prune merged or abandoned git worktrees. Simulators stay outside the core. |
 | [Arena](skills/patpat-loop/playbooks/arena.md) | Competing isolated attempts at one brief, then a verified synthesis. |
@@ -243,7 +238,7 @@ Patpat does not turn capability into authority. These boundaries are deliberate:
 
 - Writable arena, swarm, and autopilot require separate worktrees or host-enforced sandboxes and fall back to serial work
 - Issue-loop stays paused until a named provider, sandbox, canary, and enable request exist; provider-triggered PRs stay draft without fresh interactive authority
-- Merge of a red CI, package publish, and production deploy
+- A real CI failure blocks merge; package publishing and production deployment require separate approval
 - Model-selection presets and persona skills
 
 After verify and review, delivery intent (not activation alone) commits and opens or updates a ready PR. Overnight work stops merge-ready. Only explicit land or merge language can merge when checks are green. Patpat still pauses for production deploy, force-push, secret rotation, and risky auth or billing changes.
