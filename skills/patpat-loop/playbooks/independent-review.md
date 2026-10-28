@@ -29,7 +29,7 @@ Classify proven evidence laundering or a bypass that invalidates the correctness
 
 When extra read-only reviewers are available and authorized, give each the same intent, diff, and integrity rubric from a distinct independent-angle. Do not name model slugs. Serial fallback when isolation or extra reviewers are missing.
 
-Two or more independent angles agreeing is higher-signal consensus. A lone finding is worth reading but lower confidence. Deduplicate. Note disagreements.
+Deduplicate and note disagreements. Assess each finding's evidence, assumptions, and impact independently of vote count; reviewers may share the same blind spot. Separate severity from confidence. A single supported finding can outweigh consensus. When safe execution is unavailable, retain a concrete code-supported finding with its conditions and impact, label the runtime evidence gap, and do not describe it as reproduced. If the conditions or impact are unproven, report a concern or evidence gap rather than a confirmed defect.
 
 ## Lead judgment
 
