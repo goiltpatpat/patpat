@@ -1,8 +1,8 @@
 ---
 name: patpat-loop
-description: Run the explicit Patpat evidence-driven engineering loop. Use only when the user invokes /patpat, /patpat-loop, $patpat, or $patpat-loop, or directly asks to activate Patpat mode.
+description: Run the explicit Patpat evidence-driven work loop for the user's task. Use only when the user invokes /patpat, /patpat-loop, $patpat, or $patpat-loop, or directly asks to activate Patpat mode.
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"EngineeringTask","requires_state":[],"produces_state":[],"verification_cmd":""}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Task","requires_state":[],"produces_state":[],"verification_cmd":""}'
 ---
 
 # Patpat Loop
@@ -14,6 +14,8 @@ Before following this skill, apply the [skill state and mutation gate](reference
 Patpat is one system. The [operating protocol](references/operating-protocol.md) is the spine: judgment, safety, git, and evidence. Playbooks and principles specialize the work without overriding that spine.
 
 This mode stays on across later turns after explicit invocation. Trusted host hooks may persist it across resume and compaction. Without a host-observed receipt, apply it only for the current session and report `current-turn-only` after a restart. Say `disable /patpat` to opt out. Do not infer activation from a task that merely resembles a playbook.
+
+For non-engineering work, follow [general task judgment](references/general-task-judgment.md) with applicable domain skills. If the task does not affect an engineering or repository boundary, complete and report that work without entering the engineering routing, Git delivery, or durable engineering graph below; the current directory alone does not determine the task type. For mixed work, apply general task judgment to each relevant deliverable and the engineering routes and gates below to every affected engineering or repository boundary. A media file in a repository still needs media-specific verification; its repository mutation also retains repository proof and safety gates.
 
 ## Start
 
@@ -30,8 +32,6 @@ Scale start from that classification:
 These are internal routing shapes, not user-selectable modes. File count is weak evidence after callers and contracts are inspected: one security-sensitive file is design-gated, while several independent prose-only files may remain fast-track. Any Tier 2 signal overrides lower-tier hints. A clear delivery or other external effect uses its existing specialist route and fuller authority gates; externality alone does not imply `patpat-architect`. Mutating work in every shape still defines the 5-field proof contract before editing and verifies on the authoritative surface.
 
 Inspect, execute, or measure before asking. Ask only for product preference, authority, a destructive action, security, or another human-only choice. Do not expose named user-selectable modes.
-
-Do not apply Patpat outside software engineering or repository operations.
 
 ## Principle index
 

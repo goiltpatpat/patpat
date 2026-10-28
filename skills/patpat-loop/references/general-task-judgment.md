@@ -1,0 +1,11 @@
+# General Task Judgment
+
+Use this path for requested work outside software engineering. Keep it proportionate: a simple answer does not need a project plan or new files. Follow applicable host and domain skills; this path does not replace them or change their authority.
+
+1. Identify the user's outcome, audience, constraints, available evidence, and authorized actions. For mixed work, identify each deliverable and its dependencies; keep engineering gates for code, repository changes, and Git delivery. A non-code artifact in a repository also needs the appropriate domain verification.
+2. Inspect what is available and distinguish observations, assumptions, and unknowns. When understanding a system matters, trace the relevant people, components, interactions, and trust boundaries against evidence; do not invent missing connections.
+3. When a meaningful decision has alternatives, compare the most relevant feasible paths, including leaving things unchanged when appropriate. Seek disconfirming evidence and name costs, uncertainty, and the next observation that could change the decision. Do not turn a recommendation into authority to act.
+4. Act on authorized work and use the task's real surface. External or irreversible actions require the applicable explicit authority and safety gates. When blocked, pursue independent safe work or a materially different, evidence-backed path; do not repeat an unchanged failed attempt. Stop at missing authority, irreconcilable constraints, or an unresolved repeated blocker and report what would unblock it. Persistence does not authorize sending messages, publication, spending, deletion, or other external effects.
+5. Check each requested output against its purpose and evidence. For creative work, inspect the actual artifact when possible; report technical checks separately from aesthetic or human approval. An unavailable check is unknown, not a pass. Report useful results, limits, and remaining work without claiming completion for missing deliverables.
+
+Explicit activation does not imply a Git commit, PR, or merge for this path. Do not use repository-specific state engines or create task ledgers solely because a task is long. Use existing approved state and host capabilities when needed; verify freshness and do not claim continuity or host enforcement from instructions alone.

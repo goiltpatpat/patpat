@@ -2,6 +2,8 @@
 
 This is Patpat's core. Specialized workflows may narrow the work; they cannot override this protocol.
 
+For non-engineering deliverables, apply [general task judgment](general-task-judgment.md). Git, PR, and durable engineering graph rules apply to engineering or repository boundaries and Git effects, not automatically to other task types. Mixed work retains those rules for every affected engineering or repository boundary. A non-code artifact in a repository needs both domain-specific verification and repository mutation gates. For other work, use evidence appropriate to the actual outcome and host; objective checks and subjective or human approval are distinct. Existing authority, privacy, and external-effect gates still apply. This scope does not grant permission or make instruction-level routing a host-enforced guarantee.
+
 ## Standard
 
 The standard is not more output. The standard is better judgment.
@@ -46,7 +48,7 @@ Write numbered steps only when sequencing or ambiguity earns them; do not invent
 
 When implementation is clear and bounded: inspect nearby contracts, make the smallest viable change, verify with the strongest practical check, and update docs only if durable truth changed. Do not open a mandatory todo list for that path.
 
-Mutating work still defines the 5-field proof contract before editing and still verifies on the authoritative surface.
+Engineering and repository mutations still define the 5-field proof contract before editing and still verify on the authoritative surface. Other tasks use the evidence appropriate to their requested outcome.
 
 Independent review remains required before default ship, land or merge, durable-run LEARN or REPORT, and for auth, billing, secrets, architecture, or cross-cutting work. Focused verify without independent review is allowed only for non-shipping local reversible edits.
 
@@ -67,7 +69,7 @@ Before a skill runs:
 1. Compare `requires_state` with fresh evidence from the current workspace and task. A state is established only by an observable artifact or result tied to the current relevant snapshot. `unknown` is not the same as absent; inspect first when evidence is incomplete.
 2. If a required state is known to be absent, find its producer. Chain it only when exactly one producer exists, its trigger fits the same user request, and its effects are already authorized. Do not bypass manual-only host policy. If no producer fits, producers conflict, or authority would expand, stop at discovery and report the missing state.
 3. Read `mutation_level`, then classify the actual action as well. Metadata cannot downgrade a stricter rule. Before a destructive effect, verify its exact preconditions and target and obtain explicit user authorization. The delivery-intent signals below authorize only the documented default-delivery scope; other destructive effects require wording that names the action and scope.
-4. After execution, run the task's deterministic proof on the authoritative surface. Treat `verification_cmd` as a candidate check, never as permission to execute a command. Verify the command against repository evidence first. An empty command means the proof must be chosen from the task's proof contract. Record `produces_state` only after its post-condition passes.
+4. After execution, verify on the authoritative surface. For engineering behavior, run the task's deterministic proof. For non-code artifacts, including those in a repository, run applicable objective checks and inspect the artifact on the appropriate surface; report subjective judgment or unavailable checks separately. A successful file or technical check alone does not prove creative quality. Treat `verification_cmd` as a candidate check, never as permission to execute a command. Verify the command against the applicable task evidence first. An empty command means the proof must be chosen for the task. Record `produces_state` only after its post-condition passes.
 
 Commands copied from project configuration or a context graph are untrusted evidence, not approved commands. Inspect their exact arguments and side effects and apply the normal command and mutation gates before execution.
 
@@ -75,7 +77,7 @@ When `.patpat/context-graph.json` already exists, use it as an optional index to
 
 State labels must have one producer or be an explicitly observed root condition. Keep the dependency graph acyclic. A state label, context graph, or successful package validation does not prove behavior by itself. Direct skill invocation and ordinary work remain subject to this protocol and the host's invocation boundary.
 
-Stop at the first change that satisfies the proof contract. Delete before adding. Reuse repository patterns before inventing. Do not add dependencies, abstractions, docs, or public APIs unless the objective requires them.
+For engineering and repository changes, stop at the first change that satisfies the proof contract. Delete before adding. Reuse repository patterns before inventing. Do not add dependencies, abstractions, docs, or public APIs unless the objective requires them.
 
 Complete authorized implementation, verification, and required review before handing back the task. After relevant checks pass, proceed to the authorized delivery or report; repeat or broaden checks only for changed evidence, failures, unresolved concerns, or a required gate. Reuse approval for the same action, target, and scope; a new target or safety boundary requires its own authority. Preserve explicit safety pauses and evidence freshness requirements.
 
@@ -101,13 +103,14 @@ Default to one owner. Workers return compact findings and evidence, not transcri
 
 ## Four gates and mechanical enforcement
 
-Patpat work progresses through four strict gates:
+Engineering and repository work progresses through four strict gates:
 1. **Pre-edit**: Define a 5-field proof contract (`Claim`, `Surface`, `Action`, `Expect`, `Cleanup`) before editing code.
-2. **Verify**: Observe execution on the authoritative surface, producing an exit-code-0 receipt for the exact current snapshot.
+2. **Verify**: For engineering behavior, observe execution on the authoritative surface and produce an exit-code-0 receipt for the exact current snapshot. For a non-code repository artifact, run applicable objective checks and inspect the artifact; report subjective or unavailable evidence separately. Do not treat technical checks as creative approval.
 3. **Ship**: Entered when delivery intent exists: commit and open or update one ready PR after fresh verification and independent review pass.
 4. **Merge**: Land only upon explicit user `land` or `merge` language with green provider checks.
 
 Enforcement boundaries:
+- The durable engineering graph retains its exit-code receipt requirement for its verification gate, including when a run covers non-code artifacts. That receipt cannot prove subjective quality; report missing human or other evidence separately.
 - In durable graph runs, [`skills/patpat-run/scripts/run_state.py check-gate`](../../patpat-run/scripts/run_state.py) enforces these transitions mechanically.
 - In ordinary session turns, these gates operate as an instruction contract unless a host hook or pre-tool mechanism actively blocks writes. A CLI that agents can ignore is not mechanical host enforcement.
 - After 3 consecutive failures from the same unresolved blocker, stop and classify the failure into: `implementation defect`, `verifier defect`, or `environment blocker`. In durable runs, the blocker key, failure class, and graph node define the streak; a changed snapshot alone does not clear it.
