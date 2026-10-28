@@ -2762,7 +2762,7 @@ def run_self_test(root: Path) -> list[str]:
         (fixture_source / "docs" / "guide").mkdir(parents=True)
         (fixture_source / "docs" / "Diagrams").mkdir()
         (fixture_source / ".agents" / "plugins").mkdir(parents=True)
-        (fixture_source / ".agents" / "teamwork_preview_fixture" / "pstack_cache" / "scripts").mkdir(parents=True)
+        (fixture_source / ".agents" / "teamwork_preview_fixture" / "external_cache" / "scripts").mkdir(parents=True)
         (fixture_source / ".playwright-cli").mkdir()
         (fixture_source / "docs" / "guide" / "installing.md").write_text("guide\n", encoding="utf-8")
         (fixture_source / "docs" / "Diagrams" / "local.html").write_text("local render\n", encoding="utf-8")
@@ -2773,7 +2773,7 @@ def run_self_test(root: Path) -> list[str]:
         (fixture_source / "receipt.json").write_text("private receipt\n", encoding="utf-8")
         (fixture_source / "trial.jsonl").write_text("private trial\n", encoding="utf-8")
         (fixture_source / "codex.stderr.txt").write_text("private stderr\n", encoding="utf-8")
-        (fixture_source / ".agents" / "teamwork_preview_fixture" / "pstack_cache" / "scripts" / "watch-pr").write_text(
+        (fixture_source / ".agents" / "teamwork_preview_fixture" / "external_cache" / "scripts" / "watch-pr").write_text(
             "local run artifact\n",
             encoding="utf-8",
         )

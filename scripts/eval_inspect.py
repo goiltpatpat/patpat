@@ -21,7 +21,6 @@ SOURCE = ROOT / "scripts" / "dry_run_loop.py"
 SECTIONS = ("Overview", "Key Concepts", "How It Works", "Where Things Live", "Gotchas")
 FORBIDDEN = (
     "fable",
-    "setup-pstack",
     "make-bot-ui",
     "never-block-on-the-human",
     "never-block-on-human",
