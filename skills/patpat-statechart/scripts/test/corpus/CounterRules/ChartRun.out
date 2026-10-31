@@ -11,10 +11,10 @@ Running breadth-first search Model-Checking with fp 0 and seed -4419978704399735
 Starting SANY...
 @!@!@ENDMSG 2220 @!@!@
 Parsing file /tmp/statechart-7wSvPP/statechart-7cjaBf/ChartRun.tla
-Parsing file /agent/repos/plugins/pstack/skills/statechart/scripts/test/corpus/CounterRules/CounterRules.tla
+Parsing file /work/patpat-statechart/scripts/test/corpus/CounterRules/CounterRules.tla
 Parsing file /tmp/statechart-7wSvPP/statechart-7cjaBf/tmp-ChartRun/Naturals.tla
 Parsing file /tmp/statechart-7wSvPP/statechart-7cjaBf/tmp-ChartRun/TLC.tla
-Parsing file /agent/repos/plugins/pstack/skills/statechart/scripts/test/corpus/CounterRules/Moves.tla
+Parsing file /work/patpat-statechart/scripts/test/corpus/CounterRules/Moves.tla
 Parsing file /tmp/statechart-7wSvPP/statechart-7cjaBf/tmp-ChartRun/Sequences.tla
 Parsing file /tmp/statechart-7wSvPP/statechart-7cjaBf/tmp-ChartRun/FiniteSets.tla
 Semantic processing of module Naturals

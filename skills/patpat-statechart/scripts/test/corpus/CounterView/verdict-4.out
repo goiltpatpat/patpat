@@ -11,7 +11,7 @@ Running breadth-first search Model-Checking with fp 0 and seed 39020845526677923
 Starting SANY...
 @!@!@ENDMSG 2220 @!@!@
 Parsing file /tmp/statechart-kUUXB9/statechart-rfdUvS/ChartBound.tla
-Parsing file /agent/repos/plugins/pstack/skills/statechart/scripts/test/corpus/CounterView/CounterView.tla
+Parsing file /work/patpat-statechart/scripts/test/corpus/CounterView/CounterView.tla
 Parsing file /tmp/statechart-kUUXB9/statechart-rfdUvS/tmp-verdict-4/Naturals.tla
 Parsing file /tmp/statechart-kUUXB9/statechart-rfdUvS/tmp-verdict-4/TLC.tla
 Parsing file /tmp/statechart-kUUXB9/statechart-rfdUvS/tmp-verdict-4/Sequences.tla

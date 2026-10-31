@@ -11,11 +11,11 @@ Running breadth-first search Model-Checking with fp 0 and seed 62455341345856803
 Starting SANY...
 @!@!@ENDMSG 2220 @!@!@
 Parsing file /tmp/statechart-F3m8nM/statechart-zHLN8e/ChartRun.tla
-Parsing file /agent/repos/plugins/pstack/skills/statechart/scripts/test/corpus/Shadow/Shadow.tla
+Parsing file /work/patpat-statechart/scripts/test/corpus/Shadow/Shadow.tla
 Parsing file /tmp/statechart-F3m8nM/statechart-zHLN8e/tmp-ChartRun/Naturals.tla
-Parsing file /agent/repos/plugins/pstack/skills/statechart/scripts/test/corpus/Shadow/ShadowLib.tla
+Parsing file /work/patpat-statechart/scripts/test/corpus/Shadow/ShadowLib.tla
 Parsing file /tmp/statechart-F3m8nM/statechart-zHLN8e/tmp-ChartRun/TLC.tla
-Parsing file /agent/repos/plugins/pstack/skills/statechart/scripts/test/corpus/Shadow/ShadowSub.tla
+Parsing file /work/patpat-statechart/scripts/test/corpus/Shadow/ShadowSub.tla
 Parsing file /tmp/statechart-F3m8nM/statechart-zHLN8e/tmp-ChartRun/Sequences.tla
 Parsing file /tmp/statechart-F3m8nM/statechart-zHLN8e/tmp-ChartRun/FiniteSets.tla
 Semantic processing of module Naturals

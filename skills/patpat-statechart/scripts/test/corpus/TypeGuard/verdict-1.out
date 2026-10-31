@@ -10,7 +10,7 @@ Running breadth-first search Model-Checking with fp 0 and seed -6615246773092018
 @!@!@STARTMSG 2220:0 @!@!@
 Starting SANY...
 @!@!@ENDMSG 2220 @!@!@
-Parsing file /agent/repos/plugins/pstack/skills/statechart/scripts/test/corpus/TypeGuard/TypeGuard.tla
+Parsing file /work/patpat-statechart/scripts/test/corpus/TypeGuard/TypeGuard.tla
 Parsing file /tmp/statechart-6AB97O/statechart-zW0vc1/tmp-verdict-1/Naturals.tla
 Semantic processing of module Naturals
 Semantic processing of module TypeGuard

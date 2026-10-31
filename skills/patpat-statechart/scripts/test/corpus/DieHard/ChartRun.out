@@ -11,7 +11,7 @@ Running breadth-first search Model-Checking with fp 0 and seed -6664725572617936
 Starting SANY...
 @!@!@ENDMSG 2220 @!@!@
 Parsing file /tmp/statechart-bks8OV/statechart-9Ptgia/ChartRun.tla
-Parsing file /agent/repos/plugins/pstack/skills/statechart/scripts/test/corpus/DieHard/DieHard.tla
+Parsing file /work/patpat-statechart/scripts/test/corpus/DieHard/DieHard.tla
 Parsing file /tmp/statechart-bks8OV/statechart-9Ptgia/tmp-ChartRun/Naturals.tla
 Parsing file /tmp/statechart-bks8OV/statechart-9Ptgia/tmp-ChartRun/TLC.tla
 Parsing file /tmp/statechart-bks8OV/statechart-9Ptgia/tmp-ChartRun/Sequences.tla

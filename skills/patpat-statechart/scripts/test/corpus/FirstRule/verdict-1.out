@@ -10,7 +10,7 @@ Running breadth-first search Model-Checking with fp 0 and seed 40854525194900180
 @!@!@STARTMSG 2220:0 @!@!@
 Starting SANY...
 @!@!@ENDMSG 2220 @!@!@
-Parsing file /agent/repos/plugins/pstack/skills/statechart/scripts/test/corpus/FirstRule/FirstRule.tla
+Parsing file /work/patpat-statechart/scripts/test/corpus/FirstRule/FirstRule.tla
 Parsing file /tmp/statechart-ZK5K4e/statechart-H3b8iX/tmp-verdict-1/Naturals.tla
 Semantic processing of module Naturals
 Semantic processing of module FirstRule

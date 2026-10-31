@@ -702,7 +702,7 @@ def state_chart_node_label(state: ProjectedState) -> str:
     return f"S{state['index']} · {state['label']}"
 
 
-def pstack_chart(chart: ChartIR) -> dict[str, Any]:
+def backend_chart(chart: ChartIR) -> dict[str, Any]:
     palette = ("blue", "orange", "purple", "yellow", "teal", "tan", "pink")
     if chart["kind"] == "baseline":
         phase = "Bounded TLC"
@@ -847,7 +847,7 @@ def resolve_node_executable() -> str | None:
     return default_node
 
 
-def render_with_pstack(chart: ChartIR, replay: dict[str, Any], stage: Path,
+def render_with_backend(chart: ChartIR, replay: dict[str, Any], stage: Path,
                        mmd_path: Path, svg_path: Path) -> str:
     node = resolve_node_executable()
     require(node is not None, "Statechart receipt rendering requires Node.js 22 or newer")
@@ -863,9 +863,9 @@ def render_with_pstack(chart: ChartIR, replay: dict[str, Any], stage: Path,
         "steps": chart.get("steps", []),
         "implementation_mapping": chart["implementation_mapping"],
     }
-    input_path = stage / f".{chart['id']}.pstack-input.json"
+    input_path = stage / f".{chart['id']}.chart-input.json"
     input_path.write_text(
-        json.dumps({"chart": pstack_chart(chart), "evidence": evidence},
+        json.dumps({"chart": backend_chart(chart), "evidence": evidence},
                    ensure_ascii=False, sort_keys=True, separators=(",", ":")),
         encoding="utf-8", newline="\n",
     )
@@ -973,7 +973,7 @@ def render_statechart(chart: ChartIR, replay: dict[str, Any], stage: Path,
     node = resolve_node_executable()
     if node is not None:
         try:
-            return render_with_pstack(chart, replay, stage, mmd_path, svg_path)
+            return render_with_backend(chart, replay, stage, mmd_path, svg_path)
         except (StatechartError, OSError):
             pass  # Fall back cleanly to Pure-Python renderer
     return render_with_pure_python(chart, replay, stage, mmd_path, svg_path)
@@ -1224,11 +1224,11 @@ def main() -> int:
         require(out_dir.parent.is_dir(), f"output parent directory must already exist: {out_dir.parent}")
         require(out_dir.name not in {".", ".."}, "output directory needs a normal leaf name")
         stage = Path(tempfile.mkdtemp(prefix=f".{out_dir.name}.stage-", dir=out_dir.parent))
-        pstack_scripts = Path(__file__).resolve().parent
-        mermaid_backend = pstack_scripts / "backends" / "mermaid.ts"
-        receipt_adapter = pstack_scripts / "render_receipt_chart.mjs"
+        scripts_dir = Path(__file__).resolve().parent
+        mermaid_backend = scripts_dir / "backends" / "mermaid.ts"
+        receipt_adapter = scripts_dir / "render_receipt_chart.mjs"
         renderer_backend = {
-            "name": "pstack-mermaid+pele",
+            "name": "statechart-mermaid+pele",
             "package": "pele",
             "version": "1.9.0",
             "source_revision": "4dd1d05818d19792e7cd6e818f1667f95f7e1dbe",

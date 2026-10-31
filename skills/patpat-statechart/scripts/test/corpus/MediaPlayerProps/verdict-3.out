@@ -10,8 +10,8 @@ Running breadth-first search Model-Checking with fp 0 and seed -6106993110972276
 @!@!@STARTMSG 2220:0 @!@!@
 Starting SANY...
 @!@!@ENDMSG 2220 @!@!@
-Parsing file /agent/repos/plugins/pstack/skills/statechart/scripts/test/corpus/MediaPlayerProps/MediaPlayerProps.tla
-Parsing file /agent/repos/plugins/pstack/skills/statechart/scripts/test/corpus/MediaPlayerProps/MediaPlayer.tla
+Parsing file /work/patpat-statechart/scripts/test/corpus/MediaPlayerProps/MediaPlayerProps.tla
+Parsing file /work/patpat-statechart/scripts/test/corpus/MediaPlayerProps/MediaPlayer.tla
 Semantic processing of module MediaPlayer
 Semantic processing of module MediaPlayerProps
 @!@!@STARTMSG 2219:0 @!@!@

@@ -789,7 +789,7 @@ def _split_long_token(value: str, max_width: float) -> list[str]:
 
 
 def _wrap(value: str, max_width: float) -> list[str]:
-    # Keep parenthetical phrases up to 24 chars atomic (e.g. "(PStack + Pele 1.9.0)")
+    # Keep parenthetical phrases up to 24 chars atomic (e.g. "(Mermaid + Pele 1.9.0)")
     glued_value = re.sub(r"\(([^)]{1,24})\)", lambda m: m.group(0).replace(" ", "\u00a0"), value)
     raw_words = [w for w in glued_value.split(" ") if w]
     words: list[str] = []

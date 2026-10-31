@@ -10,7 +10,7 @@ Running breadth-first search Model-Checking with fp 0 and seed 41202255787154111
 @!@!@STARTMSG 2220:0 @!@!@
 Starting SANY...
 @!@!@ENDMSG 2220 @!@!@
-Parsing file /agent/repos/plugins/pstack/skills/statechart/scripts/test/corpus/CounterGuard/CounterGuard.tla
+Parsing file /work/patpat-statechart/scripts/test/corpus/CounterGuard/CounterGuard.tla
 Parsing file /tmp/statechart-8oKWYc/statechart-2fPczm/tmp-verdict-1/Naturals.tla
 Semantic processing of module Naturals
 Semantic processing of module CounterGuard

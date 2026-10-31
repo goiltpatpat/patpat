@@ -10,7 +10,7 @@ Running breadth-first search Model-Checking with fp 0 and seed 59078940147071745
 @!@!@STARTMSG 2220:0 @!@!@
 Starting SANY...
 @!@!@ENDMSG 2220 @!@!@
-Parsing file /agent/repos/plugins/pstack/skills/statechart/scripts/test/corpus/Counter/Counter.tla
+Parsing file /work/patpat-statechart/scripts/test/corpus/Counter/Counter.tla
 Parsing file /tmp/statechart-BUHfTS/statechart-nSpcGM/tmp-verdict-1/Naturals.tla
 Semantic processing of module Naturals
 Semantic processing of module Counter

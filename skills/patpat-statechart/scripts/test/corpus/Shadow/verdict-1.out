@@ -10,10 +10,10 @@ Running breadth-first search Model-Checking with fp 0 and seed 65431874937884562
 @!@!@STARTMSG 2220:0 @!@!@
 Starting SANY...
 @!@!@ENDMSG 2220 @!@!@
-Parsing file /agent/repos/plugins/pstack/skills/statechart/scripts/test/corpus/Shadow/Shadow.tla
+Parsing file /work/patpat-statechart/scripts/test/corpus/Shadow/Shadow.tla
 Parsing file /tmp/statechart-F3m8nM/statechart-zHLN8e/tmp-verdict-1/Naturals.tla
-Parsing file /agent/repos/plugins/pstack/skills/statechart/scripts/test/corpus/Shadow/ShadowLib.tla
-Parsing file /agent/repos/plugins/pstack/skills/statechart/scripts/test/corpus/Shadow/ShadowSub.tla
+Parsing file /work/patpat-statechart/scripts/test/corpus/Shadow/ShadowLib.tla
+Parsing file /work/patpat-statechart/scripts/test/corpus/Shadow/ShadowSub.tla
 Semantic processing of module Naturals
 Semantic processing of module ShadowSub
 Semantic processing of module ShadowLib

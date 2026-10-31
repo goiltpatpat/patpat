@@ -73,7 +73,7 @@ Then report:
 - what the model leaves out, the bounds you added, and which steps the chart hides;
 - the command that rebuilds the files, with a new `--out` folder.
 
-Origin and Patpat changes to the copied command are in [`UPSTREAM.md`](UPSTREAM.md); the license notice is in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+Origin, Patpat changes, and the license notice for the bundled command are in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## Proof closure
 

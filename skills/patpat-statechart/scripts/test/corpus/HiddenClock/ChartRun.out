@@ -11,7 +11,7 @@ Running breadth-first search Model-Checking with fp 0 and seed -7599449971928714
 Starting SANY...
 @!@!@ENDMSG 2220 @!@!@
 Parsing file /tmp/statechart-HFbI2d/statechart-O4JEhD/ChartRun.tla
-Parsing file /agent/repos/plugins/pstack/skills/statechart/scripts/test/corpus/HiddenClock/HiddenClock.tla
+Parsing file /work/patpat-statechart/scripts/test/corpus/HiddenClock/HiddenClock.tla
 Parsing file /tmp/statechart-HFbI2d/statechart-O4JEhD/tmp-ChartRun/Naturals.tla
 Parsing file /tmp/statechart-HFbI2d/statechart-O4JEhD/tmp-ChartRun/TLC.tla
 Parsing file /tmp/statechart-HFbI2d/statechart-O4JEhD/tmp-ChartRun/Sequences.tla

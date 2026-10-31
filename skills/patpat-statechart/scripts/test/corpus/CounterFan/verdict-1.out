@@ -10,7 +10,7 @@ Running breadth-first search Model-Checking with fp 0 and seed 32353305651406507
 @!@!@STARTMSG 2220:0 @!@!@
 Starting SANY...
 @!@!@ENDMSG 2220 @!@!@
-Parsing file /agent/repos/plugins/pstack/skills/statechart/scripts/test/corpus/CounterFan/CounterFan.tla
+Parsing file /work/patpat-statechart/scripts/test/corpus/CounterFan/CounterFan.tla
 Parsing file /tmp/statechart-LmZy8e/statechart-c8w50F/tmp-verdict-1/Naturals.tla
 Semantic processing of module Naturals
 Semantic processing of module CounterFan
