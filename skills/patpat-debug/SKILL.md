@@ -2,7 +2,7 @@
 name: patpat-debug
 description: Diagnose and fix a reproducible defect through root-cause evidence. Use for broken behavior, regressions, failing runtime paths, and unexplained mismatches when implementation is requested.
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Codebase","requires_state":[],"produces_state":[],"verification_cmd":""}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Codebase","requires_state":["workspace-root-open"],"produces_state":["defect-root-cause-isolated"],"verification_cmd":"git diff --check"}'
 ---
 
 # Patpat Debug

@@ -1627,6 +1627,34 @@
     controls("zoom-in")?.addEventListener("click", () => changeZoom(0.15));
     controls("zoom-out")?.addEventListener("click", () => changeZoom(-0.15));
     controls("zoom-reset")?.addEventListener("click", () => changeZoom(1 - zoom));
+    controls("zoom-fit")?.addEventListener("click", fitToView);
+    controls("workflow-simulate")?.addEventListener("click", toggleSimulation);
+    if (figure) {
+      figure.addEventListener("wheel", (e) => {
+        if (!e.ctrlKey && !e.metaKey) return;
+        e.preventDefault();
+        changeZoom(e.deltaY < 0 ? 0.15 : -0.15);
+      }, { passive: false });
+      let pan = null;
+      figure.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0 || e.target.closest("[data-node-id],[data-edge-id],a,button,input,select")) return;
+        pan = { id: e.pointerId, x: e.clientX, y: e.clientY, l: figure.scrollLeft, t: figure.scrollTop, m: false };
+      });
+      figure.addEventListener("pointermove", (e) => {
+        if (!pan || e.pointerId !== pan.id) return;
+        const dx = e.clientX - pan.x, dy = e.clientY - pan.y;
+        if (!pan.m && Math.hypot(dx, dy) > 4) { pan.m = true; figure.classList.add("is-panning"); try { figure.setPointerCapture(e.pointerId); } catch {} }
+        if (pan.m) { figure.scrollLeft = pan.l - dx; figure.scrollTop = pan.t - dy; }
+      });
+      const stopPan = (e) => {
+        if (!pan || (e && e.pointerId !== undefined && e.pointerId !== pan.id)) return;
+        if (pan.m && e && e.pointerId !== undefined) { try { figure.releasePointerCapture(e.pointerId); } catch {} }
+        figure.classList.remove("is-panning");
+        pan = null;
+      };
+      figure.addEventListener("pointerup", stopPan);
+      figure.addEventListener("pointercancel", stopPan);
+    }
     document.querySelectorAll("[data-export]").forEach((button) => button.addEventListener("click", async () => {
       try {
         const format = button.dataset.export;
@@ -1659,7 +1687,7 @@
     window.addEventListener("resize", updateOverviewViewport);
     figure.addEventListener("scroll", updateOverviewViewport, { passive: true });
     window.addEventListener("hashchange", handleHash);
-    document.addEventListener("visibilitychange", () => { if (document.hidden) stopTrace(true); });
+    document.addEventListener("visibilitychange", () => { if (document.hidden) { stopTrace(true); stopSimulation(); } });
     document.addEventListener("keydown", (event) => {
       const target = event.target;
       const editable = target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName));
@@ -1668,6 +1696,7 @@
         if (document.body.classList.contains("presentation")) { event.preventDefault(); exitPresentation(); return; }
         clearPassport();
         stopTrace(true);
+        stopSimulation();
       } else if (editable) return;
       else if (event.key === "/") { event.preventDefault(); params.search?.focus(); }
       else if (event.key.toLowerCase() === "s") { event.preventDefault(); cycleVisualPreset(); }
@@ -1683,7 +1712,8 @@
       else if (event.key.toLowerCase() === "f") { event.preventDefault(); controls("presentation-toggle")?.click(); }
       else if (event.key === "+" || event.key === "=") changeZoom(0.15);
       else if (event.key === "-") changeZoom(-0.15);
-      else if (event.key === "0") changeZoom(1 - zoom);
+      else if (event.key === "0") fitToView();
+      else if (event.key.toLowerCase() === "p") toggleSimulation();
       else if (event.key === "?") { const guide = document.querySelector(".viewer-guide"); if (guide) guide.open = !guide.open; }
     });
     handleHash();
@@ -1710,15 +1740,92 @@
     }
   }
 
+  let simTimer = 0, isSim = false;
+  function fitToView() {
+    if (!figure || !svg) return;
+    const r = figure.getBoundingClientRect(), pad = 40;
+    const w = Math.max(300, (figure.clientWidth || r.width) - pad);
+    const top = r.top > 0 ? r.top : 80;
+    const h = Math.max(360, window.innerHeight - top - 40);
+    const vb = svg.viewBox && svg.viewBox.baseVal ? svg.viewBox.baseVal : null;
+    const sw = vb && vb.width ? vb.width : (svg.clientWidth || 1200);
+    const sh = vb && vb.height ? vb.height : (svg.clientHeight || 1600);
+    const scale = Math.min(2.0, Math.max(0.6, Number(Math.min(w / sw, h / sh).toFixed(2))));
+    changeZoom(scale - zoom);
+    figure.scrollLeft = Math.max(0, (figure.scrollWidth - figure.clientWidth) / 2);
+    figure.scrollTop = 0;
+  }
+  function stopSimulation() {
+    if (simTimer) clearTimeout(simTimer);
+    simTimer = 0; isSim = false;
+    const b = controls("workflow-simulate");
+    if (b) { b.textContent = `\u25b6 ${ui.simulate || "Simulate flow"}`; b.classList.remove("is-running"); }
+    svg.querySelectorAll(".is-simulating").forEach((e) => e.classList.remove("is-simulating"));
+    svg.querySelectorAll(".is-active-token").forEach((e) => e.classList.remove("is-active-token"));
+  }
+  function toggleSimulation() {
+    if (isSim) { stopSimulation(); announce(ui.simulate_pause || "Simulation paused"); return; }
+    const start = nodes.find((n) => ["start", "initial"].includes(n.dataset.kind)) || nodes[0];
+    if (!start) return;
+    const seq = [], visited = new Set();
+    let curr = start.dataset.nodeId;
+    while (curr && !visited.has(curr) && seq.length < 40) {
+      visited.add(curr);
+      const out = edgeData.filter((e) => e.source === curr && !e.feedback);
+      if (!out.length) { seq.push({ node: curr, edge: null }); break; }
+      const chosen = out.find((e) => {
+        const lbl = (e.label + " " + (byNode.get(e.target)?.dataset.label || "")).toLowerCase();
+        return !lbl.includes("\u0e22\u0e01\u0e40\u0e25\u0e34\u0e01") && !lbl.includes("stop") && !lbl.includes("fail") && !lbl.includes("\u0e02\u0e32\u0e14\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c");
+      }) || out[0];
+      seq.push({ node: curr, edge: chosen.id });
+      curr = chosen.target;
+    }
+    if (!seq.length) return;
+    isSim = true;
+    const b = controls("workflow-simulate");
+    if (b) { b.textContent = `\u23f8 ${ui.simulate_pause || "Pause"}`; b.classList.add("is-running"); }
+    let step = 0;
+    const tick = () => {
+      if (!isSim || step >= seq.length) {
+        if (step >= seq.length) simTimer = setTimeout(() => { stopSimulation(); announce("Simulation completed"); }, 1200);
+        else stopSimulation();
+        return;
+      }
+      const item = seq[step];
+      const nodeEl = byNode.get(item.node), edgeEl = item.edge ? byEdge.get(item.edge) : null;
+      svg.querySelectorAll(".is-active-token").forEach((e) => e.classList.remove("is-active-token"));
+      svg.querySelectorAll(".is-simulating").forEach((e) => e.classList.remove("is-simulating"));
+      if (nodeEl) {
+        nodeEl.classList.add("is-active-token", "is-highlighted");
+        nodeEl.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+        announce((ui.simulate_status || "{node} ({step}/{total})").replace("{node}", nodeEl.dataset.label || item.node).replace("{step}", String(step + 1)).replace("{total}", String(seq.length)));
+      }
+      if (edgeEl) {
+        simTimer = setTimeout(() => {
+          if (!isSim) return;
+          edgeEl.classList.add("is-simulating", "is-highlighted");
+          simTimer = setTimeout(() => { step++; tick(); }, 650);
+        }, 550);
+      } else {
+        step++;
+        simTimer = setTimeout(tick, 800);
+      }
+    };
+    tick();
+  }
+
   function changeZoom(delta) {
     zoom = Math.min(2.5, Math.max(0.6, Number((zoom + delta).toFixed(2))));
-    if (figure) figure.dataset.zoom = String(Math.round(zoom * 100));
+    const pct = Math.round(zoom * 100);
+    if (figure) figure.dataset.zoom = String(pct);
+    const resetBtn = controls("zoom-reset");
+    if (resetBtn) resetBtn.textContent = `${pct}%`;
     if (document.body.dataset.depthMode === "auto") applyAutomaticDepth();
     updateOverviewViewport();
   }
 
   function depthAtScale(scale) {
-    if (scale < 1) return "map";
+    if (scale < 0.45) return "map";
     if (scale >= 1.75) return "full";
     return "read";
   }
@@ -1811,6 +1918,9 @@
   document.body.dataset.depth ||= "read";
   bind();
   centerMobileCanvas();
+  if (!location.hash && !new URLSearchParams(location.search).has("patpat-browser-check")) {
+    requestAnimationFrame(() => fitToView());
+  }
   document.body.dataset.viewerReady = "true";
   if (
     new URLSearchParams(location.search).has("patpat-browser-check")

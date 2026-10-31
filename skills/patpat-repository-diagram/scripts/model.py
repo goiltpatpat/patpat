@@ -31,6 +31,17 @@ MAX_EVIDENCE_SOURCE_BYTES = 1_000_000
 MAX_TOTAL_EVIDENCE_SOURCE_BYTES = 64_000_000
 
 
+def path_file_identity(value: os.stat_result) -> tuple[int, ...]:
+    identity = (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns)
+    if os.name == "nt":
+        return identity
+    return (*identity, value.st_ctime_ns)
+
+
+def descriptor_file_identity(value: os.stat_result) -> tuple[int, int, int, int, int]:
+    return value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns
+
+
 class DiagramError(ValueError):
     """A diagram source or repository anchor violates the Patpat contract."""
 
@@ -80,20 +91,7 @@ def _read_evidence_file(
             opened = os.fstat(source.fileno())
             if (
                 not stat.S_ISREG(opened.st_mode)
-                or (
-                    opened.st_dev,
-                    opened.st_ino,
-                    opened.st_size,
-                    opened.st_mtime_ns,
-                    opened.st_ctime_ns,
-                )
-                != (
-                    expected.st_dev,
-                    expected.st_ino,
-                    expected.st_size,
-                    expected.st_mtime_ns,
-                    expected.st_ctime_ns,
-                )
+                or path_file_identity(opened) != path_file_identity(expected)
             ):
                 raise DiagramError(f"working-tree source changed during validation: {path.name}")
             if opened.st_size > max_bytes:
@@ -116,8 +114,7 @@ def _read_evidence_file(
                 )
             if (
                 len(data) != opened.st_size
-                or (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns)
-                != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+                or descriptor_file_identity(opened) != descriptor_file_identity(after)
             ):
                 raise DiagramError(f"working-tree source changed during validation: {path.name}")
             return data
@@ -608,8 +605,19 @@ def validate_spec(
     if not isinstance(diagram_type, str) or diagram_type not in DIAGRAM_TYPES:
         raise DiagramError(f"type must be one of: {', '.join(sorted(DIAGRAM_TYPES))}")
     title = _text(raw["title"], "title", maximum=120)
-    language = raw.get("language", "en")
-    if not isinstance(language, str) or language not in LANGUAGES:
+    language = raw.get("language")
+    if language is None:
+        def _contains_thai(val: Any) -> bool:
+            if isinstance(val, str):
+                return any(0x0E00 <= ord(c) <= 0x0E7F for c in val)
+            if isinstance(val, dict):
+                return any(_contains_thai(v) for v in val.values())
+            if isinstance(val, list):
+                return any(_contains_thai(item) for item in val)
+            return False
+        has_thai = _contains_thai(title) or _contains_thai(raw.get("summary")) or _contains_thai(raw.get("body"))
+        language = "th" if has_thai else "en"
+    elif not isinstance(language, str) or language not in LANGUAGES:
         raise DiagramError(f"language must be one of: {', '.join(sorted(LANGUAGES))}")
     evidence = _evidence(raw["evidence"])
     brief_only = all(item.get("origin", "repository") == "brief" for item in evidence)

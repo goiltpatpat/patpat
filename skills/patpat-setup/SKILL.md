@@ -3,7 +3,7 @@ name: patpat-setup
 description: Inspect the active agent host and install or validate Patpat through its supported native plugin manager or an explicit Agent Skills directory. Use for Patpat installation, discovery, update, removal, or host compatibility questions.
 disable-model-invocation: true
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"DESTRUCTIVE","target_entity":"AgentHost","requires_state":[],"produces_state":[],"verification_cmd":""}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"DESTRUCTIVE","target_entity":"AgentHost","requires_state":["workspace-root-open"],"produces_state":["host-environment-configured"],"verification_cmd":"python3 scripts/validate.py"}'
 ---
 
 # Patpat Setup
@@ -35,6 +35,35 @@ For another agent, first prove that it supports the Agent Skills folder contract
 After install, invoke with the host form from the installation guide. Cursor uses `/patpat`. Codex uses `$patpat`. Portable hosts use `Use patpat to ...`.
 
 Report the detected host, selected scope, exact destination or marketplace, pre-existing conflicts, command receipts, discovered skill count, invocation result, and removal path. Classify package validation separately from prompt-time discovery.
+
+## Adaptive role routing (Smart Defaults + Easy Override)
+
+Patpat adapts model reasoning power to task sensitivity using three capability tiers without rigid ceremonial constraints:
+
+- **Strategic Architect & Lead (Deep Reasoning Tier)**:
+  - Target capability: Platform flagship or frontier reasoning models (e.g., Claude Thinking/Sonnet, OpenAI o-series/o3, Gemini Pro/Thinking, or host flagship aliases).
+  - Scope: Multi-phase planning, architectural refactoring, contract mutations, public API changes, statechart transitions, and high-risk invariants.
+  - Posture: Deep causal tracing, zero-shot topology planning, and strict proof-contract formulation.
+- **Fast Bounded Worker (Agile Execution Tier)**:
+  - Target capability: Low-latency, high-throughput execution models (e.g., Claude Haiku, GPT mini, Gemini Flash, or host fast worker aliases).
+  - Scope: Bounded bug fixes, local single-file refactors, test execution, AST symbol extraction, and syntax checks.
+  - Posture: Tight iteration cycles, minimal token consumption, and targeted diffs.
+- **Adversarial Reviewer (Independent Cross-Family Tier)**:
+  - Target capability: Cross-model family pairing (e.g., pairing an Anthropic worker with an OpenAI reviewer, or a Google worker with an Anthropic reviewer).
+  - Scope: Independent code reviews, blind adjudications, proof challenges, and pragmatic comment/anti-slop enforcement.
+  - Posture: Read-only, skeptical, verifying real surface evidence over narrative claims.
+
+## Universal host rules & configuration paths
+
+Store host-specific operational rules and guidelines in each platform's canonical directory:
+
+| Host Platform | Project-Scoped Rules | User / Global Rules | Supported Formats |
+| :--- | :--- | :--- | :--- |
+| **Cursor** | `.cursor/rules/` | `~/.cursor/rules/` | `.mdc`, `.md` |
+| **Claude Code** | `CLAUDE.md`, `.claude/rules/` | `~/.claude/rules/` | `.md` |
+| **OpenAI Codex** | `.codex/` | `~/.codex/` | `.md` |
+| **Google Antigravity** | `.gemini/antigravity/skills/` | `~/.gemini/antigravity/builtin/skills/` | `.md`, `SKILL.md` |
+| **Agent Plugins 1.0** | `.agents/skills/` | `~/.agents/skills/` | `SKILL.md` |
 
 ## Proof closure
 

@@ -27,6 +27,7 @@ import time
 import urllib.parse
 import urllib.error
 import urllib.request
+import unicodedata
 import xml.etree.ElementTree as ET
 import zlib
 from collections import defaultdict, deque
@@ -40,9 +41,11 @@ from model import (
     MAX_EVIDENCE_SOURCE_BYTES,
     MAX_SOURCE_JSON_BYTES,
     DiagramError,
+    descriptor_file_identity,
     git_context,
     load_json,
     parse_json,
+    path_file_identity,
     validate_spec,
 )
 from delta import compare_architecture
@@ -70,12 +73,12 @@ DESKTOP_READER_WIDTH = 960.0
 DESKTOP_READER_CHROME = 40.0
 MIN_PROJECTED_NODE_TEXT_PX = 6.0
 BLOCKING_GEOMETRY_PREFIXES = (
-    "node overlap:", "node outside canvas:", "node overlaps diagram header:",
+    "node overlap:", "node outside canvas:", "node overlaps diagram header:", "node overlaps diagram legend:",
     "node layer order:", "node layer reading order:", "edge self-crossing:",
     "edge label overlaps node:", "edge label overlap:", "boundary overlap",
-    "boundary overlaps unrelated node:", "boundary outside canvas:", "boundary overlaps diagram header:",
-    "edge label overlaps diagram header:", "edge label outside canvas:", "edge outside canvas:",
-    "edge crosses diagram header:",
+    "boundary overlaps unrelated node:", "boundary outside canvas:", "boundary overlaps diagram header:", "boundary overlaps diagram legend:",
+    "edge label overlaps diagram header:", "edge label overlaps diagram legend:", "edge label outside canvas:", "edge outside canvas:",
+    "edge crosses diagram header:", "edge crosses diagram legend:",
     "edge endpoint outside node port:", "edge crosses node:", "edge crossing:",
     "edge route reenters hinted endpoint:", "edge route overlaps relationship label:",
 )
@@ -275,6 +278,10 @@ VIEWER_TEXT = {
         "zoom_in": "Zoom in",
         "zoom_out": "Zoom out",
         "zoom_reset": "Reset zoom",
+        "zoom_fit": "Fit to view",
+        "simulate": "Simulate flow",
+        "simulate_pause": "Pause simulation",
+        "simulate_status": "Simulating: {node} ({step}/{total})",
         "export": "Export canonical diagram",
         "png": "PNG",
         "png_copy": "Copy PNG",
@@ -423,6 +430,10 @@ VIEWER_TEXT = {
         "zoom_in": "ขยาย",
         "zoom_out": "ย่อ",
         "zoom_reset": "คืนค่าขนาด",
+        "zoom_fit": "พอดีจอ",
+        "simulate": "จำลองการทำงาน",
+        "simulate_pause": "พักจำลอง",
+        "simulate_status": "กำลังจำลอง: {node} ({step}/{total})",
         "export": "ส่งออก",
         "png": "PNG",
         "png_copy": "คัดลอก PNG",
@@ -533,10 +544,10 @@ button:disabled{cursor:not-allowed;opacity:.55}
 .diagram-tools .overview-drawer>summary{display:inline-flex;min-height:34px;align-items:center;gap:7px;border:1px solid var(--line);border-radius:7px;padding:5px 10px;background:var(--paper);font-size:12px;list-style:none}.diagram-tools .overview-drawer>summary::-webkit-details-marker{display:none}.diagram-tools .overview-drawer>summary::before{content:"＋";color:var(--muted);font-weight:800}.diagram-tools .overview-drawer[open]>summary::before{content:"−";color:var(--accent)}
 .diagram-tools .overview-drawer[open] .diagram-overview{max-width:480px;margin:8px 0 0}
 .semantic-passport{margin:12px 0 4px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--canvas)}.passport-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}.passport-heading h3{margin:0;font-size:15px}.passport-heading div{display:flex;gap:8px;flex-wrap:wrap}.passport-facts{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.passport-fact{border:1px solid var(--line);border-radius:7px;padding:5px 8px;color:var(--muted);font-size:12px}.passport-relationships{margin:8px 0;padding-left:22px}.passport-relationships li{margin:4px 0}.route-details{margin:10px 0;padding:10px 12px;border-left:3px solid var(--accent);background:var(--canvas)}.route-details ol{margin:6px 0;padding-left:22px}.viewer-guide{margin:10px 0;border:1px solid var(--line);border-radius:9px;background:var(--canvas)}.viewer-guide summary{padding:7px 10px;font-size:13px}.viewer-guide ul{margin:0;padding:0 30px 12px}.viewer-guide li{margin:5px 0;font-size:13px}
-.route-journey{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}.route-journey output{color:var(--muted);font-size:13px}#route-journey[hidden]{display:none}#diagram-depth button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}figure svg [tabindex="0"]:focus{outline:none;filter:drop-shadow(0 0 3px rgba(36,85,214,.75))}.passport-evidence{margin:3px 0}.passport-evidence a{font-family:ui-monospace,Consolas,monospace}#diagram-body[data-depth="map"] figure svg .node-label,#diagram-body[data-depth="map"] figure svg .edge-label,#diagram-body[data-depth="map"] figure svg .edge-label-bg,#diagram-body[data-depth="map"] figure svg .certainty-mark{display:none}#diagram-body[data-depth="full"] figure svg .node-label,#diagram-body[data-depth="full"] figure svg .edge-label{font-weight:700}
+.route-journey{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}.route-journey output{color:var(--muted);font-size:13px}#route-journey[hidden]{display:none}#diagram-depth button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}figure svg [tabindex="0"]:focus{outline:none;filter:drop-shadow(0 0 3px rgba(36,85,214,.75))}.passport-evidence{margin:3px 0}.passport-evidence a{font-family:ui-monospace,Consolas,monospace}#diagram-body[data-depth="map"] figure svg .certainty-mark{display:none}#diagram-body[data-depth="full"] figure svg .node-label,#diagram-body[data-depth="full"] figure svg .edge-label{font-weight:700}
 .export-tools{max-width:1280px;margin:0 auto 18px;border:1px solid var(--line);border-radius:12px;background:var(--paper)}.export-tools summary{padding:11px 14px;font-size:14px}.export-grid{display:flex;flex-wrap:wrap;gap:8px;padding:0 14px 14px}
 figure svg .is-muted{opacity:.13}figure svg .is-highlighted{opacity:1!important}figure svg .is-highlighted .node-shape{stroke:#b45309;stroke-width:3.2}figure svg .is-highlighted path.edge{stroke:#b45309;stroke-width:3.2}figure svg .is-intent-preview{opacity:1!important;filter:drop-shadow(0 1px 3px rgba(180,83,9,.65))}
-body[data-depth="map"] figure svg .node-label,body[data-depth="map"] figure svg .edge-label,body[data-depth="map"] figure svg .edge-label-bg,body[data-depth="map"] figure svg .certainty-mark{visibility:hidden}body[data-depth="map"] figure svg [data-node-id].is-highlighted .node-label,body[data-depth="map"] figure svg [data-edge-id].is-highlighted .edge-label,body[data-depth="map"] figure svg [data-edge-id].is-highlighted .edge-label-bg{visibility:visible}body[data-depth="full"] figure svg .node-label{font-size:18px}body[data-depth="full"] figure svg .edge-label{font-size:15px}
+body[data-depth="map"] figure svg .certainty-mark{visibility:hidden}body[data-depth="map"] figure svg [data-node-id].is-highlighted .node-label,body[data-depth="map"] figure svg [data-edge-id].is-highlighted .edge-label,body[data-depth="map"] figure svg [data-edge-id].is-highlighted .edge-label-bg{visibility:visible}body[data-depth="full"] figure svg .node-label{font-size:18px}body[data-depth="full"] figure svg .edge-label{font-size:15px}
 body[data-theme="dark"]{color-scheme:dark;--ink:#e8edf6;--muted:#b1bfd3;--line:#52647c;--paper:#172235;--canvas:#101827;--accent:#8db0ff}
 body[data-theme="dark"] figure,body[data-theme="dark"] details{background:#172235;border-color:#52647c}body[data-theme="dark"] th{background:#202d42;color:#b1bfd3}body[data-theme="dark"] .unknown{color:#ffb58c}
 body[data-theme="dark"] figure svg .canvas{fill:#101827}body[data-theme="dark"] figure svg .paper{fill:#172235;stroke:#52647c}body[data-theme="dark"] figure svg text{fill:#e8edf6}body[data-theme="dark"] figure svg .header-kicker{fill:#8db0ff}body[data-theme="dark"] figure svg .summary,body[data-theme="dark"] figure svg .provenance,body[data-theme="dark"] figure svg .legend,body[data-theme="dark"] figure svg .node-id,body[data-theme="dark"] figure svg .certainty-mark,body[data-theme="dark"] figure svg .group-title{fill:#c0ccdd}
@@ -564,7 +575,7 @@ HTML_CSS += """
 body{background:var(--canvas);color:var(--ink)}main{max-width:1680px;padding:12px clamp(12px,2vw,28px) 32px}
 .diagram-tools{max-width:none;margin:0 auto 10px;padding:8px;border-radius:12px;background:var(--paper);box-shadow:none}
 .primary-toolbar{display:flex;align-items:center;gap:8px}.primary-toolbar .search-field{flex:1 1 auto;max-width:660px;min-width:210px}.primary-toolbar .search-field input{min-height:42px}
-.primary-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}.primary-actions>button,.primary-actions>.export-tools>summary{min-height:36px;padding:6px 10px;font-size:12px}
+.primary-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}.primary-actions>button,.primary-actions>.export-tools>summary{min-height:36px;padding:6px 10px;font-size:12px}#zoom-out,#zoom-in{min-width:34px;font-weight:800;font-size:15px}#zoom-reset{min-width:52px;font-variant-numeric:tabular-nums}#zoom-fit{min-width:44px}button.action-simulate{border-color:var(--accent);color:var(--accent);font-weight:700}button.action-simulate.is-running{background:var(--accent);color:#fff;border-color:var(--accent)}@keyframes edge-flow{to{stroke-dashoffset:-24}}figure svg path.edge.is-simulating{stroke:var(--accent)!important;stroke-width:3.5!important;stroke-dasharray:7 4;animation:edge-flow .5s linear infinite}@keyframes token-pulse{0%,100%{filter:drop-shadow(0 0 4px var(--accent))}50%{filter:drop-shadow(0 0 12px var(--accent))}}figure svg [data-node-id].is-active-token .node-shape{stroke:var(--accent)!important;stroke-width:3.6!important;animation:token-pulse 1.2s ease-in-out infinite}figure svg{margin:0 auto}figure.is-panning{cursor:grabbing;user-select:none}
 button{border-color:var(--line);border-radius:7px;font-size:12px;letter-spacing:.005em}button:hover{border-color:var(--accent);background:var(--accent-soft)}
 .explore-tools{max-width:none;margin:4px 0 0;border:0;background:transparent}.explore-tools>summary{display:inline-flex;align-items:center;gap:6px;padding:4px 7px;color:var(--muted);font-size:12px;list-style:none}.explore-tools>summary::-webkit-details-marker{display:none}.explore-tools>summary::before{content:"＋";font-weight:800}.explore-tools[open]>summary::before{content:"−";color:var(--accent)}.advanced-tools{padding:4px 8px 2px;border-top:1px solid var(--line)}
 .advanced-tools .tool-row{margin:8px 0}.advanced-tools .tool-field{max-width:360px}.advanced-tools .tool-status{margin:4px 0}
@@ -595,8 +606,7 @@ body[data-theme="dark"] .search-results{background:#121821;border-color:#354252}
 @media(max-width:760px){.mobile-diagram-intro{display:block;margin:10px 4px 8px}.mobile-diagram-intro h2{margin:0;font-size:17px;line-height:1.3}.mobile-diagram-intro p{margin:5px 0 0;color:var(--muted);font-size:12px;line-height:1.45}figure svg{margin-top:-124px;min-width:1000px}figure svg .header-kicker,figure svg .title,figure svg .summary,figure svg .provenance{display:none}}
 @media(max-width:760px){.mobile-diagram-intro p{margin:5px 0 0;color:var(--muted);font-size:12px;line-height:1.45;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}}
 @media(max-width:760px){.diagram-tools{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 8px}.primary-toolbar{grid-column:1/-1}.primary-actions{flex-wrap:nowrap;overflow-x:auto}.primary-actions>*{flex:0 0 auto;white-space:nowrap}.diagram-tools>.overview-drawer,.diagram-tools>.explore-tools{min-width:0;margin:0}.diagram-tools>.overview-drawer[open],.diagram-tools>.explore-tools[open]{grid-column:1/-1}}
-@media(max-width:760px){body.presentation .mobile-diagram-intro,body.presentation .diagram-pan-hint{display:none!important}body.presentation figure{overflow:auto}body.presentation figure svg{margin-top:-124px;min-width:1000px!important}body.presentation #presentation-exit{top:108px}}
-@media(max-width:760px){body.presentation .mobile-diagram-intro{display:block!important;margin:10px 4px 8px;padding-right:148px}body.presentation figure svg .header-kicker,body.presentation figure svg .title,body.presentation figure svg .summary,body.presentation figure svg .provenance{display:none!important}body.presentation #presentation-exit{top:16px}}
+@media(max-width:760px){body.presentation .diagram-pan-hint{display:none!important}body.presentation .mobile-diagram-intro{display:block!important;margin:10px 4px 8px;padding-right:148px}body.presentation figure{overflow:auto}body.presentation figure svg{margin-top:-124px;min-width:1000px!important}body.presentation figure svg .header-kicker,body.presentation figure svg .title,body.presentation figure svg .summary,body.presentation figure svg .provenance{display:none!important}body.presentation #presentation-exit{top:16px}}
 figure svg [data-node-id].is-role-a .node-shape{stroke:#087f8c!important;stroke-width:3.2!important}
 figure svg [data-node-id].is-role-b .node-shape{stroke:#a64b00!important;stroke-width:3.2!important;stroke-dasharray:6 3!important}
 figure svg [data-edge-id].is-role-forward path.edge{stroke:#087f8c!important;stroke-width:3.2!important}
@@ -648,10 +658,119 @@ def _text_width(value: str) -> float:
     width = 0.0
     for char in value:
         code = ord(char)
-        if unicodedata.category(char) in {"Mn", "Me"}:
+        if unicodedata.category(char) in {"Mn", "Me", "Cf"}:
             continue
-        width += 16 if unicodedata.east_asian_width(char) in {"F", "W"} or 0x0E00 <= code <= 0x0E7F else 8
+        if unicodedata.east_asian_width(char) in {"F", "W"}:
+            width += 16.0
+        elif 0x0E00 <= code <= 0x0E7F:
+            width += 9.5
+        else:
+            width += 8.0
     return width
+
+
+_THAI_LEADING_VOWELS = frozenset("\u0e40\u0e41\u0e42\u0e43\u0e44")
+_THAI_FOLLOWING_ATTACHED = frozenset("\u0e2f\u0e30\u0e32\u0e33\u0e45\u0e46")
+_THAI_CLOSED_VOWEL_MARKS = frozenset("\u0e31\u0e47")
+_THAI_BREAK_WORDS = (
+    "ระหว่าง", "สำหรับ", "เพื่อ", "เมื่อ", "เพราะ", "ตั้งแต่", "ไปยัง", "เข้าสู่", "ออกจาก",
+    "พร้อม", "ผ่าน", "ด้วย", "ตาม", "จาก", "ของ", "และ", "หรือ", "โดย", "ใน", "ต่อ", "ก่อน", "หลัง",
+    "สถาปัตยกรรม", "ความสัมพันธ์", "การเปลี่ยนผ่าน", "ข้อจำกัด", "หลักฐาน", "แผนภาพ", "เวิร์กโฟลว์",
+    "ขอบเขต", "สถานะ", "ระบบ", "โมดูล", "โมเดล", "คำสั่ง", "ข้อมูล", "ผลลัพธ์", "เงื่อนไข", "รายการ",
+    "ตรวจสอบ", "คำนวณ", "เปรียบเทียบ", "ส่งออก", "บันทึก", "สร้าง", "อ่าน", "เขียน",
+    "การทำงาน", "ทำงาน", "ความพร้อม", "เป้าหมาย", "ส่งมอบ", "ปลอดภัย",
+)
+
+
+def _is_thai_char(char: str) -> bool:
+    return 0x0E00 <= ord(char) <= 0x0E7F
+
+
+def _can_break_thai_at(text: str, index: int) -> bool:
+    """Return True when index is a safe orthographic boundary inside text."""
+    if index <= 0 or index >= len(text):
+        return False
+    prev_char = text[index - 1]
+    next_char = text[index]
+    if prev_char == "\u00a0" or next_char == "\u00a0":
+        return False
+    if unicodedata.category(next_char) in {"Mn", "Me", "Cf"}:
+        return False
+    if prev_char in _THAI_LEADING_VOWELS:
+        return False
+    if next_char in _THAI_FOLLOWING_ATTACHED:
+        return False
+    if next_char == "\u0e46" or (index + 1 < len(text) and text[index + 1] == "\u0e46"):
+        return False
+    # Do not split before a consonant cluster silenced by thanthakhat (การันต์ \u0e4c).
+    probe = index
+    while probe < min(len(text), index + 4):
+        if text[probe] == "\u0e4c":
+            return False
+        if probe > index and text[probe] not in "\u0e32\u0e33\u0e40\u0e41\u0e42\u0e43\u0e44" and unicodedata.category(text[probe]) not in {"Mn", "Me", "Lo"}:
+            break
+        probe += 1
+    # Do not split immediately after a closed-syllable vowel mark (ั / ็) before its final consonant.
+    back = index - 1
+    while back >= 0 and unicodedata.category(text[back]) in {"Mn", "Me"}:
+        if text[back] in _THAI_CLOSED_VOWEL_MARKS:
+            return False
+        back -= 1
+    return True
+
+
+def _known_thai_word_spans(value: str) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    for word in _THAI_BREAK_WORDS:
+        start = value.find(word)
+        while start != -1:
+            spans.append((start, start + len(word)))
+            start = value.find(word, start + 1)
+    return spans
+
+
+def _inside_known_thai_word(value: str, index: int, spans: list[tuple[int, int]] | None = None) -> bool:
+    """Return True when index falls strictly inside a listed Thai word occurrence."""
+    if spans is None:
+        spans = _known_thai_word_spans(value)
+    return any(start < index < end for start, end in spans)
+
+
+def _choose_token_cut(value: str, limit: int) -> int:
+    if limit >= len(value):
+        return len(value)
+    natural = [index + 1 for index, char in enumerate(value[:limit]) if char in "/_-\u200b"]
+    if natural:
+        return max(natural)
+    if any(_is_thai_char(char) for char in value[: limit + 1]):
+        min_cut = max(2, limit // 3)
+        spans = _known_thai_word_spans(value)
+        preferred: list[int] = []
+        for index in range(min_cut, limit + 1):
+            if not _can_break_thai_at(value, index) or _inside_known_thai_word(value, index, spans):
+                continue
+            tail = value[index:]
+            head = value[:index]
+            if (
+                any(tail.startswith(word) for word in _THAI_BREAK_WORDS)
+                or any(head.endswith(word) for word in _THAI_BREAK_WORDS)
+                or value[index] in _THAI_LEADING_VOWELS
+                or value[index - 1] in _THAI_FOLLOWING_ATTACHED
+                or (index >= 2 and value[index - 1] == "\u0e4c")
+            ):
+                preferred.append(index)
+        if preferred:
+            return max(preferred)
+        safe = [
+            index for index in range(1, limit + 1)
+            if _can_break_thai_at(value, index) and not _inside_known_thai_word(value, index)
+        ] or [index for index in range(1, limit + 1) if _can_break_thai_at(value, index)]
+        if safe:
+            return max(safe)
+        forward = next((index for index in range(limit + 1, len(value)) if _can_break_thai_at(value, index)), None)
+        if forward is not None:
+            return forward
+    return limit
 
 
 def _split_long_token(value: str, max_width: float) -> list[str]:
@@ -661,17 +780,26 @@ def _split_long_token(value: str, max_width: float) -> list[str]:
         if not fitting:
             break
         limit = max(fitting)
-        natural = [index + 1 for index, char in enumerate(value[:limit]) if char in "/_-"]
-        cut = max(natural) if natural else limit
-        pieces.append(value[:cut])
-        value = value[cut:]
+        cut = _choose_token_cut(value, limit)
+        pieces.append(value[:cut].rstrip("\u200b"))
+        value = value[cut:].lstrip("\u200b")
     if value:
-        pieces.append(value)
+        pieces.append(value.strip("\u200b"))
     return pieces
 
 
 def _wrap(value: str, max_width: float) -> list[str]:
-    words = value.split()
+    # Keep parenthetical phrases up to 24 chars atomic (e.g. "(PStack + Pele 1.9.0)")
+    glued_value = re.sub(r"\(([^)]{1,24})\)", lambda m: m.group(0).replace(" ", "\u00a0"), value)
+    raw_words = [w for w in glued_value.split(" ") if w]
+    words: list[str] = []
+    for word in raw_words:
+        # Keep a short count glued to the following Thai word ("3 ชั้น") so the
+        # number never ends one line while its unit starts the next.
+        if words and re.fullmatch(r"\d{1,3}", words[-1]) and _is_thai_char(word[0]):
+            words[-1] = f"{words[-1]}\u00a0{word}"
+        else:
+            words.append(word)
     lines: list[str] = []
     current = ""
     for word in words:
@@ -696,15 +824,7 @@ def _wrap(value: str, max_width: float) -> list[str]:
             if segment:
                 lines.append(segment)
             continue
-        pieces = []
-        while _text_width(word) > max_width:
-            cut = 1
-            while cut < len(word) and _text_width(word[: cut + 1]) <= max_width:
-                cut += 1
-            pieces.append(word[:cut])
-            word = word[cut:]
-        if word:
-            pieces.append(word)
+        pieces = _split_long_token(word, max_width) if _text_width(word) > max_width else [word]
         for piece in pieces:
             candidate = f"{current} {piece}".strip()
             if current and _text_width(candidate) > max_width:
@@ -719,11 +839,40 @@ def _wrap(value: str, max_width: float) -> list[str]:
     return lines
 
 
+_FILE_TOKEN_PATTERN = re.compile(r"^\(?[A-Za-z0-9_.\-/]+\.[A-Za-z0-9]{1,6}\)?$")
+MAX_FILE_TOKEN_NODE_WIDTH = 340.0
+
+
 def _node_size(entity: dict[str, Any]) -> tuple[float, float, list[str]]:
-    lines = _wrap(entity["label"], 176)
-    extra = 60 if entity["kind"] == "initial" else 36
-    width = max(164.0, min(260.0, max(_text_width(line) for line in lines) + extra))
-    height = 62.0 + max(0, len(lines) - 1) * 18.0
+    kind = entity["kind"]
+    extra = 64 if kind in {"initial", "start", "terminal"} else 40
+    wrap_width = 152.0 if kind in {"decision", "gate"} else 176.0
+    # Keep file names such as (check_assignment_model.py) on one line by widening
+    # the node instead of cutting them at an underscore.
+    file_tokens = [token for token in entity["label"].split() if _FILE_TOKEN_PATTERN.match(token)]
+    if file_tokens:
+        wrap_width = max(wrap_width, min(MAX_FILE_TOKEN_NODE_WIDTH - extra, max(_text_width(token) for token in file_tokens)))
+    paren_match = re.search(r"\(([^)]+)\)", entity["label"])
+    if paren_match:
+        paren_inner = paren_match.group(0)
+        paren_w = _text_width(paren_inner)
+        if paren_w + extra <= (230.0 if kind in {"decision", "gate"} else 260.0):
+            wrap_width = max(wrap_width, paren_w)
+    lines = _wrap(entity["label"], wrap_width)
+    id_width = _text_width(_display_node_id(entity)) * 0.78 if "id" in entity else 0.0
+    text_w = max((_text_width(line) for line in lines), default=80.0)
+    if kind in {"decision", "gate"}:
+        height = 112.0 + max(0, len(lines) - 1) * 30.0
+        max_cap = 268.0 if len(lines) == 1 and text_w <= 155.0 else 380.0
+        width = max(236.0, min(max_cap, max(text_w * 1.9 + 68.0, id_width * 2.5 + 68.0)))
+        return width, height, lines
+    max_node_width = 276.0 if wrap_width <= 176.0 else MAX_FILE_TOKEN_NODE_WIDTH
+    if kind in {"start", "terminal"}:
+        width = max(188.0, id_width + 72.0, min(max_node_width, text_w + extra))
+        height = 68.0 + max(0, len(lines) - 1) * 20.0
+        return width, height, lines
+    width = max(164.0, id_width + 36.0, min(max_node_width, text_w + extra))
+    height = 64.0 + max(0, len(lines) - 1) * 19.0
     return width, height, lines
 
 
@@ -1146,14 +1295,25 @@ def _graph_layout(spec: dict[str, Any]) -> dict[str, Any]:
     group_boxes = []
     for group in spec["groups"]:
         members = [positions[identifier] for identifier in group["members"]]
-        pad_x, pad_y = 20.0, 28.0
+        pad_x, pad_top, pad_bottom = 24.0, 34.0, 22.0
         left = min(item["x"] for item in members) - pad_x
-        top = min(item["y"] for item in members) - pad_y
+        top = min(item["y"] for item in members) - pad_top
         right = max(item["x"] + item["w"] for item in members) + pad_x
-        bottom = max(item["y"] + item["h"] for item in members) + pad_y
+        bottom = max(item["y"] + item["h"] for item in members) + pad_bottom
+        min_group_w = _text_width(group["label"]) + 48.0
+        if right - left < min_group_w and authored_positions is None:
+            extra_w = min_group_w - (right - left)
+            cand_left = left - extra_w / 2.0
+            cand_right = right + extra_w / 2.0
+            cand_box = {"x": cand_left, "y": top, "w": cand_right - cand_left, "h": bottom - top}
+            if not any(
+                identifier not in group["members"] and _rects_overlap(cand_box, rect, 2.0)
+                for identifier, rect in positions.items()
+            ) and not any(_rects_overlap(cand_box, prev, 2.0) for prev in group_boxes):
+                left, right = cand_left, cand_right
         group_boxes.append({**group, "x": left, "y": top, "w": right - left, "h": bottom - top})
 
-    if authored_positions:
+    if authored_positions or spec["layout"].get("edge_hints"):
         x_extents = [coordinate for item in positions.values() for coordinate in (item["x"], item["x"] + item["w"])]
         x_extents.extend(coordinate for path in paths for coordinate, _ in path["points"])
         x_extents.extend(coordinate for label in labels for coordinate in (label["x"] - label["w"] / 2, label["x"] + label["w"] / 2))
@@ -1162,8 +1322,8 @@ def _graph_layout(spec: dict[str, Any]) -> dict[str, Any]:
         y_extents.extend(y for path in paths for _, y in path["points"])
         y_extents.extend(coordinate for label in labels for coordinate in (label["y"] - label["h"] / 2, label["y"] + label["h"] / 2))
         y_extents.extend(coordinate for group in group_boxes for coordinate in (group["y"], group["y"] + group["h"]))
-        width = max(MIN_CANVAS_WIDTH, max(x_extents, default=0.0) + 80.0)
-        height = max(_header_height(spec) + 100.0, max(y_extents, default=0.0) + 80.0)
+        width = max(MIN_CANVAS_WIDTH if authored_positions else width, max(x_extents, default=0.0) + 80.0)
+        height = max((_header_height(spec) + 100.0) if authored_positions else height, max(y_extents, default=0.0) + 80.0)
 
     if direction == "TB":
         horizontal_extents = [
@@ -1203,7 +1363,7 @@ def _graph_layout(spec: dict[str, Any]) -> dict[str, Any]:
                 group_boxes = [{**group, "x": group["x"] + offset} for group in group_boxes]
 
     warnings = _geometry_warnings(
-        positions, paths, labels, group_boxes, width, height, header_bottom=_header_height(spec),
+        positions, paths, labels, group_boxes, width, height, header_bottom=_header_height(spec), footer_top=height - 68.0,
     )
     if authored_positions:
         warnings.extend(_authored_position_warnings(direction, layers, positions))
@@ -1455,12 +1615,15 @@ def _geometry_warnings(
     height: float,
     *,
     header_bottom: float | None = None,
+    footer_top: float | None = None,
 ) -> list[str]:
     warnings: list[str] = []
     rects = list(positions.items())
     for identifier, rect in rects:
         if rect["x"] < 0 or rect["y"] < 0 or rect["x"] + rect["w"] > width or rect["y"] + rect["h"] > height:
             warnings.append(f"node outside canvas: {identifier}")
+        if footer_top is not None and rect["y"] + rect["h"] > footer_top:
+            warnings.append(f"node overlaps diagram legend: {identifier}")
     for index, (first_id, first) in enumerate(rects):
         for second_id, second in rects[index + 1 :]:
             if _rects_overlap(first, second, 2.0):
@@ -1471,6 +1634,8 @@ def _geometry_warnings(
             warnings.append(f"edge label outside canvas: {label['id']}")
         if header_bottom is not None and _rects_overlap(box, {"x": 0.0, "y": 0.0, "w": width, "h": header_bottom}, 0.0):
             warnings.append(f"edge label overlaps diagram header: {label['id']}")
+        if footer_top is not None and _rects_overlap(box, {"x": 0.0, "y": footer_top, "w": width, "h": max(0.0, height - footer_top)}, 0.0):
+            warnings.append(f"edge label overlaps diagram legend: {label['id']}")
         for identifier, rect in positions.items():
             if _rects_overlap(box, rect, 1.0):
                 warnings.append(f"edge label overlaps node: {label['id']}/{identifier}")
@@ -1505,12 +1670,18 @@ def _geometry_warnings(
             warnings.append(f"boundary outside canvas: {group['id']}")
         if header_bottom is not None and _rects_overlap(group, {"x": 0.0, "y": 0.0, "w": width, "h": header_bottom}, 0.0):
             warnings.append(f"boundary overlaps diagram header: {group['id']}")
+        if footer_top is not None and _rects_overlap(group, {"x": 0.0, "y": footer_top, "w": width, "h": max(0.0, height - footer_top)}, 0.0):
+            warnings.append(f"boundary overlaps diagram legend: {group['id']}")
         for identifier, rect in positions.items():
             if identifier not in group["members"] and _rects_overlap(group, rect, 0):
                 warnings.append(f"boundary overlaps unrelated node: {group['id']}/{identifier}")
         for other in groups[index + 1 :]:
             if _rects_overlap(group, other, 0):
-                warnings.append(f"boundary overlap: {group['id']}/{other['id']}")
+                warnings.append(
+                    f"boundary overlap: {group['id']}/{other['id']}; "
+                    "hint: check if an early-exit or terminal node (e.g. fail-closed stop) is assigned to a late-stage lane across distant layers; "
+                    "group early-exit nodes into their originating stage lane to maintain contiguous vertical bounds"
+                )
     for path in paths:
         for x, y in path["points"]:
             if x < 0 or y < 0 or x > width or y > height:
@@ -1558,6 +1729,10 @@ def _geometry_warnings(
             header = {"x": 0.0, "y": 0.0, "w": width, "h": header_bottom}
             if any(_segment_crosses_rect(first, second, header) for first, second in zip(path["points"], path["points"][1:])):
                 warnings.append(f"edge crosses diagram header: {path['edge']['id']}")
+        if footer_top is not None:
+            footer = {"x": 0.0, "y": footer_top, "w": width, "h": max(0.0, height - footer_top)}
+            if any(_segment_crosses_rect(first, second, footer) for first, second in zip(path["points"], path["points"][1:])):
+                warnings.append(f"edge crosses diagram legend: {path['edge']['id']}")
         endpoints = {path["edge"]["source"], path["edge"]["target"]}
         side_hints = path.get("side_hints", {})
         if side_hints:
@@ -1580,7 +1755,13 @@ def _geometry_warnings(
                 _segment_crosses_rect(first, second, rect)
                 for first, second in zip(path["points"], path["points"][1:])
             ):
-                warnings.append(f"edge crosses node: {path['edge']['id']}/{identifier}; adjust layer order or route")
+                hint = "; adjust layer order or route"
+                if path["edge"].get("feedback"):
+                    hint += (
+                        "; hint: in shared layers, place nodes with feedback: true transitions at the leftmost index (Index 0) of layout.layers, "
+                        "and forward-branching nodes to the right to prevent left/right routing collisions"
+                    )
+                warnings.append(f"edge crosses node: {path['edge']['id']}/{identifier}{hint}")
     for index, first in enumerate(paths):
         first_ends = {first["edge"]["source"], first["edge"]["target"]}
         for second in paths[index + 1 :]:
@@ -1601,7 +1782,13 @@ def _geometry_warnings(
                 if crossed:
                     break
             if crossed:
-                warnings.append(f"edge crossing: {first['edge']['id']}/{second['edge']['id']}; adjust layer order or route")
+                hint = "; adjust layer order or route"
+                if first["edge"].get("feedback") or second["edge"].get("feedback"):
+                    hint += (
+                        "; hint: in shared layers, place nodes with feedback: true transitions at the leftmost index (Index 0) of layout.layers, "
+                        "and forward-branching nodes to the right to prevent left/right routing collisions"
+                    )
+                warnings.append(f"edge crossing: {first['edge']['id']}/{second['edge']['id']}{hint}")
     return sorted(set(warnings))
 
 
@@ -1775,7 +1962,7 @@ def _sequence_layout(spec: dict[str, Any]) -> dict[str, Any]:
         box_height = len(lines) * 16.0 + 7.0
         labels.append({"id": edge["id"], "text": edge["label"], "lines": lines, "x": label_x, "y": label_y, "w": box_width, "h": box_height, "certainty": edge["certainty"]})
         y += row_heights[edge["id"]]
-    warnings = _geometry_warnings(positions, paths, labels, [], width, height, header_bottom=_header_height(spec))
+    warnings = _geometry_warnings(positions, paths, labels, [], width, height, header_bottom=_header_height(spec), footer_top=height - 68.0)
     return {"positions": positions, "paths": paths, "labels": labels, "groups": [], "width": width, "height": height, "warnings": warnings}
 
 
@@ -1806,16 +1993,52 @@ def _draw_group(svg: ET.Element, group: dict[str, Any]) -> None:
     group_node = _svg(svg, "g", {"data-boundary-id": group["id"], "role": "group", "aria-label": f"{group['label']}; {ui[group['certainty']]}{detail}"})
     classes = "group-box group-unknown" if group["certainty"] == "unknown" else "group-box group-inferred" if group["certainty"] == "inferred" else "group-box"
     _svg(group_node, "rect", {"x": group["x"], "y": group["y"], "width": group["w"], "height": group["h"], "rx": 13, "class": classes})
-    _svg(group_node, "text", {"x": group["x"] + 13, "y": group["y"] + 17, "class": "group-title"}, group["label"])
+    title_lines = _wrap(group["label"], max(120.0, group["w"] - 28.0))
+    if len(title_lines) == 1:
+        _svg(group_node, "text", {"x": group["x"] + 14, "y": group["y"] + 19, "class": "group-title"}, title_lines[0])
+    else:
+        _draw_text(group_node, group["x"] + 14, group["y"] + 17, title_lines, class_name="group-title", anchor="start", line_height=15.0)
 
 
 def _certainty_symbol(certainty: str) -> str:
     return {"inferred": "~", "unknown": "?"}.get(certainty, "")
 
 
+def _display_node_id(entity: dict[str, Any]) -> str:
+    raw_id = entity["id"]
+    if not re.fullmatch(r"[A-Z][0-9a-f]{12,}", raw_id):
+        return raw_id
+    label = str(entity.get("label") or "").strip()
+    if " — " in label:
+        tail = label.rsplit(" — ", 1)[-1].strip()
+        if tail and len(tail) <= 24:
+            return tail
+    file_match = re.search(r"\(([^)]+\.[a-zA-Z0-9_]+)\)", label)
+    if file_match and len(file_match.group(1)) <= 24:
+        return file_match.group(1)
+    if "/" in label:
+        basename = PurePosixPath(label.split()[0]).name
+        if basename and len(basename) <= 24:
+            return basename
+    return str(entity.get("kind") or "component").upper()[:18]
+
+
+def _cited_dirty_paths(spec: dict[str, Any], git: dict[str, Any]) -> list[str]:
+    workspace_dirty = set(git.get("changed_paths", []))
+    cited: set[str] = set()
+    for item in spec.get("snapshots", {}).values():
+        if not isinstance(item, dict) or item.get("origin", "repository") != "repository":
+            continue
+        path = item.get("path")
+        if isinstance(path, str) and (item.get("snapshot") != "committed" or path in workspace_dirty):
+            cited.add(path)
+    return sorted(cited)
+
+
 def _draw_graph_node(svg: ET.Element, entity: dict[str, Any], rect: dict[str, Any]) -> None:
     x, y, width, height = rect["x"], rect["y"], rect["w"], rect["h"]
     ui = UI_TEXT[svg.attrib.get("data-language", "en")]
+    display_id = _display_node_id(entity)
     group = _svg(svg, "g", {
         "data-node-id": entity["id"], "data-label": entity["label"], "data-kind": entity["kind"],
         "data-certainty": entity["certainty"], "data-evidence": ",".join(entity["evidence_ids"]),
@@ -1830,7 +2053,7 @@ def _draw_graph_node(svg: ET.Element, entity: dict[str, Any], rect: dict[str, An
         _svg(group, "rect", {"x": x, "y": y, "width": width, "height": height, "rx": 11, "class": shape_class})
         _svg(group, "circle", {"cx": x + 23, "cy": y + height / 2, "r": 8, "class": "terminal-dot"})
     elif kind in {"terminal", "start"}:
-        _svg(group, "rect", {"x": x, "y": y + 7, "width": width, "height": height - 14, "rx": (height - 14) / 2, "class": shape_class})
+        _svg(group, "rect", {"x": x, "y": y, "width": width, "height": height, "rx": min(height / 2, 36.0), "class": shape_class})
     elif kind in {"decision", "gate"}:
         points = f"{x + width / 2},{y} {x + width},{y + height / 2} {x + width / 2},{y + height} {x},{y + height / 2}"
         _svg(group, "polygon", {"points": points, "class": shape_class})
@@ -1843,20 +2066,35 @@ def _draw_graph_node(svg: ET.Element, entity: dict[str, Any], rect: dict[str, An
         rx = 19 if kind == "external" else 11
         _svg(group, "rect", {"x": x, "y": y, "width": width, "height": height, "rx": rx, "class": shape_class})
     if kind == "initial":
-        _svg(group, "text", {"x": x + 12, "y": y + 15, "class": "node-id"}, entity["id"])
+        _svg(group, "text", {"x": x + 12, "y": y + 16, "class": "node-id"}, display_id)
         marker = _certainty_symbol(entity["certainty"])
         if marker:
-            _svg(group, "text", {"x": x + width - 11, "y": y + 15, "class": "certainty-mark" + (" unknown-mark" if marker == "?" else ""), "text-anchor": "end"}, marker)
-        _draw_text(group, x + width / 2 + 19, y + height / 2 + 5, rect["lines"], class_name="node-label")
-    else:
-        corner_inset = 30 if kind in {"start", "terminal"} else 12
-        _svg(group, "text", {"x": x + corner_inset, "y": y + 15, "class": "node-id"}, entity["id"])
-        marker = _certainty_symbol(entity["certainty"])
-        if marker:
-            _svg(group, "text", {"x": x + width - corner_inset, "y": y + 15, "class": "certainty-mark" + (" unknown-mark" if marker == "?" else ""), "text-anchor": "end"}, marker)
+            _svg(group, "text", {"x": x + width - 11, "y": y + 16, "class": "certainty-mark" + (" unknown-mark" if marker == "?" else ""), "text-anchor": "end"}, marker)
         line_height = 17.0
         total = len(rect["lines"]) * line_height
-        first_y = y + height / 2 - total / 2 + 13
+        first_y = max(y + 36.0, y + 18.0 + (height - 20.0) / 2 - total / 2 + 13.0)
+        _draw_text(group, x + width / 2 + 19, first_y, rect["lines"], class_name="node-label")
+    elif kind in {"decision", "gate"}:
+        line_height = 17.0
+        total = len(rect["lines"]) * line_height
+        id_y = y + height / 2 - total / 2 - 7.0
+        _svg(group, "text", {"x": x + width / 2, "y": f"{id_y:.1f}", "class": "node-id", "text-anchor": "middle"}, display_id)
+        marker = _certainty_symbol(entity["certainty"])
+        if marker:
+            _svg(group, "text", {"x": f"{x + width / 2 + _text_width(display_id) * 0.42 + 10.0:.1f}", "y": f"{id_y:.1f}", "class": "certainty-mark" + (" unknown-mark" if marker == "?" else "")}, marker)
+        first_y = y + height / 2 - total / 2 + 16.0
+        _draw_text(group, x + width / 2, first_y, rect["lines"], class_name="node-label")
+    else:
+        corner_inset = 30 if kind in {"start", "terminal"} else 12
+        id_y = y + 17 if kind in {"start", "terminal"} else y + 16
+        _svg(group, "text", {"x": x + corner_inset, "y": id_y, "class": "node-id"}, display_id)
+        marker = _certainty_symbol(entity["certainty"])
+        if marker:
+            _svg(group, "text", {"x": x + width - corner_inset, "y": id_y, "class": "certainty-mark" + (" unknown-mark" if marker == "?" else ""), "text-anchor": "end"}, marker)
+        line_height = 17.0
+        total = len(rect["lines"]) * line_height
+        min_first_y = y + 37.0 if kind in {"start", "terminal"} else y + 36.0
+        first_y = max(min_first_y, y + 18.0 + (height - 20.0) / 2 - total / 2 + 13.0)
         _draw_text(group, x + width / 2, first_y, rect["lines"], class_name="node-label")
 
 
@@ -1866,6 +2104,7 @@ def _draw_sequence_participant(svg: ET.Element, entity: dict[str, Any], rect: di
     top = y + node_height
     _svg(svg, "line", {"x1": cx, "y1": top + 10, "x2": cx, "y2": height - 54, "class": "lifeline", "data-lifeline-for": entity["id"]})
     ui = UI_TEXT[svg.attrib.get("data-language", "en")]
+    display_id = _display_node_id(entity)
     node = _svg(svg, "g", {
         "data-node-id": entity["id"], "data-label": entity["label"], "data-kind": entity["kind"],
         "data-certainty": entity["certainty"], "data-evidence": ",".join(entity["evidence_ids"]),
@@ -1874,11 +2113,14 @@ def _draw_sequence_participant(svg: ET.Element, entity: dict[str, Any], rect: di
     _svg(node, "title", text=f"{entity['id']}: {entity['label']} ({ui[entity['certainty']]})")
     shape_class = "participant" + (" participant-unknown" if entity["certainty"] == "unknown" else "")
     _svg(node, "rect", {"x": x, "y": y, "width": width, "height": node_height, "rx": 11, "class": shape_class})
-    _svg(node, "text", {"x": x + 12, "y": y + 15, "class": "node-id"}, entity["id"])
+    _svg(node, "text", {"x": x + 12, "y": y + 16, "class": "node-id"}, display_id)
     marker = _certainty_symbol(entity["certainty"])
     if marker:
-        _svg(node, "text", {"x": x + width - 11, "y": y + 15, "class": "certainty-mark" + (" unknown-mark" if marker == "?" else ""), "text-anchor": "end"}, marker)
-    _draw_text(node, cx, y + node_height / 2 + 5, rect["lines"], class_name="node-label")
+        _svg(node, "text", {"x": x + width - 11, "y": y + 16, "class": "certainty-mark" + (" unknown-mark" if marker == "?" else ""), "text-anchor": "end"}, marker)
+    line_height = 17.0
+    total = len(rect["lines"]) * line_height
+    first_y = max(y + 36.0, y + 18.0 + (node_height - 20.0) / 2 - total / 2 + 13.0)
+    _draw_text(node, cx, first_y, rect["lines"], class_name="node-label")
 
 
 def _draw_edge(svg: ET.Element, route: dict[str, Any], label: dict[str, Any]) -> None:
@@ -2026,7 +2268,7 @@ def _viewer_controls(language: str, views: list[dict[str, Any]] | None = None) -
 <div class="primary-toolbar">
 <div class="tool-field search-field"><label class="sr-only" for="diagram-search">{html.escape(labels['search'])}</label><input id="diagram-search" type="search" autocomplete="off" placeholder="{html.escape(labels['search'])}" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="diagram-search-results" aria-expanded="false"><div id="diagram-search-results" class="search-results" role="listbox" aria-label="{html.escape(labels['search_results'])}" hidden></div></div>
 <div class="primary-actions" role="group" aria-label="{html.escape(labels['tools'])}">
-<button id="theme-toggle" type="button" aria-pressed="true" aria-keyshortcuts="T">{html.escape(labels['theme'])}</button><button id="visual-preset" type="button" aria-keyshortcuts="S">{html.escape(labels['visual_preset'])}</button><button id="presentation-toggle" type="button" aria-keyshortcuts="F">{html.escape(labels['presentation'])}</button>
+<button id="zoom-out" type="button" title="{html.escape(labels['zoom_out'])}" aria-label="{html.escape(labels['zoom_out'])}" aria-keyshortcuts="-">−</button><button id="zoom-reset" type="button" title="{html.escape(labels['zoom_reset'])}" aria-label="{html.escape(labels['zoom_reset'])}" aria-keyshortcuts="0">100%</button><button id="zoom-in" type="button" title="{html.escape(labels['zoom_in'])}" aria-label="{html.escape(labels['zoom_in'])}" aria-keyshortcuts="+">+</button><button id="zoom-fit" type="button" title="{html.escape(labels['zoom_fit'])}" aria-label="{html.escape(labels['zoom_fit'])}">{html.escape(labels['zoom_fit'])}</button><button id="workflow-simulate" type="button" class="action-simulate" title="{html.escape(labels['simulate'])}" aria-label="{html.escape(labels['simulate'])}">▶ {html.escape(labels['simulate'])}</button><button id="theme-toggle" type="button" aria-pressed="true" aria-keyshortcuts="T">{html.escape(labels['theme'])}</button><button id="visual-preset" type="button" aria-keyshortcuts="S">{html.escape(labels['visual_preset'])}</button><button id="presentation-toggle" type="button" aria-keyshortcuts="F">{html.escape(labels['presentation'])}</button>
 <details id="export-tools" class="export-tools"><summary>{html.escape(labels['export'])}</summary><div class="export-grid">
 <button type="button" data-export="png">{html.escape(labels['png'])}</button><button type="button" data-export="png-copy">{html.escape(labels['png_copy'])}</button><button type="button" data-export="jpeg">{html.escape(labels['jpeg'])}</button><button type="button" data-export="webp">{html.escape(labels['webp'])}</button>
 <button type="button" data-export="svg-auto">{html.escape(labels['svg_auto'])}</button><button type="button" data-export="svg-pair">{html.escape(labels['svg_pair'])}</button><button type="button" data-export="webm">{html.escape(labels['webm'])}</button>
@@ -2057,7 +2299,6 @@ def _viewer_controls(language: str, views: list[dict[str, Any]] | None = None) -
 <div class="tool-field"><label for="route-from">{html.escape(labels['from'])}</label><select id="route-from"></select></div>
 <div class="tool-field"><label for="route-to">{html.escape(labels['to'])}</label><select id="route-to"></select></div>
 <button id="route-probe" type="button">{html.escape(labels['probe'])}</button><button id="motion-trace" type="button">{html.escape(labels['trace'])}</button>
-<button id="zoom-out" type="button" aria-label="{html.escape(labels['zoom_out'])}">−</button><button id="zoom-reset" type="button" aria-label="{html.escape(labels['zoom_reset'])}">100%</button><button id="zoom-in" type="button" aria-label="{html.escape(labels['zoom_in'])}">+</button>
 </div>
 <div id="diagram-depth" class="tool-row" role="group" aria-label="{html.escape(labels['read_depth'])}"><button id="depth-auto" type="button" data-depth-mode="auto" aria-pressed="true">{html.escape(labels['depth_auto_status'].replace('{depth}', labels['read_mode']))}</button><button type="button" data-depth="map">{html.escape(labels['map_mode'])}</button><button type="button" data-depth="read">{html.escape(labels['read_mode'])}</button><button type="button" data-depth="full">{html.escape(labels['full_mode'])}</button></div>
 <output id="viewer-status" class="tool-status" aria-live="polite">{html.escape(labels['status'])}</output>
@@ -2283,13 +2524,25 @@ def _html_document(spec: dict[str, Any], git: dict[str, Any], svg: bytes, source
         )
     changed_path_items = git.get("changed_paths", [])
     changed_paths = "".join(f"<li><code>{html.escape(path)}</code></li>" for path in changed_path_items)
+    cited_dirty = _cited_dirty_paths(spec, git)
+    cited_dirty_summary = (
+        ("หลักฐานที่อ้างอิงมีการแก้ไขใน working tree: " if language == "th" else "Cited evidence modified in working tree: ")
+        + ", ".join(f"<code>{html.escape(path)}</code>" for path in cited_dirty)
+        if cited_dirty
+        else (
+            "หลักฐานที่อ้างอิงในแผนภาพนี้ตรงกับ HEAD ที่ commit แล้วทั้งหมด"
+            if language == "th"
+            else "All cited repository evidence in this diagram matches committed HEAD."
+        )
+    )
     if git.get("revision"):
         provenance = (
             f"<details class=\"provenance-details\"><summary>{html.escape(ui['provenance'])}</summary>"
             f"<p><code>{html.escape(git['name'])}</code> · <code>{html.escape(git['revision'])}</code> · "
             f"{html.escape(ui['working_dirty'] if git['dirty'] else ui['working_clean'])}</p>"
             f"<p>{html.escape(ui['origin'])}: <code>{html.escape(git.get('origin') or 'unavailable')}</code></p>"
-            f"<p>{html.escape(ui['changed_paths'])}</p><ul>{changed_paths}</ul>"
+            f"<p>{cited_dirty_summary}</p>"
+            f"<p>{html.escape(ui['changed_paths'])} ({len(changed_path_items)})</p><ul>{changed_paths}</ul>"
             f"{'<p>Changed path list truncated at 500 entries.</p>' if git.get('changed_paths_truncated', False) else ''}</details>"
         )
     else:
@@ -2564,10 +2817,9 @@ def _file_sha256(path: Path, max_bytes: int) -> str:
     try:
         with os.fdopen(descriptor, "rb") as source:
             opened = os.fstat(source.fileno())
-            identity = (expected.st_dev, expected.st_ino, expected.st_size, expected.st_mtime_ns, expected.st_ctime_ns)
             if (
                 not stat.S_ISREG(opened.st_mode)
-                or (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns) != identity
+                or path_file_identity(opened) != path_file_identity(expected)
             ):
                 raise DiagramError(f"transaction artifact changed during hashing: {path.name}")
             total = 0
@@ -2582,8 +2834,7 @@ def _file_sha256(path: Path, max_bytes: int) -> str:
             after = os.fstat(source.fileno())
             if (
                 total != opened.st_size
-                or (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns)
-                != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+                or descriptor_file_identity(opened) != descriptor_file_identity(after)
             ):
                 raise DiagramError(f"transaction artifact changed during hashing: {path.name}")
     except OSError as error:
@@ -2611,10 +2862,9 @@ def _copy_file_bounded(source_path: Path, destination_path: Path, max_bytes: int
     try:
         with os.fdopen(source_descriptor, "rb") as source:
             opened = os.fstat(source.fileno())
-            identity = (expected.st_dev, expected.st_ino, expected.st_size, expected.st_mtime_ns, expected.st_ctime_ns)
             if (
                 not stat.S_ISREG(opened.st_mode)
-                or (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns) != identity
+                or path_file_identity(opened) != path_file_identity(expected)
             ):
                 raise DiagramError(f"transaction artifact changed during copy: {source_path.name}")
 
@@ -2636,8 +2886,7 @@ def _copy_file_bounded(source_path: Path, destination_path: Path, max_bytes: int
                 after = os.fstat(source.fileno())
                 if (
                     total != opened.st_size
-                    or (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns)
-                    != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+                    or descriptor_file_identity(opened) != descriptor_file_identity(after)
                 ):
                     raise DiagramError(f"transaction artifact changed during copy: {source_path.name}")
                 destination.flush()
@@ -3375,7 +3624,7 @@ def _render(
         "schema_version": 2,
         "tool": "patpat-repository-diagram",
         "tool_version": TOOL_VERSION,
-        "repository": repo_before,
+        "repository": {**repo_before, "cited_dirty_paths": _cited_dirty_paths(spec, repo_before)},
         "diagram_schema_version": spec["schema_version"],
         "profile": spec["profile"],
         "source": {"name": output_names["source"], "sha256": hashlib.sha256(source_spec_bytes).hexdigest()},
@@ -3845,31 +4094,22 @@ def _read_bounded_regular_file(
     try:
         with os.fdopen(descriptor, "rb") as artifact:
             opened = os.fstat(artifact.fileno())
-            opened_identity = (
-                opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns
-            )
-            expected_identity = (
-                expected.st_dev, expected.st_ino, expected.st_size, expected.st_mtime_ns, expected.st_ctime_ns
-            )
             if (
                 not stat.S_ISREG(opened.st_mode)
                 or (require_single_link and opened.st_nlink != 1)
-                or opened_identity != expected_identity
+                or path_file_identity(opened) != path_file_identity(expected)
             ):
                 raise DiagramError(changed_message)
             if opened.st_size > max_bytes:
                 raise DiagramError(too_large_message)
             data = artifact.read(max_bytes + 1)
             after = os.fstat(artifact.fileno())
-            after_identity = (
-                after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns
-            )
             if len(data) > max_bytes:
                 raise DiagramError(too_large_message)
             if (
                 len(data) != opened.st_size
                 or (require_single_link and after.st_nlink != 1)
-                or opened_identity != after_identity
+                or descriptor_file_identity(opened) != descriptor_file_identity(after)
             ):
                 raise DiagramError(changed_message)
             return data
@@ -4094,7 +4334,10 @@ def _preview_invalid_source(source_path: Path) -> tuple[dict[str, Any], bytes]:
     try:
         with os.fdopen(descriptor, "rb") as source:
             opened = os.fstat(source.fileno())
-            if not stat.S_ISREG(opened.st_mode) or stat_material(opened) != expected_material:
+            if (
+                not stat.S_ISREG(opened.st_mode)
+                or path_file_identity(opened) != path_file_identity(expected)
+            ):
                 return {
                     "state": "changed",
                     "stat": expected_material,
@@ -4103,7 +4346,7 @@ def _preview_invalid_source(source_path: Path) -> tuple[dict[str, Any], bytes]:
             source_bytes = source.read(MAX_SOURCE_JSON_BYTES + 1)
             after = os.fstat(source.fileno())
             after_material = stat_material(after)
-            if after_material != expected_material:
+            if descriptor_file_identity(after) != descriptor_file_identity(opened):
                 return {
                     "state": "changed",
                     "stat": expected_material,
@@ -4771,6 +5014,57 @@ def self_test() -> None:
     path_lines = _wrap("tests/test_sanitize_logs.py", 176)
     if path_lines != ["tests/test_sanitize_", "logs.py"] or "".join(path_lines) != "tests/test_sanitize_logs.py":
         raise AssertionError(f"long source paths must wrap at path separators without losing characters: {path_lines}")
+    for thai_phrase in (
+        "ตรวจสอบและบังคับข้อจำกัดของโมเดล",
+        "คำนวณความเปลี่ยนแปลงระหว่างสถาปัตยกรรม",
+        "ตรวจเงื่อนไขและหลักฐานในโมเดล",
+    ):
+        thai_lines = _wrap(thai_phrase, 176)
+        if "".join(thai_lines) != thai_phrase or any(line[-1] in _THAI_LEADING_VOWELS for line in thai_lines if line):
+            raise AssertionError(f"Thai wrapping stranded a leading vowel or altered characters: {thai_lines}")
+    file_lines = _node_size({"label": "ตรวจโมเดลจำกัดขอบเขต TLC และสร้าง Receipt (check_assignment_model.py)", "kind": "worker"})[2]
+    if "(check_assignment_model.py)" not in file_lines:
+        raise AssertionError(f"file name token was split across lines: {file_lines}")
+    if any(line.endswith("ขอบ") for line in file_lines):
+        raise AssertionError(f"Thai wrapping cut inside a known word: {file_lines}")
+    count_lines = _wrap("รวมหลักฐาน 3 ชั้นและฉายรอยทาง", 120)
+    if any(line.endswith(" 3") or line == "3" for line in count_lines):
+        raise AssertionError(f"Thai count was separated from its unit: {count_lines}")
+    if _display_node_id({"id": "N927ffe090cff83690ece", "label": "เรนเดอร์และตรวจแผนภาพ — render.py", "kind": "component"}) != "render.py":
+        raise AssertionError("machine hash node IDs must display a readable badge")
+    if _display_node_id({"id": "RENDER_ENGINE", "label": "Render engine", "kind": "service"}) != "RENDER_ENGINE":
+        raise AssertionError("authored readable node IDs must remain unchanged")
+    legend_collision = _geometry_warnings(
+        {},
+        [{"edge": {"id": "E1", "source": "N1", "target": "N2"}, "points": [(100.0, 460.0), (300.0, 460.0)]}],
+        [{"id": "E1", "x": 200.0, "y": 460.0, "w": 120.0, "h": 24.0}],
+        [], 600.0, 510.0, footer_top=510.0 - 68.0,
+    )
+    if "edge crosses diagram legend: E1" not in legend_collision or "edge label overlaps diagram legend: E1" not in legend_collision:
+        raise AssertionError(f"footer/legend collision was not diagnosed: {legend_collision}")
+    gate_w, gate_h, gate_lines = _node_size({"id": "G1", "label": "ตรวจสิทธิ์ & ความพร้อมของเป้าหมายและเงื่อนไขการทำงาน", "kind": "gate"})
+    if "".join(gate_lines).replace(" ", "") != "ตรวจสิทธิ์ & ความพร้อมของเป้าหมายและเงื่อนไขการทำงาน".replace(" ", ""):
+        raise AssertionError(f"Thai gate node wrapping lost characters: {gate_lines}")
+    if any(line.endswith("กา") for line in gate_lines):
+        raise AssertionError(f"Thai word การทำงาน severed: {gate_lines}")
+    if any(line[-1] in _THAI_LEADING_VOWELS for line in gate_lines):
+        raise AssertionError(f"Thai gate node stranded leading vowel: {gate_lines}")
+    if gate_h < 112.0 or gate_w < 236.0:
+        raise AssertionError(f"Thai gate diamond sized too small: {gate_w}x{gate_h}")
+    test_overlap_warnings = _geometry_warnings(
+        positions={"N1": {"x": 10, "y": 10, "w": 100, "h": 50}, "N2": {"x": 50, "y": 20, "w": 100, "h": 50}, "N3": {"x": 40, "y": 10, "w": 30, "h": 30}},
+        paths=[{"edge": {"id": "E_FB", "source": "N1", "target": "N2", "feedback": True}, "points": [(10.0, 20.0), (100.0, 20.0)]}],
+        labels=[],
+        groups=[
+            {"id": "G1", "x": 10, "y": 10, "w": 100, "h": 100, "members": ["N1"]},
+            {"id": "G2", "x": 50, "y": 50, "w": 100, "h": 100, "members": ["N2"]},
+        ],
+        width=500, height=500,
+    )
+    if not any("hint: check if an early-exit or terminal node" in w for w in test_overlap_warnings):
+        raise AssertionError("boundary overlap warning missing actionable hint")
+    if not any("hint: in shared layers, place nodes with feedback: true" in w for w in test_overlap_warnings):
+        raise AssertionError("edge crosses node with feedback missing actionable hint")
     viewer_source = _viewer_script()
     if (
         "patpat-browser-check" not in viewer_source

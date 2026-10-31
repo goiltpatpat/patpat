@@ -2,7 +2,7 @@
 name: patpat-change
 description: Implement one bounded repository change with a small diff and explicit proof. Use for clear features, localized refactors, and requested fixes after the root cause or design is known.
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Codebase","requires_state":[],"produces_state":[],"verification_cmd":""}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Codebase","requires_state":["execution-plan-settled"],"produces_state":["bounded-change-staged"],"verification_cmd":"git diff --check"}'
 ---
 
 # Patpat Change

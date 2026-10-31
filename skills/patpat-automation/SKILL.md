@@ -2,7 +2,7 @@
 name: patpat-automation
 description: Design or scaffold a safe external automation for a concrete provider, trigger, and verification surface. Use when an integration is named and write authority, idempotency, compensation, secrets, and kill-switch behavior must be settled.
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Automation","requires_state":[],"produces_state":[],"verification_cmd":""}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Automation","requires_state":["workspace-root-open"],"produces_state":["automation-pipeline-settled"],"verification_cmd":"git status --short"}'
 ---
 
 # Patpat Automation

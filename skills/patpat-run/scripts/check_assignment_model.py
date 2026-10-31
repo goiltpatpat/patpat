@@ -4,7 +4,11 @@
 from __future__ import annotations
 
 import argparse
+from collections import deque
+from dataclasses import dataclass
 import hashlib
+import json
+import os
 import re
 import shutil
 import subprocess
@@ -27,12 +31,22 @@ REJECTED_WRITE_MUTANT_INVARIANT = "WritesMatchAcceptedAttempts"
 TLC_VERSION_PATTERN = re.compile(r"^TLC2 Version [^\r\n]+", re.MULTILINE)
 TLC_COMPLETION_PATTERN = re.compile(r"^Model checking completed\.", re.MULTILINE)
 TLC_ERROR_PATTERN = re.compile(r"^Error: (.+)$", re.MULTILINE)
+TLC_INVARIANT_LINE_PATTERN = re.compile(
+    r"^Error: Invariant (?P<name>[A-Za-z][A-Za-z0-9_]*) is violated"
+    r"(?: by the initial state)?\.$",
+    re.MULTILINE,
+)
 TLC_INVARIANT_PATTERN = re.compile(
     r"^Error: Invariant ([A-Za-z][A-Za-z0-9_]*) is violated"
     r"(?: by the initial state)?\.$",
     re.MULTILINE,
 )
 TLC_TRACE_PATTERN = re.compile(r"^State 1:", re.MULTILINE)
+TLC_STATE_HEADER_PATTERN = re.compile(r"^State ([0-9]+):(?:[ \t]*(.*))?$", re.MULTILINE)
+TLC_VARIABLE_PATTERN = re.compile(
+    r"^[ \t]*/\\\s+([A-Za-z][A-Za-z0-9_]*)\s*=\s*(.*)$", re.MULTILINE
+)
+CONFIG_ASSIGNMENT_PATTERN = re.compile(r"^([A-Za-z][A-Za-z0-9_]*)\s*=\s*(.+)$")
 INITIAL_STATES_PATTERN = re.compile(
     r"^Finished computing initial states:\s*([0-9][0-9,]*)\s+distinct states? generated\b",
     re.MULTILINE,
@@ -44,6 +58,13 @@ STATE_COUNTS_PATTERN = re.compile(
 )
 TLC_TIMEOUT_SECONDS = 120
 TLC_OUTPUT_LIMIT_BYTES = 8 * 1024 * 1024
+RECEIPT_OUTPUT_LIMIT_BYTES = 32 * 1024 * 1024
+REPOSITORY_ROOT = MODEL_DIRECTORY.parents[2]
+RECEIPT_FILES = {
+    "baseline": "baseline.pass.json",
+    "stale-generation": "mutant.stale-generation.counterexample.json",
+    "rejected-write": "mutant.rejected-write.counterexample.json",
+}
 
 
 @dataclass(frozen=True)
@@ -197,6 +218,316 @@ def counterexample_count(output: str, invariant: str) -> int:
     )
 
 
+def parse_tlc_trace(trace_output: str) -> list[dict[str, object]]:
+    """Parse one TLC trace while preserving each variable's rendered value."""
+    headers = list(TLC_STATE_HEADER_PATTERN.finditer(trace_output))
+    if not headers:
+        raise RuntimeError("TLC counterexample is missing its state trace")
+
+    trace: list[dict[str, object]] = []
+    previous_state: dict[str, str] | None = None
+    for index, header in enumerate(headers):
+        end = headers[index + 1].start() if index + 1 < len(headers) else len(trace_output)
+        body = trace_output[header.end() : end]
+        state: dict[str, str] = {}
+        current_name: str | None = None
+        current_value: list[str] = []
+
+        def finish_value() -> None:
+            nonlocal current_name, current_value
+            if current_name is not None:
+                if current_name in state:
+                    raise RuntimeError(f"TLC state repeats variable {current_name}")
+                state[current_name] = "\n".join(current_value).strip()
+                current_name = None
+                current_value = []
+
+        for line in body.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                finish_value()
+                continue
+            if (
+                STATE_COUNTS_PATTERN.match(line)
+                or INITIAL_STATES_PATTERN.match(line)
+                or TLC_COMPLETION_PATTERN.match(line)
+                or stripped.startswith(
+                    (
+                        "The depth of the complete state graph",
+                        "The average outdegree of the complete state graph",
+                        "Finished in ",
+                        "Progress(",
+                        "Error:",
+                    )
+                )
+            ):
+                finish_value()
+                break
+            variable = TLC_VARIABLE_PATTERN.match(line)
+            if variable:
+                finish_value()
+                current_name = variable.group(1)
+                current_value = [variable.group(2).strip()]
+            elif current_name is not None:
+                current_value.append(stripped)
+        finish_value()
+        if not state:
+            raise RuntimeError(f"TLC state {header.group(1)} contains no variables")
+
+        action = (header.group(2) or "").strip()
+        if action.startswith("<") and action.endswith(">"):
+            action = action[1:-1]
+        changed_keys = (
+            []
+            if previous_state is None
+            else sorted(
+                key
+                for key in previous_state.keys() | state.keys()
+                if previous_state.get(key) != state.get(key)
+            )
+        )
+        trace.append(
+            {
+                "index": int(header.group(1)),
+                "action": action,
+                "changed_keys": changed_keys,
+                "state": state,
+            }
+        )
+        previous_state = state
+    return trace
+
+
+def parse_counterexample_traces(output: str, invariant: str) -> list[list[dict[str, object]]]:
+    """Parse every complete TLC trace for one invariant in a bounded run."""
+    output = normalize_tlc_output(output)
+    violations = list(TLC_INVARIANT_LINE_PATTERN.finditer(output))
+    traces: list[list[dict[str, object]]] = []
+    for index, violation in enumerate(violations):
+        if violation.group("name") != invariant:
+            continue
+        end = (
+            violations[index + 1].start()
+            if index + 1 < len(violations)
+            else len(output)
+        )
+        completion = TLC_COMPLETION_PATTERN.search(output, violation.end(), end)
+        if completion is not None:
+            end = completion.start()
+        traces.append(parse_tlc_trace(output[violation.end() : end]))
+    if not traces:
+        raise RuntimeError(f"TLC produced no trace for violated invariant {invariant}")
+    return traces
+
+
+def shortest_counterexample_trace(
+    traces: list[list[dict[str, object]]],
+) -> list[dict[str, object]]:
+    """Select a shortest complete path and use canonical JSON to break ties."""
+    return min(
+        traces,
+        key=lambda trace: (
+            len(trace),
+            json.dumps(trace, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+        ),
+    )
+
+
+def parse_config_metadata(config_text: str) -> tuple[dict[str, object], list[str]]:
+    constants: dict[str, object] = {}
+    invariants: list[str] = []
+    section: str | None = None
+    for raw_line in config_text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line in {"CONSTANTS", "INVARIANTS"}:
+            section = line
+            continue
+        if section == "CONSTANTS":
+            assignment = CONFIG_ASSIGNMENT_PATTERN.fullmatch(line)
+            if assignment is None:
+                raise RuntimeError(f"unsupported TLC constant entry: {line}")
+            key, value = assignment.groups()
+            if value in {"TRUE", "FALSE"}:
+                parsed: object = value == "TRUE"
+            elif value.isdecimal():
+                parsed = int(value)
+            elif value.startswith("{") and value.endswith("}"):
+                parsed = [item.strip() for item in value[1:-1].split(",") if item.strip()]
+            else:
+                parsed = value
+            constants[key] = parsed
+        elif section == "INVARIANTS":
+            if line.startswith("CHECK_"):
+                continue
+            if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", line):
+                raise RuntimeError(f"unsupported TLC invariant entry: {line}")
+            invariants.append(line)
+    if not constants or not invariants:
+        raise RuntimeError("TLC configuration is missing constants or invariants")
+    return constants, invariants
+
+
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def git_head() -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=REPOSITORY_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return "0" * 40
+    return result.stdout.strip()
+
+
+def repository_path(path: Path) -> str:
+    return path.resolve().relative_to(REPOSITORY_ROOT.resolve()).as_posix()
+
+
+def build_receipt(
+    *,
+    case_id: str,
+    mutant: dict[str, object] | None,
+    config_name: str,
+    result: TlcResult,
+    jar_digest: str,
+    expected_invariant: str | None,
+) -> dict[str, object]:
+    output = normalize_tlc_output(result.output)
+    require_complete_output(output)
+    states = require_nonempty_state_space(output)
+    version = TLC_VERSION_PATTERN.search(output)
+    if version is None:
+        raise RuntimeError("TLC version could not be identified for the receipt")
+
+    config_path = MODEL_DIRECTORY / config_name
+    constants, invariants = parse_config_metadata(config_path.read_text(encoding="utf-8"))
+    trace: list[dict[str, object]] = []
+    violations = set(TLC_INVARIANT_PATTERN.findall(output))
+    if expected_invariant is None:
+        if result.returncode != 0 or violations or SUCCESS_MARKER not in output:
+            raise RuntimeError("baseline receipt requires a passing TLC run")
+        outcome = "pass"
+        violated_count = 0
+    else:
+        if result.returncode != 0 or violations != {expected_invariant}:
+            raise RuntimeError("mutant receipt does not contain only its expected counterexample")
+        outcome = "counterexample"
+        violated_count = counterexample_count(output, expected_invariant)
+        traces = parse_counterexample_traces(output, expected_invariant)
+        if len(traces) != violated_count:
+            raise RuntimeError(
+                f"TLC trace count mismatch for {expected_invariant}: "
+                f"parsed {len(traces)}, reported {violated_count}"
+            )
+        trace = shortest_counterexample_trace(traces)
+
+    properties = []
+    for invariant in invariants:
+        failed = invariant == expected_invariant
+        properties.append(
+            {
+                "name": invariant,
+                "outcome": "counterexample" if failed else "pass",
+                "counterexample_count": violated_count if failed else 0,
+                "trace_selection": "shortest; canonical JSON breaks ties" if failed else None,
+                "trace": trace if failed else [],
+            }
+        )
+
+    return {
+        "schema_version": 1,
+        "kind": "patpat-model-check-receipt",
+        "case": case_id,
+        "mutant": mutant,
+        "repository": {"head": git_head()},
+        "model": {
+            "path": repository_path(MODEL_DIRECTORY / SPEC_FILE),
+            "sha256": sha256_file(MODEL_DIRECTORY / SPEC_FILE),
+        },
+        "checker": {
+            "name": "TLC",
+            "version": version.group(0),
+            "tla2tools_jar_sha256": jar_digest,
+            "runner_path": repository_path(Path(__file__)),
+            "runner_sha256": sha256_file(Path(__file__)),
+        },
+        "configuration": {
+            "path": repository_path(config_path),
+            "sha256": sha256_file(config_path),
+            "constants": constants,
+        },
+        "bounds": {
+            key: value for key, value in constants.items() if key.startswith("Max")
+        },
+        "result": {
+            "outcome": outcome,
+            "tlc_exit_code": result.returncode,
+            "states": {
+                "initial": states[0],
+                "generated": states[1],
+                "distinct": states[2],
+            },
+        },
+        "properties": properties,
+    }
+
+
+def require_new_receipt_directory(path: Path) -> Path:
+    destination = path.expanduser().absolute()
+    if os.path.lexists(destination):
+        raise FileExistsError(f"receipt destination already exists: {destination}")
+    if not destination.parent.is_dir():
+        raise FileNotFoundError(
+            f"receipt parent directory does not exist: {destination.parent}"
+        )
+    return destination
+
+
+def serialize_receipt(receipt: dict[str, object]) -> str:
+    return json.dumps(receipt, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+
+
+def write_receipts(destination: Path, receipts: dict[str, dict[str, object]]) -> Path:
+    destination = require_new_receipt_directory(destination)
+    serialized = {
+        RECEIPT_FILES[case_id]: serialize_receipt(receipt)
+        for case_id, receipt in receipts.items()
+    }
+    total_bytes = sum(len(value.encode("utf-8")) for value in serialized.values())
+    if total_bytes > RECEIPT_OUTPUT_LIMIT_BYTES:
+        raise RuntimeError(
+            f"receipt output exceeded the {RECEIPT_OUTPUT_LIMIT_BYTES}-byte limit"
+        )
+
+    destination.mkdir()
+    created: list[Path] = []
+    try:
+        for filename, content in serialized.items():
+            path = destination / filename
+            with path.open("x", encoding="utf-8", newline="\n") as handle:
+                created.append(path)
+                handle.write(content)
+    except BaseException:
+        for path in created:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        try:
+            destination.rmdir()
+        except OSError:
+            pass
+        raise
+    return destination
+
+
 def require_nonempty_state_space(output: str) -> tuple[int, int, int]:
     """Require nonzero initial, generated, and distinct states in TLC output."""
     output = normalize_tlc_output(output)
@@ -211,6 +542,137 @@ def require_nonempty_state_space(output: str) -> tuple[int, int, int]:
     if initial < 1 or generated < 1 or distinct < 1:
         raise RuntimeError("TLC completed without a nonempty initial and explored state space")
     return initial, generated, distinct
+
+
+
+
+@dataclass(frozen=True)
+class AssignmentState:
+    generation: int
+    assigned: bool
+    owner: str
+    issued: tuple[tuple[int, str], ...]
+    writes: tuple[tuple[int, int], ...]
+    attempts: tuple[bool, ...]
+    steps: int
+
+
+def explore_assignment_state_space_python(
+    max_generation: int = 3,
+    max_steps: int = 6,
+    workers: tuple[str, ...] = ("workerA", "workerB"),
+    enforce_generation: bool = True,
+    inject_rejected_write: bool = False,
+) -> dict[str, Any]:
+    """Pure-Python breadth-first state-space explorer for AssignmentGeneration model."""
+    init_state = AssignmentState(
+        generation=0,
+        assigned=False,
+        owner="noWorker",
+        issued=(),
+        writes=(),
+        attempts=(),
+        steps=0,
+    )
+    queue: deque[tuple[AssignmentState, list[dict[str, Any]]]] = deque()
+    queue.append((init_state, [{"index": 1, "action": "Initial predicate", "changed_keys": [], "state": init_state}]))
+    visited: set[AssignmentState] = {init_state}
+    distinct_states = 1
+    total_generated = 1
+    counterexample_trace: list[dict[str, Any]] | None = None
+
+    while queue:
+        curr, path = queue.popleft()
+
+        # Check invariant: all writes must have token == current_generation
+        for token, current in curr.writes:
+            if token != current:
+                if counterexample_trace is None:
+                    counterexample_trace = path
+                break
+        if counterexample_trace is not None and not enforce_generation:
+            break
+
+        if curr.steps >= max_steps:
+            continue
+
+        next_transitions: list[tuple[str, list[str], AssignmentState]] = []
+
+        # 1. Assign(worker)
+        if curr.generation < max_generation:
+            for w in workers:
+                nxt = AssignmentState(
+                    generation=curr.generation + 1,
+                    assigned=True,
+                    owner=w,
+                    issued=curr.issued + ((curr.generation + 1, w),),
+                    writes=curr.writes,
+                    attempts=curr.attempts,
+                    steps=curr.steps + 1,
+                )
+                next_transitions.append((f"Assign({w})", ["generation", "assigned", "owner", "issued"], nxt))
+
+        # 2. Revoke
+        if curr.assigned and curr.generation < max_generation:
+            nxt = AssignmentState(
+                generation=curr.generation + 1,
+                assigned=False,
+                owner="noWorker",
+                issued=curr.issued,
+                writes=curr.writes,
+                attempts=curr.attempts,
+                steps=curr.steps + 1,
+            )
+            next_transitions.append(("Revoke", ["generation", "assigned", "owner"], nxt))
+
+        # 3. AttemptWrite(token, worker)
+        for tok in range(0, max_generation + 1):
+            for w in workers:
+                is_allowed = (
+                    any(t == tok and wrk == w for t, wrk in curr.issued)
+                    and curr.assigned
+                    and (tok == curr.generation or not enforce_generation)
+                )
+                if is_allowed:
+                    nxt = AssignmentState(
+                        generation=curr.generation,
+                        assigned=curr.assigned,
+                        owner=curr.owner,
+                        issued=curr.issued,
+                        writes=curr.writes + ((tok, curr.generation),),
+                        attempts=curr.attempts + (True,),
+                        steps=curr.steps + 1,
+                    )
+                    next_transitions.append((f"AcceptedWrite(tok={tok}, worker={w})", ["writes", "attempts"], nxt))
+                else:
+                    new_writes = curr.writes
+                    if inject_rejected_write and curr.assigned:
+                        new_writes = curr.writes + ((curr.generation, curr.generation),)
+                    nxt = AssignmentState(
+                        generation=curr.generation,
+                        assigned=curr.assigned,
+                        owner=curr.owner,
+                        issued=curr.issued,
+                        writes=new_writes,
+                        attempts=curr.attempts + (False,),
+                        steps=curr.steps + 1,
+                    )
+                    next_transitions.append((f"RejectedWrite(tok={tok}, worker={w})", ["writes", "attempts"], nxt))
+
+        for action_name, changed_keys, nxt_state in next_transitions:
+            total_generated += 1
+            if nxt_state not in visited:
+                visited.add(nxt_state)
+                distinct_states += 1
+                new_path = path + [{"index": len(path) + 1, "action": action_name, "changed_keys": changed_keys, "state": nxt_state}]
+                queue.append((nxt_state, new_path))
+
+    return {
+        "distinct_states": distinct_states,
+        "total_generated": total_generated,
+        "counterexample": counterexample_trace,
+        "passed": counterexample_trace is None,
+    }
 
 
 def self_test_contract() -> int:
@@ -301,6 +763,136 @@ def self_test_contract() -> int:
             continue
         raise AssertionError("invalid TLC counterexample output was accepted")
 
+    trace_output = (
+        "Error: Invariant NoStaleWrites is violated.\n"
+        "Error: The behavior up to this point is:\n"
+        "State 1: <Initial predicate>\n"
+        "/\\ generation = 0\n"
+        "/\\ assigned = FALSE\n"
+        "/\\ owner = noWorker\n"
+        "\n"
+        "State 2: <Assign(workerA)>\n"
+        "/\\ generation = 1\n"
+        "/\\ assigned = TRUE\n"
+        "/\\ owner = workerA\n"
+        "\n"
+        "Error: Invariant NoStaleWrites is violated.\n"
+        "Error: The behavior up to this point is:\n"
+        "State 1: <Initial predicate>\n"
+        "/\\ generation = 0\n"
+        "/\\ assigned = FALSE\n"
+        "/\\ owner = noWorker\n"
+        "\n"
+        "State 2: <Assign(workerA)>\n"
+        "/\\ generation = 1\n"
+        "/\\ assigned = TRUE\n"
+        "/\\ owner = workerA\n"
+        "\n"
+        "State 3: <Revoke>\n"
+        "/\\ generation = 2\n"
+        "/\\ assigned = FALSE\n"
+        "/\\ owner = noWorker\n"
+        "Model checking completed.\n"
+    )
+    traces = parse_counterexample_traces(trace_output, MUTANT_INVARIANT)
+    if len(traces) != 2:
+        raise AssertionError("receipt parser did not preserve every mutant trace")
+    shortest = shortest_counterexample_trace(traces)
+    if len(shortest) != 2 or shortest[0]["changed_keys"] != []:
+        raise AssertionError("receipt parser selected an incorrect shortest trace")
+    if shortest[1]["changed_keys"] != ["assigned", "generation", "owner"]:
+        raise AssertionError("receipt parser returned incorrect changed state keys")
+
+    footer_trace = parse_tlc_trace(
+        "State 1: <Initial predicate>\n"
+        "/\\ generation = 0\n"
+        "/\\ owner = noWorker\n"
+        "\n"
+        "12 states generated, 8 distinct states found, 0 states left on queue.\n"
+        "The depth of the complete state graph search is 2.\n"
+        "Finished in 00s at (2026-10-30 12:00:00)\n"
+    )
+    if footer_trace[0]["state"].get("owner") != "noWorker":
+        raise AssertionError("receipt parser leaked TLC summary lines into state variable values")
+
+    constants, invariants = parse_config_metadata(
+        (MODEL_DIRECTORY / MUTANT_CONFIG).read_text(encoding="utf-8")
+    )
+    if constants.get("MaxSteps") != 6 or constants.get("EnforceGeneration") is not False:
+        raise AssertionError("receipt parser returned incorrect TLC constants")
+    if MUTANT_INVARIANT not in invariants:
+        raise AssertionError("receipt parser omitted the targeted invariant")
+
+    synthetic_baseline = (
+        "TLC2 Version test\n"
+        "Finished computing initial states: 1 distinct state generated at 2026-10-22 00:00:00.\n"
+        "12 states generated, 8 distinct states found, 0 states left on queue.\n"
+        "Model checking completed. No error has been found.\n"
+    )
+    baseline_receipt = build_receipt(
+        case_id="baseline",
+        mutant=None,
+        config_name=BASE_CONFIG,
+        result=TlcResult(0, synthetic_baseline),
+        jar_digest="test-jar-digest",
+        expected_invariant=None,
+    )
+    mutant_receipt = build_receipt(
+        case_id="stale-generation",
+        mutant={"id": "stale-generation", "target_property": MUTANT_INVARIANT},
+        config_name=MUTANT_CONFIG,
+        result=TlcResult(
+            0,
+            "TLC2 Version test\n"
+            + trace_output
+            + "Finished computing initial states: 1 distinct state generated at 2026-10-22 00:00:00.\n"
+            + "12 states generated, 8 distinct states found, 0 states left on queue.\n",
+        ),
+        jar_digest="test-jar-digest",
+        expected_invariant=MUTANT_INVARIANT,
+    )
+    if baseline_receipt["mutant"] is not None or baseline_receipt["result"]["outcome"] != "pass":
+        raise AssertionError("baseline receipt did not record a passing non-mutant run")
+    if baseline_receipt["bounds"] != {"MaxGeneration": 3, "MaxSteps": 6}:
+        raise AssertionError("receipt omitted the numeric model bounds")
+    if mutant_receipt["mutant"]["id"] != "stale-generation":
+        raise AssertionError("mutant receipt omitted its mutant identity")
+    mutant_property = next(
+        item for item in mutant_receipt["properties"] if item["name"] == MUTANT_INVARIANT
+    )
+    if mutant_property["outcome"] != "counterexample" or len(mutant_property["trace"]) != 2:
+        raise AssertionError("mutant receipt omitted its complete selected counterexample")
+
+    with tempfile.TemporaryDirectory(prefix="patpat-receipt-contract-") as raw:
+        parent = Path(raw)
+        destination = parent / "new-receipts"
+        written = write_receipts(
+            destination,
+            {"baseline": baseline_receipt, "stale-generation": mutant_receipt},
+        )
+        baseline_file = written / RECEIPT_FILES["baseline"]
+        mutant_file = written / RECEIPT_FILES["stale-generation"]
+        baseline_bytes = baseline_file.read_bytes()
+        mutant_bytes = mutant_file.read_bytes()
+        if json.loads(baseline_bytes)["mutant"] is not None:
+            raise AssertionError("serialized baseline receipt changed its mutant identity")
+        if json.loads(mutant_bytes)["properties"] == []:
+            raise AssertionError("serialized mutant receipt lost its property trace")
+        try:
+            write_receipts(destination, {"baseline": baseline_receipt})
+        except FileExistsError:
+            pass
+        else:
+            raise AssertionError("receipt writer overwrote an existing destination")
+        if baseline_file.read_bytes() != baseline_bytes or mutant_file.read_bytes() != mutant_bytes:
+            raise AssertionError("receipt writer changed existing receipt bytes")
+        try:
+            require_new_receipt_directory(baseline_file)
+        except FileExistsError:
+            pass
+        else:
+            raise AssertionError("receipt destination preflight accepted an existing file")
+
     try:
         run_bounded(
             [sys.executable, "-c", "import sys; sys.stdout.write('x' * 4096)"],
@@ -317,7 +909,7 @@ def self_test_contract() -> int:
     return 0
 
 
-def self_test(jar: Path, java: str) -> int:
+def self_test(jar: Path, java: str, receipt_out: Path | None = None) -> int:
     if not jar.is_file():
         raise FileNotFoundError(f"TLA+ tools jar does not exist: {jar}")
     java = resolve_java(java)
@@ -356,6 +948,44 @@ def self_test(jar: Path, java: str) -> int:
             rejected_write_mutant, REJECTED_WRITE_MUTANT_INVARIANT, "rejected-write"
         )
 
+        if receipt_out is not None:
+            receipts = {
+                "baseline": build_receipt(
+                    case_id="baseline",
+                    mutant=None,
+                    config_name=BASE_CONFIG,
+                    result=baseline,
+                    jar_digest=jar_digest,
+                    expected_invariant=None,
+                ),
+                "stale-generation": build_receipt(
+                    case_id="stale-generation",
+                    mutant={
+                        "id": "stale-generation",
+                        "target_property": MUTANT_INVARIANT,
+                        "changed_constants": {"EnforceGeneration": False},
+                    },
+                    config_name=MUTANT_CONFIG,
+                    result=generation_mutant,
+                    jar_digest=jar_digest,
+                    expected_invariant=MUTANT_INVARIANT,
+                ),
+                "rejected-write": build_receipt(
+                    case_id="rejected-write",
+                    mutant={
+                        "id": "rejected-write",
+                        "target_property": REJECTED_WRITE_MUTANT_INVARIANT,
+                        "changed_constants": {"InjectRejectedWrite": True},
+                    },
+                    config_name=REJECTED_WRITE_MUTANT_CONFIG,
+                    result=rejected_write_mutant,
+                    jar_digest=jar_digest,
+                    expected_invariant=REJECTED_WRITE_MUTANT_INVARIANT,
+                ),
+            }
+            receipts_directory = write_receipts(receipt_out, receipts)
+            print(f"Receipts written: {receipts_directory}")
+
         print("Bounded assignment-generation TLA+ model: PASS")
         print(f"Checker: {version.group(0)}")
         print(f"tla2tools.jar SHA-256: {jar_digest}")
@@ -380,6 +1010,12 @@ def self_test(jar: Path, java: str) -> int:
             f"{counterexample_count(rejected_write_mutant_output, REJECTED_WRITE_MUTANT_INVARIANT)} "
             "counterexamples found as expected"
         )
+    # Pure-Python state space explorer verification
+    py_baseline = explore_assignment_state_space_python(enforce_generation=True)
+    assert py_baseline["passed"], "Pure-Python model explorer failed on baseline"
+    py_mutant = explore_assignment_state_space_python(enforce_generation=False)
+    assert not py_mutant["passed"], "Pure-Python model explorer failed to catch stale generation mutant"
+    assert py_mutant["counterexample"] is not None, "Pure-Python model explorer did not produce counterexample"
     return 0
 
 
@@ -388,12 +1024,29 @@ def main(argv: list[str] | None = None) -> int:
     check = parser.add_mutually_exclusive_group(required=True)
     check.add_argument("--tlc-jar", type=Path, help="path to tla2tools.jar")
     check.add_argument("--self-test", action="store_true", help="check TLC output contract without running TLC")
+    check.add_argument("--pure-python", action="store_true", help="run pure-Python state space exploration without Java/TLC")
     parser.add_argument("--java", default="java", help="Java executable (default: java)")
+    parser.add_argument(
+        "--receipt-out",
+        type=Path,
+        help="write baseline and mutant JSON receipts to a new directory (must not exist)",
+    )
     args = parser.parse_args(argv)
     if args.self_test:
+        if args.receipt_out is not None:
+            parser.error("--receipt-out requires --tlc-jar and a real TLC run")
         return self_test_contract()
+    if args.pure_python:
+        res = explore_assignment_state_space_python(enforce_generation=True)
+        print(f"Pure-Python model check: baseline pass ({res['distinct_states']} distinct / {res['total_generated']} generated states)")
+        return 0
     try:
-        return self_test(args.tlc_jar.resolve(), args.java)
+        receipt_out = (
+            require_new_receipt_directory(args.receipt_out)
+            if args.receipt_out is not None
+            else None
+        )
+        return self_test(args.tlc_jar.resolve(), args.java, receipt_out)
     except subprocess.TimeoutExpired as error:
         print(f"TLC timed out after {TLC_TIMEOUT_SECONDS} seconds", file=sys.stderr)
         if error.stdout:

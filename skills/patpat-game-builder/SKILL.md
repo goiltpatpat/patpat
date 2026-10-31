@@ -2,7 +2,7 @@
 name: patpat-game-builder
 description: Build or extend a runnable game or gameplay feature in the user's project. Verify rules and a real playthrough when the target runtime is available. Do not use for game concepts, design documents, repository diagrams, or ordinary applications.
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Codebase","requires_state":[],"produces_state":[],"verification_cmd":""}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Codebase","requires_state":["workspace-root-open"],"produces_state":["playable-slice-verified"],"verification_cmd":"git diff --check"}'
 ---
 
 # Patpat Game Builder

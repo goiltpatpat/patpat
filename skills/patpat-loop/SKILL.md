@@ -2,7 +2,7 @@
 name: patpat-loop
 description: Run the explicit Patpat evidence-driven work loop for the user's task. Use only when the user invokes /patpat, /patpat-loop, $patpat, or $patpat-loop, or directly asks to activate Patpat mode.
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Task","requires_state":[],"produces_state":[],"verification_cmd":""}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Task","requires_state":["workspace-root-open"],"produces_state":["orchestrated-objective-resolved"],"verification_cmd":"git status --short"}'
 ---
 
 # Patpat Loop
@@ -35,7 +35,7 @@ Inspect, execute, or measure before asking. Ask only for product preference, aut
 
 ## Principle index
 
-Read the linked file when the trigger fires. Cite a principle only when it changed a decision.
+Read the linked file when the trigger fires. Cite a principle only when it changed a decision, using the lightweight decision format: `[Principle Name] -> [Concrete decision or architectural choice made based on it]`. Do not name-drop principles without an altered choice.
 
 - [Repository truth](principles/repository-truth.md) before deciding. Inspect live evidence. Do not prefer assumptions.
 - [Smallest safe change](principles/smallest-safe-change.md) when sizing a diff. Delete, reuse, then patch. Keep comments only for constraints the code cannot show.
@@ -49,10 +49,18 @@ Read the linked file when the trigger fires. Cite a principle only when it chang
 - [Idempotent effects](principles/idempotent-effects.md) on retries, installs, and lifecycle steps.
 - [Encode lessons](principles/encode-lessons.md) only for recurring failures, at the earliest enforceable boundary.
 - [Earned parallelism](principles/earned-parallelism.md) before any writable fan-out. Default to one owner.
+- [Subtract before you add](principles/subtract-before-you-add.md) before expanding footprint. Delete, simplify, or refactor existing paths before introducing new files or abstractions.
+- [Experience first](principles/experience-first.md) when designing interactions. Shape contracts, errors, and CLI ergonomics around the consumer, not internal convenience.
+- [Minimize reader load](principles/minimize-reader-load.md) on code and diffs. Keep control flow linear, names domain-accurate, and structural indirection minimal.
+- [Guard the context window](principles/guard-the-context-window.md) across tool calls. Filter and compact evidence at the source; never dump raw, noisy logs into context.
+- [Attack the premise](principles/attack-the-premise.md) when complexity cascades. Question upstream assumptions before nursing brittle workarounds.
+- [Redesign from first principles](principles/redesign-from-first-principles.md) when constraints choke progress. Rebuild the essential invariant cleanly from platform primitives.
 
 ## Route the work
 
 Before executing a specialist workflow, resolve its `metadata.patpat.ontology` against current evidence. Check required states, use only a unique eligible producer inside the user's authorized scope, preserve the mutation and approval gates, and verify any produced state. The [operating protocol](references/operating-protocol.md#skill-state-and-mutation-gate) defines the gate. Metadata is routing evidence, not authority.
+
+Orchestrate through composition rather than duplication: `patpat-loop` coordinates workflow transitions and delegates to specialized skills (`patpat-architect`, `patpat-change`, `patpat-engineer`, `patpat-verify`, `patpat-review`, `patpat-unslop`, `patpat-ship`) rather than absorbing their logic into a monolithic God Skill. Specialist skills configured with `disable-model-invocation: true` are shielded from ambient host auto-triggering but remain composable within an active Patpat session.
 
 The user speaks plainly and invokes `/patpat` (or host equivalent). Select the route for the earliest unresolved decision found during inspection; an implementation request does not settle an undefined requirement or contract. Use the 8 existing primary routes:
 
@@ -75,6 +83,7 @@ Read the matched workflow and relevant references. Read [the execution graph](re
 
 ```text
 FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY
+In FRAME, perform In-Your-Own-Words Digestion before acting: articulate (1) Core Objective, (2) Non-negotiables, and (3) Acceptance Criteria in plain, concise terms to establish explicit alignment.
 VERIFY -> REPORT when the edit is local, reversible, and not shipping
 VERIFY -> REVIEW before default ship, land or merge, durable-run LEARN or REPORT, and for auth, billing, secrets, architecture, or cross-cutting work
 REVIEW -> changes required -> INSPECT / PROOF CONTRACT / ACT -> VERIFY

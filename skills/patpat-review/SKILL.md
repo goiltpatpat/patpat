@@ -2,7 +2,7 @@
 name: patpat-review
 description: Independently challenge an implementation, diff, or verification claim without editing. Use after meaningful changes, for explicit code review, or when high-risk evidence needs a separate skeptical pass.
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Codebase","requires_state":[],"produces_state":[],"verification_cmd":""}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Codebase","requires_state":["acceptance-verified"],"produces_state":["delivery-review-cleared"],"verification_cmd":"git diff --check"}'
 ---
 
 # Patpat Review

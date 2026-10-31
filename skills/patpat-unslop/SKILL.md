@@ -3,7 +3,7 @@ name: patpat-unslop
 description: Cut superficial patterns and fluff from engineering docs, PR text, and code diffs.
 disable-model-invocation: true
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Artifact","requires_state":[],"produces_state":[],"verification_cmd":""}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Artifact","requires_state":["bounded-change-staged"],"produces_state":["prose-code-unslopped"],"verification_cmd":"git diff --check"}'
 ---
 
 # Patpat Unslop
@@ -53,6 +53,14 @@ Review engineering documentation, PR text, and code diffs for artificial writing
 12. **Apologetic or sycophantic tone.** Never use *"Certainly!"*, *"I would be happy to..."*, or *"You are absolutely right!"*. State technical findings and decisions neutrally.
 13. **Narrative code commentary.** Strip conversational commentary from code changes. Code should communicate via types, names, and explicit structure.
 14. **Unproven claims.** Never state that a fix works or tests pass without attaching fresh, observable command receipts.
+
+### Code and Comment Discipline
+
+15. **Redundant code paraphrasing.** Delete comments that merely restate what code identifiers, types, and logic already express (e.g., `// set active to true` or `// loop over items`). Code must communicate *how*; comments exist only to communicate *why* or non-obvious constraints.
+16. **Dead code and historical commentary.** Eliminate commented-out blocks of code, obsolete workarounds, and conversational apologies (e.g., `// hack: fix later`). Git tracks history; active source files must contain only living, executable code.
+17. **Decorative comment dividers.** Remove ASCII banners, delimiter lines (`// ====================`), and sectional boxes. Use blank lines and modular file organization instead.
+18. **Orphaned TODOs.** Remove unanchored, vague `TODO` comments without an owner, issue link, or immediate actionable condition.
+19. **Preserve high-value invariants.** Actively keep comments that document non-obvious *Why*, domain invariants, concurrency/reentrancy fences, upstream library bug workarounds (citing issue URLs or RFCs), or required legal notices.
 
 ## Mutation boundary
 

@@ -3,7 +3,7 @@ name: patpat-eval
 description: Evaluate whether an agent skill triggers and performs correctly using scoped, evidence-based trials. Use after non-trivial skill changes or when routing quality is uncertain.
 disable-model-invocation: true
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"AgentSkill","requires_state":[],"produces_state":[],"verification_cmd":""}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"AgentSkill","requires_state":["skill-definition-staged"],"produces_state":["skill-behavior-evaluated"],"verification_cmd":"python3 scripts/validate.py"}'
 ---
 
 # Patpat Eval

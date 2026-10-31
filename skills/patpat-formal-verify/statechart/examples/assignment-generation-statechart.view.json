@@ -1,0 +1,217 @@
+{
+  "schema_version": 2,
+  "slug": "assignment-generation",
+  "title": "Assignment Generation · model-check statecharts",
+  "model_path": "skills/patpat-run/models/AssignmentGeneration.tla",
+  "bounds": {
+    "MaxGeneration": 3,
+    "MaxSteps": 6
+  },
+  "implementation_mapping": [
+    {
+      "id": "model-contract",
+      "label": "Model-to-code crosswalk",
+      "symbol": "AssignmentGeneration code mapping and limits",
+      "path": "skills/patpat-run/references/assignment-generation-model.md",
+      "start_line": 37,
+      "end_line": 49
+    },
+    {
+      "id": "assignment-fence",
+      "label": "Current assignment generation fence",
+      "symbol": "require_current_assignment()",
+      "path": "skills/patpat-run/scripts/program_state.py",
+      "start_line": 591,
+      "end_line": 617
+    },
+    {
+      "id": "assign-unit",
+      "label": "Assignment issuance",
+      "symbol": "assign_unit()",
+      "path": "skills/patpat-run/scripts/program_state.py",
+      "start_line": 1615,
+      "end_line": 1668
+    },
+    {
+      "id": "guarded-set-head",
+      "label": "Guarded state write entry",
+      "symbol": "set_head()",
+      "path": "skills/patpat-run/scripts/program_state.py",
+      "start_line": 1671,
+      "end_line": 1722
+    }
+  ],
+  "cases": [
+    {
+      "id": "baseline",
+      "receipt": "baseline.pass.json",
+      "kind": "baseline",
+      "title": "Assignment Generation · bounded baseline",
+      "subtitle": "Invariant ทั้งสี่ข้อผ่านภายในขอบเขต TLC ที่บันทึกไว้",
+      "mutant_id": null,
+      "mutant_constants": null,
+      "target_property": null,
+      "states": [],
+      "steps": []
+    },
+    {
+      "id": "stale-generation",
+      "receipt": "mutant.stale-generation.counterexample.json",
+      "kind": "counterexample",
+      "title": "Token รุ่นเก่าถูกยอมรับหลังมอบหมายงานใหม่",
+      "subtitle": "Mutant: EnforceGeneration=false · invariant: NoStaleWrites",
+      "mutant_id": "stale-generation",
+      "mutant_constants": {"EnforceGeneration": false},
+      "target_property": "NoStaleWrites",
+      "states": [
+        {
+          "index": 1,
+          "label": "ยังไม่มี assignment",
+          "phase": "ก่อนมอบหมาย",
+          "facts": ["generation 0 · ยังไม่มี owner"],
+          "violation": false,
+          "expected": {"assigned": "FALSE", "generation": "0", "owner": "noWorker"}
+        },
+        {
+          "index": 2,
+          "label": "Worker A · token รุ่น 1",
+          "phase": "assignment รุ่น 1",
+          "facts": ["owner workerA · token 1 · generation 1"],
+          "violation": false,
+          "expected": {"assigned": "TRUE", "generation": "1", "owner": "workerA", "issued": "<<[token |-> 1, worker |-> workerA]>>"}
+        },
+        {
+          "index": 3,
+          "label": "Worker B · รุ่น 2, token 1 เก่า",
+          "phase": "assignment รุ่น 2",
+          "facts": ["owner workerB · generation 2 · issued tokens 1/2"],
+          "violation": false,
+          "expected": {"assigned": "TRUE", "generation": "2", "owner": "workerB"}
+        },
+        {
+          "index": 4,
+          "label": "token 1 เขียน, current generation 2",
+          "phase": "ผลของ write attempt",
+          "facts": ["accepted TRUE · write token 1 / current 2"],
+          "violation": true,
+          "expected": {"generation": "2", "attempts": "<<[accepted |-> TRUE]>>", "writes": "<<[token |-> 1, current |-> 2]>>"}
+        }
+      ],
+      "steps": [
+        {
+          "from": 1,
+          "to": 2,
+          "label": "มอบหมายรุ่น 1 ให้ Worker A",
+          "label_origin": "authored-view",
+          "label_basis": "receipt-state-and-delta",
+          "expected_action": "Next line 87, col 5 to line 91, col 41 of module AssignmentGeneration",
+          "expected_changed_keys": ["assigned", "generation", "issued", "owner", "steps"],
+          "implementation": {
+            "status": "static-mapping",
+            "code_refs": ["assign-unit"],
+            "expected_effect": "assign_unit() persists the next assignment generation and the selected actor.",
+            "reason": null
+          }
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "label": "มอบหมายรุ่น 2 ให้ Worker B",
+          "label_origin": "authored-view",
+          "label_basis": "receipt-state-and-delta",
+          "expected_action": "Next line 87, col 5 to line 91, col 41 of module AssignmentGeneration",
+          "expected_changed_keys": ["generation", "issued", "owner", "steps"],
+          "implementation": {
+            "status": "static-mapping",
+            "code_refs": ["assign-unit"],
+            "expected_effect": "assign_unit() persists the next assignment generation and the selected actor.",
+            "reason": null
+          }
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "label": "ยอมรับ write จาก token 1 รุ่นเก่า",
+          "label_origin": "authored-view",
+          "label_basis": "receipt-state-and-delta",
+          "expected_action": "Next line 87, col 5 to line 91, col 41 of module AssignmentGeneration",
+          "expected_changed_keys": ["attempts", "steps", "writes"],
+          "implementation": {
+            "status": "static-mapping",
+            "code_refs": ["assignment-fence", "guarded-set-head"],
+            "expected_effect": "require_current_assignment() rejects generation 1 before set_head() mutates or saves unit state when generation 2 is current.",
+            "reason": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "rejected-write",
+      "receipt": "mutant.rejected-write.counterexample.json",
+      "kind": "counterexample",
+      "title": "มี write ถูกบันทึกแม้ attempt ถูกปฏิเสธ",
+      "subtitle": "Mutant: InjectRejectedWrite=true · invariant: WritesMatchAcceptedAttempts",
+      "mutant_id": "rejected-write",
+      "mutant_constants": {"InjectRejectedWrite": true},
+      "target_property": "WritesMatchAcceptedAttempts",
+      "states": [
+        {
+          "index": 1,
+          "label": "ยังไม่มี assignment",
+          "phase": "ก่อนมอบหมาย",
+          "facts": ["generation 0 · ยังไม่มี owner"],
+          "violation": false,
+          "expected": {"assigned": "FALSE", "generation": "0", "owner": "noWorker"}
+        },
+        {
+          "index": 2,
+          "label": "Worker A · token รุ่น 1",
+          "phase": "assignment รุ่น 1",
+          "facts": ["owner workerA · token 1 · generation 1"],
+          "violation": false,
+          "expected": {"assigned": "TRUE", "generation": "1", "owner": "workerA", "issued": "<<[token |-> 1, worker |-> workerA]>>"}
+        },
+        {
+          "index": 3,
+          "label": "attempt ถูกปฏิเสธ, มี write",
+          "phase": "ผลของ write attempt",
+          "facts": ["accepted FALSE · write token 1 / current 1"],
+          "violation": true,
+          "expected": {"generation": "1", "attempts": "<<[accepted |-> FALSE]>>", "writes": "<<[token |-> 1, current |-> 1]>>"}
+        }
+      ],
+      "steps": [
+        {
+          "from": 1,
+          "to": 2,
+          "label": "มอบหมายรุ่น 1 ให้ Worker A",
+          "label_origin": "authored-view",
+          "label_basis": "receipt-state-and-delta",
+          "expected_action": "Next line 87, col 5 to line 91, col 41 of module AssignmentGeneration",
+          "expected_changed_keys": ["assigned", "generation", "issued", "owner", "steps"],
+          "implementation": {
+            "status": "static-mapping",
+            "code_refs": ["assign-unit"],
+            "expected_effect": "assign_unit() persists the next assignment generation and the selected actor.",
+            "reason": null
+          }
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "label": "ปฏิเสธ attempt แต่บันทึก write",
+          "label_origin": "authored-view",
+          "label_basis": "receipt-state-and-delta",
+          "expected_action": "Next line 87, col 5 to line 91, col 41 of module AssignmentGeneration",
+          "expected_changed_keys": ["attempts", "steps", "writes"],
+          "implementation": {
+            "status": "unmapped",
+            "code_refs": [],
+            "expected_effect": null,
+            "reason": "The receipt records accepted=FALSE and the injected write, but omits the attempted token and worker; it cannot identify a concrete Python rejection branch. This edge remains model-only."
+          }
+        }
+      ]
+    }
+  ]
+}

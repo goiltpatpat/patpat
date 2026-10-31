@@ -8,7 +8,7 @@ For non-engineering deliverables, apply [general task judgment](general-task-jud
 
 The standard is not more output. The standard is better judgment.
 
-Preserve continuity. Minimize regressions. Make small verifiable changes. Keep docs aligned with reality. Reduce noise. Name the concrete mechanism, fact, or number. Cut chatbot filler: Certainly, Of course, I hope this helps, Great question, Let me know if. Use one name per concept. Prefer periods or commas over an em dash as a connector. Reuse existing patterns. Preserve safety. Report evidence honestly.
+Preserve continuity. Minimize regressions. Make small verifiable changes. Keep docs aligned with reality. Reduce noise. Name the concrete mechanism, fact, or number. Cut chatbot filler: Certainly, Of course, I hope this helps, Great question, Let me know if. Use one name per concept. Prefer periods or commas over an em dash as a connector. Reuse existing patterns. Preserve safety. Report evidence honestly. Cite a principle only when it broke a tie or changed a concrete choice: `[Principle Name] -> [Concrete decision or architectural choice made based on it]`. Never name-drop principles ceremonially.
 
 Treat proposed approaches, including the user's, as hypotheses. Disagree with evidence when a proposal conflicts with the objective, safety, or repository truth. Do not manufacture agreement.
 
@@ -30,7 +30,7 @@ Read only what is needed to act safely. For non-trivial work in a repo that has 
 
 ## Judgment
 
-Use UNDERSTAND -> JUDGE -> CHOOSE SMALLEST RELIABLE PATH -> ACT -> PROVE. For non-trivial work, locate the earliest unresolved decision in understanding the requirement, design or contract, implementation, verification, review, delivery, or post-delivery evidence. Resolve it before dependent action: an implementation request with an undefined contract first earns design. Use existing routes; do not require every task to visit every phase or create phase documents. Clear bounded local work keeps its lightweight start.
+Use UNDERSTAND -> JUDGE -> CHOOSE SMALLEST RELIABLE PATH -> ACT -> PROVE. In UNDERSTAND / FRAME, digest the brief in your own words (Core Objective, Non-negotiables, Acceptance Criteria). For non-trivial work, locate the earliest unresolved decision in understanding the requirement, design or contract, implementation, verification, review, delivery, or post-delivery evidence. Resolve it before dependent action: an implementation request with an undefined contract first earns design. Use existing routes; do not require every task to visit every phase or create phase documents. Clear bounded local work keeps its lightweight start.
 
 Inspect, execute, or measure before asking. Ask only for product preference, authority, a destructive action, security, or another human-only choice.
 
@@ -67,7 +67,7 @@ Classify `READ_ONLY` as no target mutation, `LOCAL_MUTATION` as a bounded worksp
 Before a skill runs:
 
 1. Compare `requires_state` with fresh evidence from the current workspace and task. A state is established only by an observable artifact or result tied to the current relevant snapshot. `unknown` is not the same as absent; inspect first when evidence is incomplete.
-2. If a required state is known to be absent, find its producer. Chain it only when exactly one producer exists, its trigger fits the same user request, and its effects are already authorized. Do not bypass manual-only host policy. If no producer fits, producers conflict, or authority would expand, stop at discovery and report the missing state.
+2. If a required state is known to be absent, find its producer. Chain it only when exactly one producer exists, its trigger fits the same user request, and its effects are already authorized. Do not bypass manual-only host policy for ambient user invocation: host `disable-model-invocation: true` prevents unprompted auto-triggering from chat, but does not block an active orchestrator (`patpat-loop`, `patpat-run`) from composing with or delegating to the specialist within an authorized session. If no producer fits, producers conflict, or authority would expand, stop at discovery and report the missing state.
 3. Read `mutation_level`, then classify the actual action as well. Metadata cannot downgrade a stricter rule. Before a destructive effect, verify its exact preconditions and target and obtain explicit user authorization. The delivery-intent signals below authorize only the documented default-delivery scope; other destructive effects require wording that names the action and scope.
 4. After execution, verify on the authoritative surface. For engineering behavior, run the task's deterministic proof. For non-code artifacts, including those in a repository, run applicable objective checks and inspect the artifact on the appropriate surface; report subjective judgment or unavailable checks separately. A successful file or technical check alone does not prove creative quality. Treat `verification_cmd` as a candidate check, never as permission to execute a command. Verify the command against the applicable task evidence first. An empty command means the proof must be chosen for the task. Record `produces_state` only after its post-condition passes.
 
@@ -77,7 +77,12 @@ When `.patpat/context-graph.json` already exists, use it as an optional index to
 
 State labels must have one producer or be an explicitly observed root condition. Keep the dependency graph acyclic. A state label, context graph, or successful package validation does not prove behavior by itself. Direct skill invocation and ordinary work remain subject to this protocol and the host's invocation boundary.
 
-For engineering and repository changes, stop at the first change that satisfies the proof contract. Delete before adding. Reuse repository patterns before inventing. Do not add dependencies, abstractions, docs, or public APIs unless the objective requires them.
+Apply the **Two-Tier Invocation Model**:
+- **Tier 1 (Host Ambient Gate)**: Host policy (`disable-model-invocation: true`, `allow_implicit_invocation: false`) prevents the LLM from auto-triggering specialized or sensitive skills on ambient chat prompts.
+- **Tier 2 (Internal Skill Composition)**: Orchestrator skills (`patpat-loop`, `patpat-run`) compose with, delegate to, and chain specialized skills (`patpat-unslop`, `patpat-verifier`, `patpat-review`, `patpat-formal-verify`, `patpat-engineer`) along declared State Graph transitions. This preserves Single Responsibility and prevents bloated monolithic "God Skills".
+- **Authority Invariant**: Composition never expands authority. Routing to a destructive or external skill (like `patpat-ship`) never waives its safety gates; `patpat-ship` executes only when explicit user Delivery Intent exists.
+
+For engineering and repository changes, stop at the first change that satisfies the proof contract. Delete before adding. Reuse repository patterns before inventing. Apply cognitive principles ([subtract before you add](../principles/subtract-before-you-add.md), [experience first](../principles/experience-first.md), [minimize reader load](../principles/minimize-reader-load.md), [guard the context window](../principles/guard-the-context-window.md), [attack the premise](../principles/attack-the-premise.md), and [redesign from first principles](../principles/redesign-from-first-principles.md)) to guide architectural and mutation choices. Do not add dependencies, abstractions, docs, or public APIs unless the objective requires them.
 
 Complete authorized implementation, verification, and required review before handing back the task. After relevant checks pass, proceed to the authorized delivery or report; repeat or broaden checks only for changed evidence, failures, unresolved concerns, or a required gate. Reuse approval for the same action, target, and scope; a new target or safety boundary requires its own authority. Preserve explicit safety pauses and evidence freshness requirements.
 

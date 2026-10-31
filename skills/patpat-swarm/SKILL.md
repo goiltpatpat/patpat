@@ -3,7 +3,7 @@ name: patpat-swarm
 description: Fan out isolated workers across slices or races and return one aggregated report. Use for /patpat-swarm, coverage matrices, parallel checks, or races with a declared selection rule.
 disable-model-invocation: true
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"GitRepository","requires_state":[],"produces_state":[],"verification_cmd":""}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"GitRepository","requires_state":["execution-plan-settled"],"produces_state":["swarm-slices-integrated"],"verification_cmd":"git status --short"}'
 ---
 
 # Patpat Swarm

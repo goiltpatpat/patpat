@@ -1,25 +1,50 @@
 # Local agent continuity
 memory-bank/
+/.codex-attachments/
 
 # Python runtime and tooling
 __pycache__/
 *.py[cod]
 .venv/
+venv/
+env/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .coverage
+.coverage.*
 htmlcov/
 
-# Local diagram renders and browser inspection artifacts
+# Local diagram renders, Playwright and browser inspection artifacts
 /docs/diagrams/
 /.playwright-cli/
+test-results/
+playwright-report/
 .patpat-diagram.lock
 .patpat/context-graph.json
 
-# Operating system metadata
+# Local assignment-generation model-check receipts
+/assignment-generation-receipts-*/
+/assignment-generation-runtime-replay-*.json
+
+# Local JS dependencies for rendering and tooling
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Operating system and editor metadata
 .DS_Store
+._*
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
 
 # Private evaluation receipts and raw output. Keep global: the publish gate rejects them at every depth.
 # Sanitized attestation output belongs outside the worktree; leave misplaced copies visible.
@@ -27,10 +52,8 @@ receipt.json
 *.jsonl
 *.stderr.txt
 
-# Local multi-agent run artifacts
-/.agents/ORIGINAL_REQUEST.md
-/.agents/sentinel/
-/.agents/sentinel_victory_auditor/
-/.agents/teamwork_preview_*/
+# Local multi-agent run artifacts (preserve tracked plugin manifests)
+/.agents/*
+!/.agents/plugins/
 /PROJECT.md
 /TEST_INFRA.md
