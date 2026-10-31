@@ -151,6 +151,21 @@ WORKSPACE_MAPPER_VERIFIER = Path("skills/00-workspace-mapper/scripts/verify_cont
 WORKSPACE_MAPPER_VERIFY_COMMAND = (
     "python3 <loaded-skill-directory>/scripts/verify_context_graph.py --root <workspace-root>"
 )
+PLAN_VERIFIER = Path("skills/patpat-plan/scripts/verify_plan.py")
+PLAN_VERIFY_COMMAND = (
+    "python3 <loaded-skill-directory>/scripts/verify_plan.py --root <workspace-root>"
+)
+REVIEW_VERIFIER = Path("skills/patpat-review/scripts/verify_review.py")
+REVIEW_VERIFY_COMMAND = (
+    "python3 <loaded-skill-directory>/scripts/verify_review.py --root <workspace-root>"
+)
+DELIVERY_VERIFIER = Path("skills/patpat-ship/scripts/verify_delivery.py")
+DELIVERY_VERIFY_COMMAND = (
+    "python3 <loaded-skill-directory>/scripts/verify_delivery.py --root <workspace-root>"
+)
+FORMAL_VERIFY_COMMAND = (
+    "python3 skills/patpat-run/scripts/check_assignment_model.py --pure-python"
+)
 REVIEWER_DESCRIPTION = (
     "Independently challenge an implementation and its verification evidence "
     "without modifying repository or external state."
@@ -584,8 +599,37 @@ def validate_skill_ontology(
         errors.append(f"{path}: ontology verification_cmd must be a single-line string")
     elif isinstance(ontology.get("produces_state"), list) and ontology["produces_state"] and not command:
         errors.append(f"{path}: produced states require a deterministic verification_cmd")
-    elif path.parent.name == "00-workspace-mapper" and command != WORKSPACE_MAPPER_VERIFY_COMMAND:
-        errors.append(f"{path}: workspace mapper verification_cmd must invoke its bundled verifier")
+    else:
+        generic_commands = {
+            "git status",
+            "git status --short",
+            "git diff",
+            "git diff --check",
+            "git diff --name-only",
+            "git diff --stat",
+        }
+        disallowed_generic_states = {
+            "execution-plan-settled",
+            "delivery-review-cleared",
+            "delivery-pr-ready",
+            "formal-model-verified",
+            "workspace-map-current",
+        }
+        for state in ontology.get("produces_state", []):
+            if state in disallowed_generic_states and command in generic_commands:
+                errors.append(
+                    f"{path}: generic command {command!r} cannot prove {state!r}; use a state-specific verifier"
+                )
+        if path.parent.name == "00-workspace-mapper" and command != WORKSPACE_MAPPER_VERIFY_COMMAND:
+            errors.append(f"{path}: workspace mapper verification_cmd must invoke its bundled verifier")
+        elif path.parent.name == "patpat-plan" and command != PLAN_VERIFY_COMMAND:
+            errors.append(f"{path}: plan verification_cmd must invoke its bundled verifier")
+        elif path.parent.name == "patpat-review" and command != REVIEW_VERIFY_COMMAND:
+            errors.append(f"{path}: review verification_cmd must invoke its bundled verifier")
+        elif path.parent.name == "patpat-ship" and command != DELIVERY_VERIFY_COMMAND:
+            errors.append(f"{path}: delivery verification_cmd must invoke its bundled verifier")
+        elif path.parent.name == "patpat-formal-verify" and command != FORMAL_VERIFY_COMMAND:
+            errors.append(f"{path}: formal verify verification_cmd must invoke --pure-python model checking")
     return ontology
 
 
@@ -612,9 +656,15 @@ def validate_skill_state_gate(path: Path, body: str, errors: list[str]) -> None:
 
 
 def validate_workspace_mapper_resource(root: Path, errors: list[str]) -> None:
-    verifier = root / WORKSPACE_MAPPER_VERIFIER
-    if not verifier.is_file() or verifier.is_symlink():
-        errors.append(f"{verifier}: missing workspace mapper verifier")
+    for verifier_path, label in (
+        (WORKSPACE_MAPPER_VERIFIER, "workspace mapper"),
+        (PLAN_VERIFIER, "plan"),
+        (REVIEW_VERIFIER, "review"),
+        (DELIVERY_VERIFIER, "delivery"),
+    ):
+        verifier = root / verifier_path
+        if not verifier.is_file() or verifier.is_symlink():
+            errors.append(f"{verifier}: missing {label} verifier")
 
 
 def validate_ontology_graph(
@@ -1873,6 +1923,27 @@ def run_self_test(root: Path) -> list[str]:
             lambda ontology: ontology.update(verification_cmd="python3 -m json.tool graph.json"),
         )
 
+    def drift_plan_verifier_command(fixture: Path) -> None:
+        update_ontology(
+            fixture,
+            "patpat-plan",
+            lambda ontology: ontology.update(verification_cmd="git status --short"),
+        )
+
+    def drift_review_verifier_command(fixture: Path) -> None:
+        update_ontology(
+            fixture,
+            "patpat-review",
+            lambda ontology: ontology.update(verification_cmd="git diff --check"),
+        )
+
+    def drift_delivery_verifier_command(fixture: Path) -> None:
+        update_ontology(
+            fixture,
+            "patpat-ship",
+            lambda ontology: ontology.update(verification_cmd="git status --short"),
+        )
+
     def remove_skill_file(fixture: Path) -> None:
         (fixture / "skills" / "patpat-inspect" / "SKILL.md").unlink()
 
@@ -2651,6 +2722,9 @@ def run_self_test(root: Path) -> list[str]:
             ("duplicate ontology state producer", duplicate_ontology_state_producer, "producers must be unique"),
             ("cyclic ontology prerequisites", create_ontology_cycle, "dependency graph contains a cycle"),
             ("workspace mapper verifier command drift", drift_workspace_mapper_verifier_command, "verification_cmd must invoke its bundled verifier"),
+            ("plan verifier command drift", drift_plan_verifier_command, "plan verification_cmd must invoke its bundled verifier"),
+            ("review verifier command drift", drift_review_verifier_command, "review verification_cmd must invoke its bundled verifier"),
+            ("delivery verifier command drift", drift_delivery_verifier_command, "delivery verification_cmd must invoke its bundled verifier"),
             ("missing SKILL.md", remove_skill_file, "immediate skill directory is missing SKILL.md"),
             (
                 "unverified Antigravity root hooks",

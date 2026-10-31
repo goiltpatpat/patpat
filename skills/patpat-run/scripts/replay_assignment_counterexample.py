@@ -34,11 +34,13 @@ SUPPORTED_MUTANTS = {
     "stale-generation": {
         "id": "stale-generation",
         "target_property": "NoStaleWrites",
+        "config_relative": "skills/patpat-run/models/AssignmentGeneration.mutant.cfg",
         "changed_constants": {"EnforceGeneration": False},
     },
     "rejected-write": {
         "id": "rejected-write",
-        "target_property": "SafeRejectedWrites",
+        "target_property": "WritesMatchAcceptedAttempts",
+        "config_relative": "skills/patpat-run/models/AssignmentGeneration.rejected-write-mutant.cfg",
         "changed_constants": {"InjectRejectedWrite": True},
     },
 }
@@ -169,8 +171,9 @@ def _validate_trace(receipt: dict[str, Any]) -> tuple[list[dict[str, Any]], list
         raise ReplayError("receipt checker identity is missing or is not TLC")
 
     configuration = receipt.get("configuration")
-    if not isinstance(configuration, dict) or configuration.get("path") != CONFIG_RELATIVE:
-        raise ReplayError("receipt does not use the supported stale-generation TLC configuration")
+    expected_config_rel = expected_meta["config_relative"]
+    if not isinstance(configuration, dict) or configuration.get("path") != expected_config_rel:
+        raise ReplayError(f"receipt does not use the supported {case_id} TLC configuration")
     expected_constants = {
         "EnforceGeneration": True,
         "InjectRejectedWrite": False,
@@ -269,8 +272,31 @@ def _validate_trace(receipt: dict[str, Any]) -> tuple[list[dict[str, Any]], list
         if first_assignment["owner"] == reassignment["owner"]:
             raise ReplayError("the pilot requires reassignment to a different model worker")
     elif case_id == "rejected-write":
-        if len(parsed_states) < 2:
-            raise ReplayError("rejected-write receipt requires at least 2 states")
+        if len(parsed_states) != 3:
+            raise ReplayError(
+                f"rejected-write receipt requires a 3-state counterexample trace (initial, assignment, rejected write); got {len(parsed_states)}"
+            )
+        initial, assignment = parsed_states[0], parsed_states[1]
+        if initial != {
+            "generation": 0,
+            "assigned": False,
+            "owner": "noWorker",
+            "issued": [],
+            "writes": [],
+            "attempts": [],
+            "steps": 0,
+        }:
+            raise ReplayError("receipt initial state is not the expected empty assignment state")
+        if not _is_assignment_transition(initial, assignment):
+            raise ReplayError("trace state 2 is not a single valid assignment")
+        if assignment["owner"] not in {"workerA", "workerB"}:
+            raise ReplayError("trace assignment names a worker outside the configured worker set")
+        rejected_write_state = parsed_states[-1]
+        if not _is_rejected_write_transition(parsed_states[-2], rejected_write_state):
+            raise ReplayError("trace final transition is not the expected injected rejected write")
+        accepted_count = sum(1 for a in rejected_write_state["attempts"] if a)
+        if len(rejected_write_state["writes"]) == accepted_count:
+            raise ReplayError("selected trace does not violate WritesMatchAcceptedAttempts")
     return raw_states, parsed_states
 
 
@@ -314,6 +340,19 @@ def _is_stale_write_transition(before: dict[str, Any], after: dict[str, Any]) ->
         return False
     return after["steps"] == before["steps"] + 1
 
+def _is_rejected_write_transition(before: dict[str, Any], after: dict[str, Any]) -> bool:
+    if after["generation"] != before["generation"] or after["assigned"] != before["assigned"]:
+        return False
+    if after["owner"] != before["owner"] or after["issued"] != before["issued"]:
+        return False
+    if len(after["attempts"]) != len(before["attempts"]) + 1:
+        return False
+    if after["attempts"][:-1] != before["attempts"] or after["attempts"][-1] is not False:
+        return False
+    if len(after["writes"]) not in (len(before["writes"]), len(before["writes"]) + 1):
+        return False
+    return after["steps"] == before["steps"] + 1
+
 
 def _implementation_refs() -> tuple[str, list[dict[str, Any]]]:
     source_path = Path(program_state.__file__).resolve()
@@ -343,18 +382,14 @@ def _git(root: Path, *arguments: str) -> str:
     return completed.stdout.strip()
 
 
-def _runtime_replay(parsed_states: list[dict[str, Any]]) -> dict[str, Any]:
-    initial, first_assignment, reassignment, stale_write = parsed_states
-    first_worker = first_assignment["owner"]
-    current_worker = reassignment["owner"]
-    stale_token = first_assignment["issued"][-1]["token"]
-    stale_generation = stale_write["writes"][-1]["token"]
-    current_generation = reassignment["generation"]
-    if stale_token != stale_generation:
-        raise ReplayError("stale write token and modeled assignment generation do not match")
+def _runtime_replay(
+    parsed_states: list[dict[str, Any]],
+    case_id: str = "stale-generation",
+    raw_states: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     source_digest, source_refs = _implementation_refs()
 
-    with tempfile.TemporaryDirectory(prefix="patpat-assignment-replay-") as raw_root:
+    with tempfile.TemporaryDirectory(prefix=f"patpat-assignment-{case_id}-replay-") as raw_root:
         root = Path(raw_root).resolve()
         _git(root, "init", "-q")
         _git(root, "config", "user.name", "Patpat Replay")
@@ -368,7 +403,7 @@ def _runtime_replay(parsed_states: list[dict[str, Any]]) -> dict[str, Any]:
         plan["delivery"] = {"authority": "none", "actions": []}
         plan_path = root / "plan.json"
         plan_path.write_text(json.dumps(plan), encoding="utf-8")
-        program_id = "assignment-replay"
+        program_id = f"assignment-{case_id}-replay"
         state = program_state.initialize(root, program_id, plan_path)
 
         evidence_path = root / "parallel-gate-evidence.txt"
@@ -401,108 +436,223 @@ def _runtime_replay(parsed_states: list[dict[str, Any]]) -> dict[str, Any]:
             "replay-coordinator",
         )
 
-        first_assignment_result = program_state.assign_unit(
-            root,
-            program_id,
-            "contract",
-            first_worker,
-            "assignment-replay-worker",
-            initial["generation"],
-        )
-        reassignment_result = program_state.assign_unit(
-            root,
-            program_id,
-            "contract",
-            current_worker,
-            "assignment-replay-worker",
-            first_assignment["generation"],
-        )
-        first_observed = first_assignment_result["units"]["contract"]["assignment"]
-        current_observed = reassignment_result["units"]["contract"]["assignment"]
-        assignment_prefix_matches_model = (
-            first_observed["generation"] == first_assignment["generation"]
-            and first_observed["actor"] == first_worker.casefold()
-            and current_observed["generation"] == reassignment["generation"]
-            and current_observed["actor"] == current_worker.casefold()
-        )
-
         persisted_state = program_state.state_path(root, program_id)
-        state_before = persisted_state.read_bytes()
-        digest_before = sha256_bytes(state_before)
-        observed_error: str | None = None
-        try:
-            program_state.set_head(
+
+        if case_id == "stale-generation":
+            initial, first_assignment, reassignment, stale_write = parsed_states
+            first_worker = first_assignment["owner"]
+            current_worker = reassignment["owner"]
+            stale_token = first_assignment["issued"][-1]["token"]
+            stale_generation = stale_write["writes"][-1]["token"]
+            current_generation = reassignment["generation"]
+            if stale_token != stale_generation:
+                raise ReplayError("stale write token and modeled assignment generation do not match")
+
+            first_assignment_result = program_state.assign_unit(
                 root,
                 program_id,
                 "contract",
-                head_sha,
-                None,
-                stale_generation,
+                first_worker,
+                "assignment-replay-worker",
+                initial["generation"],
             )
-        except program_state.ProgramStateError as error:
-            observed_error = str(error)
-        state_after = persisted_state.read_bytes()
-        digest_after = sha256_bytes(state_after)
-        unchanged = state_before == state_after
-        expected_rejection = (
-            assignment_prefix_matches_model
-            and observed_error == "stale assignment generation"
-            and unchanged
-        )
+            reassignment_result = program_state.assign_unit(
+                root,
+                program_id,
+                "contract",
+                current_worker,
+                "assignment-replay-worker",
+                first_assignment["generation"],
+            )
+            first_observed = first_assignment_result["units"]["contract"]["assignment"]
+            current_observed = reassignment_result["units"]["contract"]["assignment"]
+            assignment_prefix_matches_model = (
+                first_observed["generation"] == first_assignment["generation"]
+                and first_observed["actor"] == first_worker.casefold()
+                and current_observed["generation"] == reassignment["generation"]
+                and current_observed["actor"] == current_worker.casefold()
+            )
 
-        return {
-            "status": "pass" if expected_rejection else "fail",
-            "outcome": (
-                "rejected-as-expected"
-                if expected_rejection
-                else "assignment-prefix-diverged"
-                if not assignment_prefix_matches_model
-                else "unexpected-rejection" if observed_error is not None else "accepted-stale-write"
-            ),
-            "entrypoint": "program_state.set_head()",
-            "attempted_model_worker": first_worker,
-            "attempted_token": stale_token,
-            "attempted_generation": stale_generation,
-            "current_assignment": {
-                "worker": current_worker,
-                "generation": current_generation,
-            },
-            "mapped_calls": [
-                {
-                    "model_transition": 2,
-                    "entrypoint": "program_state.assign_unit()",
-                    "worker_label_from_model_state": first_worker,
-                    "expected_generation": initial["generation"],
-                    "observed_generation": first_assignment_result["units"]["contract"]["assignment"]["generation"],
+            state_before = persisted_state.read_bytes()
+            digest_before = sha256_bytes(state_before)
+            observed_error: str | None = None
+            try:
+                program_state.set_head(
+                    root,
+                    program_id,
+                    "contract",
+                    head_sha,
+                    None,
+                    stale_generation,
+                )
+            except program_state.ProgramStateError as error:
+                observed_error = str(error)
+            state_after = persisted_state.read_bytes()
+            digest_after = sha256_bytes(state_after)
+            unchanged = state_before == state_after
+            expected_rejection = (
+                assignment_prefix_matches_model
+                and observed_error == "stale assignment generation"
+                and unchanged
+            )
+
+            return {
+                "status": "pass" if expected_rejection else "fail",
+                "outcome": (
+                    "rejected-as-expected"
+                    if expected_rejection
+                    else "assignment-prefix-diverged"
+                    if not assignment_prefix_matches_model
+                    else "unexpected-rejection" if observed_error is not None else "accepted-stale-write"
+                ),
+                "entrypoint": "program_state.set_head()",
+                "attempted_model_worker": first_worker,
+                "attempted_token": stale_token,
+                "attempted_generation": stale_generation,
+                "current_assignment": {
+                    "worker": current_worker,
+                    "generation": current_generation,
                 },
-                {
-                    "model_transition": 3,
-                    "entrypoint": "program_state.assign_unit()",
-                    "worker_label_from_model_state": current_worker,
-                    "expected_generation": first_assignment["generation"],
-                    "observed_generation": reassignment_result["units"]["contract"]["assignment"]["generation"],
+                "mapped_calls": [
+                    {
+                        "model_transition": 2,
+                        "entrypoint": "program_state.assign_unit()",
+                        "worker_label_from_model_state": first_worker,
+                        "expected_generation": initial["generation"],
+                        "observed_generation": first_assignment_result["units"]["contract"]["assignment"]["generation"],
+                    },
+                    {
+                        "model_transition": 3,
+                        "entrypoint": "program_state.assign_unit()",
+                        "worker_label_from_model_state": current_worker,
+                        "expected_generation": first_assignment["generation"],
+                        "observed_generation": reassignment_result["units"]["contract"]["assignment"]["generation"],
+                    },
+                    {
+                        "model_transition": 4,
+                        "entrypoint": "program_state.set_head()",
+                        "worker_label_from_model_state": first_worker,
+                        "stale_generation": stale_generation,
+                        "current_generation": current_generation,
+                    },
+                ],
+                "observed_error": observed_error,
+                "assignment_prefix_matches_model": assignment_prefix_matches_model,
+                "state_sha256_before": digest_before,
+                "state_sha256_after": digest_after,
+                "persisted_state_unchanged": unchanged,
+                "actor_authentication": "not-exercised; set_head() accepts a generation but no worker identity",
+                "temporary_workspace": "isolated Git and program state; removed when replay returns",
+                "implementation_source": {
+                    "path": IMPLEMENTATION_RELATIVE,
+                    "sha256": source_digest,
+                    "references": source_refs,
                 },
-                {
-                    "model_transition": 4,
-                    "entrypoint": "program_state.set_head()",
-                    "worker_label_from_model_state": first_worker,
-                    "stale_generation": stale_generation,
-                    "current_generation": current_generation,
+            }
+
+        elif case_id == "rejected-write":
+            initial, assignment, rejected_step = parsed_states
+            worker = assignment["owner"]
+            assign_result = program_state.assign_unit(
+                root,
+                program_id,
+                "contract",
+                worker,
+                "assignment-replay-worker",
+                initial["generation"],
+            )
+            observed_assignment = assign_result["units"]["contract"]["assignment"]
+            assignment_matches = (
+                observed_assignment["generation"] == assignment["generation"]
+                and observed_assignment["actor"] == worker.casefold()
+            )
+
+            # Extract attempted token from raw trace step action if available
+            attempted_token = 0
+            if raw_states and len(raw_states) > 2:
+                action_str = str(raw_states[2].get("action", ""))
+                token_match = re.search(r"(?:tok|token)\s*[:=]\s*(\d+)", action_str)
+                if not token_match:
+                    token_match = re.search(r"AttemptWrite\s*\(\s*(\d+)", action_str)
+                if token_match:
+                    attempted_token = int(token_match.group(1))
+            if attempted_token == assignment["generation"]:
+                raise ReplayError("trace attempted write uses current valid generation token")
+
+            state_before = persisted_state.read_bytes()
+            digest_before = sha256_bytes(state_before)
+            observed_error: str | None = None
+            try:
+                # Attempt an unallowed write with unissued / stale generation token
+                program_state.set_head(
+                    root,
+                    program_id,
+                    "contract",
+                    head_sha,
+                    None,
+                    attempted_token,
+                )
+            except program_state.ProgramStateError as error:
+                observed_error = str(error)
+
+            state_after = persisted_state.read_bytes()
+            digest_after = sha256_bytes(state_after)
+            unchanged = state_before == state_after
+            persisted_head = program_state.load_state(root, program_id)["units"]["contract"]["head_sha"]
+            expected_rejection = (
+                assignment_matches
+                and observed_error == "stale assignment generation"
+                and unchanged
+                and persisted_head is None
+            )
+
+            return {
+                "status": "pass" if expected_rejection else "fail",
+                "outcome": (
+                    "rejected-as-expected"
+                    if expected_rejection
+                    else "assignment-prefix-diverged"
+                    if not assignment_matches
+                    else "unexpected-rejection" if observed_error is not None else "accepted-rejected-write"
+                ),
+                "entrypoint": "program_state.set_head()",
+                "attempted_model_worker": worker,
+                "attempted_token": attempted_token,
+                "current_assignment": {
+                    "worker": worker,
+                    "generation": assignment["generation"],
                 },
-            ],
-            "observed_error": observed_error,
-            "assignment_prefix_matches_model": assignment_prefix_matches_model,
-            "state_sha256_before": digest_before,
-            "state_sha256_after": digest_after,
-            "persisted_state_unchanged": unchanged,
-            "actor_authentication": "not-exercised; set_head() accepts a generation but no worker identity",
-            "temporary_workspace": "isolated Git and program state; removed when replay returns",
-            "implementation_source": {
-                "path": IMPLEMENTATION_RELATIVE,
-                "sha256": source_digest,
-                "references": source_refs,
-            },
-        }
+                "mapped_calls": [
+                    {
+                        "model_transition": 2,
+                        "entrypoint": "program_state.assign_unit()",
+                        "worker_label_from_model_state": worker,
+                        "expected_generation": initial["generation"],
+                        "observed_generation": observed_assignment["generation"],
+                    },
+                    {
+                        "model_transition": 3,
+                        "entrypoint": "program_state.set_head()",
+                        "attempted_generation": attempted_token,
+                        "rejection_observed": observed_error is not None,
+                    },
+                ],
+                "observed_error": observed_error,
+                "assignment_prefix_matches_model": assignment_matches,
+                "state_sha256_before": digest_before,
+                "state_sha256_after": digest_after,
+                "persisted_state_unchanged": unchanged,
+                "persisted_head_is_none": persisted_head is None,
+                "actor_authentication": "not-exercised; set_head() validates generation fencing, not worker identity",
+                "temporary_workspace": "isolated Git and program state; removed when replay returns",
+                "implementation_source": {
+                    "path": IMPLEMENTATION_RELATIVE,
+                    "sha256": source_digest,
+                    "references": source_refs,
+                },
+            }
+        else:
+            raise ReplayError(f"unsupported runtime replay case: {case_id}")
 
 
 def replay_receipt(receipt_path: Path) -> dict[str, Any]:
@@ -514,9 +664,14 @@ def replay_receipt(receipt_path: Path) -> dict[str, Any]:
     model_path = REPOSITORY_ROOT / MODEL_RELATIVE
     if not model_path.is_file() or sha256_bytes(model_path.read_bytes()) != model_ref.get("sha256"):
         raise ReplayError("receipt model digest does not match the current model source")
-    if not isinstance(config_ref, dict) or config_ref.get("path") != CONFIG_RELATIVE:
-        raise ReplayError("receipt does not identify the supported mutant configuration")
-    config_path = REPOSITORY_ROOT / CONFIG_RELATIVE
+    case_id = receipt.get("case", "stale-generation")
+    if case_id not in SUPPORTED_MUTANTS:
+        raise ReplayError(f"unsupported case: {case_id}")
+    expected_meta = SUPPORTED_MUTANTS[case_id]
+    expected_config_rel = expected_meta["config_relative"]
+    if not isinstance(config_ref, dict) or config_ref.get("path") != expected_config_rel:
+        raise ReplayError(f"receipt does not identify the supported {case_id} configuration")
+    config_path = REPOSITORY_ROOT / expected_config_rel
     if not config_path.is_file() or sha256_bytes(config_path.read_bytes()) != config_ref.get("sha256"):
         raise ReplayError("receipt configuration digest does not match the current configuration")
 
@@ -525,8 +680,49 @@ def replay_receipt(receipt_path: Path) -> dict[str, Any]:
         raise ReplayError("receipt checker identity is missing or is not TLC")
 
     raw_trace, parsed_states = _validate_trace(receipt)
-    prop = next(item for item in receipt["properties"] if item["name"] == "NoStaleWrites")
-    replay = _runtime_replay(parsed_states)
+    target_prop = expected_meta["target_property"]
+    prop = next(item for item in receipt["properties"] if item["name"] == target_prop)
+    replay = _runtime_replay(parsed_states, case_id=case_id, raw_states=raw_trace)
+
+    model_action_interpretation = []
+    if case_id == "stale-generation":
+        model_action_interpretation = [
+            {
+                "transition": 2,
+                "interpretation": f"Assign({parsed_states[1]['owner']})",
+                "basis": "validated state delta; not emitted as TLC action text",
+            },
+            {
+                "transition": 3,
+                "interpretation": f"Assign({parsed_states[2]['owner']})",
+                "basis": "validated state delta; not emitted as TLC action text",
+            },
+            {
+                "transition": 4,
+                "interpretation": (
+                    f"AcceptedWrite(token={parsed_states[3]['writes'][-1]['token']}, "
+                    f"worker={parsed_states[1]['owner']}) in the mutant model"
+                ),
+                "basis": (
+                    "validated stale token issuance plus the model WriteAllowed relation; "
+                    "the worker argument is not serialized in TLC variables"
+                ),
+            },
+        ]
+    elif case_id == "rejected-write":
+        model_action_interpretation = [
+            {
+                "transition": 2,
+                "interpretation": f"Assign({parsed_states[1]['owner']})",
+                "basis": "validated state delta; not emitted as TLC action text",
+            },
+            {
+                "transition": 3,
+                "interpretation": "RejectedWrite() with injected write record in mutant model",
+                "basis": "validated state delta; mutant committed write on rejected attempt",
+            },
+        ]
+
     return {
         "kind": REPLAY_KIND,
         "schema_version": REPLAY_SCHEMA_VERSION,
@@ -536,41 +732,20 @@ def replay_receipt(receipt_path: Path) -> dict[str, Any]:
                 "model_path": MODEL_RELATIVE,
                 "model_sha256": model_ref["sha256"],
                 "receipt_sha256": sha256_bytes(receipt_bytes),
-                "mutant": EXPECTED_MUTANT,
-                "property": "NoStaleWrites",
+                "mutant": expected_meta,
+                "property": target_prop,
                 "counterexample_count": prop["counterexample_count"],
                 "bounds": EXPECTED_BOUNDS,
                 "selected_trace_states": len(raw_trace),
                 "raw_tlc_actions": [step["action"] for step in raw_trace],
                 "selected_trace": raw_trace,
-                "model_action_interpretation": [
-                    {
-                        "transition": 2,
-                        "interpretation": f"Assign({parsed_states[1]['owner']})",
-                        "basis": "validated state delta; not emitted as TLC action text",
-                    },
-                    {
-                        "transition": 3,
-                        "interpretation": f"Assign({parsed_states[2]['owner']})",
-                        "basis": "validated state delta; not emitted as TLC action text",
-                    },
-                    {
-                        "transition": 4,
-                        "interpretation": (
-                            f"AcceptedWrite(token={parsed_states[3]['writes'][-1]['token']}, "
-                            f"worker={parsed_states[1]['owner']}) in the mutant model"
-                        ),
-                        "basis": (
-                            "validated stale token issuance plus the model WriteAllowed relation; "
-                            "the worker argument is not serialized in TLC variables"
-                        ),
-                    },
-                ],
+                "model_action_interpretation": model_action_interpretation,
             },
             "implementation_replay": replay,
         },
+        "verdict": replay["status"],
         "interpretation": (
-            "The counterexample is produced by a model mutant. The Python replay checks the mapped stale-write path; "
+            f"The counterexample is produced by the {case_id} model mutant. The Python replay checks the mapped path; "
             "a rejection is evidence that this selected mutant path was not reproduced as a Python defect."
         ),
     }
