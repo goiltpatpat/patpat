@@ -36,22 +36,15 @@ After install, invoke with the host form from the installation guide. Cursor use
 
 Report the detected host, selected scope, exact destination or marketplace, pre-existing conflicts, command receipts, discovered skill count, invocation result, and removal path. Classify package validation separately from prompt-time discovery.
 
-## Adaptive role routing (Smart Defaults + Easy Override)
+## Model choice
 
-Patpat adapts model reasoning power to task sensitivity using three capability tiers without rigid ceremonial constraints:
+Patpat does not route models; the host and the user do. By default every worker and reviewer inherits the parent model. When the user names models, use them. When the host lets the parent choose a model for each worker, use this guidance:
 
-- **Strategic Architect & Lead (Deep Reasoning Tier)**:
-  - Target capability: Platform flagship or frontier reasoning models (e.g., Claude Thinking/Sonnet, OpenAI o-series/o3, Gemini Pro/Thinking, or host flagship aliases).
-  - Scope: Multi-phase planning, architectural refactoring, contract mutations, public API changes, statechart transitions, and high-risk invariants.
-  - Posture: Deep causal tracing, zero-shot topology planning, and strict proof-contract formulation.
-- **Fast Bounded Worker (Agile Execution Tier)**:
-  - Target capability: Low-latency, high-throughput execution models (e.g., Claude Haiku, GPT mini, Gemini Flash, or host fast worker aliases).
-  - Scope: Bounded bug fixes, local single-file refactors, test execution, AST symbol extraction, and syntax checks.
-  - Posture: Tight iteration cycles, minimal token consumption, and targeted diffs.
-- **Adversarial Reviewer (Independent Cross-Family Tier)**:
-  - Target capability: Cross-model family pairing (e.g., pairing an Anthropic worker with an OpenAI reviewer, or a Google worker with an Anthropic reviewer).
-  - Scope: Independent code reviews, blind adjudications, proof challenges, and pragmatic comment/anti-slop enforcement.
-  - Posture: Read-only, skeptical, verifying real surface evidence over narrative claims.
+- Design-gated work (architecture, contracts, migrations, auth, security, statechart and formal models): the strongest reasoning model available.
+- A bounded, well-specified slice (a local fix, a test run): a faster model is acceptable when the parent verifies its result.
+- Independent review: a different model, ideally from another family, when available; otherwise a fresh context of the same model. Independence comes from the separate context and evidence, not the model name.
+
+Report which model ran each role only when the host shows it. Never claim a model choice the host did not make.
 
 ## Universal host rules & configuration paths
 

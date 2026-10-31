@@ -31,6 +31,14 @@ DISABLE_MODE = re.compile(
     r"^\s*(?:disable\s+(?:/|\$)?patpat(?:-loop)?|opt\s+out(?:\s+of)?\s+patpat(?:-loop)?)\s*[.!?]?\s*$",
     re.IGNORECASE,
 )
+# Behavior over time with rules to check goes to patpat-statechart, ahead of structure diagrams.
+STATECHART_INTENT = re.compile(
+    r"\b(?:draw|show|make|create|chart|model|render|run)\b.{0,60}\bstate\s?(?:charts?|diagrams?)\b"
+    r"|(?:วาด|สร้าง|ทำ|ขอ|ขอดู|แสดง).{0,60}แผนภาพสถานะ"
+)
+STATECHART_STUCK_QUESTION = re.compile(
+    r"\b(?:can|could)\b.{0,80}\b(?:get\s+stuck|deadlock)\b.{0,80}\b(?:show|chart)\b.{0,40}\bpath\b"
+)
 INTERACTIVE_DIAGRAM_INTENT = re.compile(
     r"\b(?:draw|create|make|generate|render|map|show|provide|visuali[sz]e|turn|transform)\b.{0,100}\b(?:architecture\s+|workflow\s+|sequence\s+|data[- ]?flow\s+|lifecycle\s+)?(?:diagram|flowchart|interactive\s+(?:visual|map)|visualization|visualisation|visual\s+(?:map|of|for|about))\b"
     r"|(?:วาด|สร้าง|ทำ|จัดทำ|ขอ|ช่วยวาด|ช่วยสร้าง|ช่วยทำ|อยากได้|ขอดู|เปลี่ยน).{0,100}(?:diagram|flowchart|แผนภาพ|ไดอะแกรม|ผังงาน|ภาพโต้ตอบ|ภาพสรุป)"
@@ -340,6 +348,20 @@ def has_repository_diagram_request(text: str) -> bool:
     return False
 
 
+def has_statechart_request(text: str) -> bool:
+    if STATECHART_STUCK_QUESTION.search(text):
+        return True
+    clauses = re.split(
+        r"[,;.!?\n]+|\b(?:but|instead|however|rather)\b|(?:แต่|แต่ว่า|แทนที่จะ)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return any(
+        STATECHART_INTENT.search(clause) and not REPOSITORY_DIAGRAM_DENIAL.search(clause)
+        for clause in clauses
+    )
+
+
 def has_compound_non_diagram_work(text: str) -> bool:
     clauses = re.split(
         r"[,;.!?\n]+|\b(?:then|and|but|instead|however|also)\b|(?:แล้ว|และ|แต่|แต่ว่า|แทนที่จะ)",
@@ -370,6 +392,8 @@ def route(prompt: str) -> str:
     text = prompt.lower()
     if DISABLE_MODE.fullmatch(prompt):
         return "disable"
+    if has_statechart_request(text):
+        return "loop" if has_compound_non_diagram_work(text) else "statechart"
     if has_repository_diagram_request(text):
         if has_compound_non_diagram_work(text):
             return "loop"
@@ -1146,6 +1170,17 @@ def run_self_test() -> None:
         "/patpat fix settings when users disable alerts": "debug",
         "/patpat do not disable the safety gate": "loop",
         "disable /patpat": "disable",
+        "Run /statechart on the login flow.": "statechart",
+        "Show it as a state diagram: can the player be loud while stopped?": "statechart",
+        "Can our login flow get stuck after a failed 2FA? Show me the path.": "statechart",
+        "ช่วยวาดแผนภาพสถานะของการสั่งชานมไข่มุก": "statechart",
+        "Refactor the state machine in program_state.py.": "loop",
+        "Fix the deadlock in the worker pool.": "debug",
+        "Fix the CRLF bug in the statechart run.ts on Windows.": "debug",
+        "Refactor the statechart module and open a PR.": "loop",
+        "Explain how the statechart renderer works.": "inspect",
+        "Don't draw a state diagram; just fix the deadlock.": "debug",
+        "Draw a state diagram of auth, then fix the login bug.": "loop",
         "opt out of patpat": "disable",
     }
     for prompt, expected in cases.items():

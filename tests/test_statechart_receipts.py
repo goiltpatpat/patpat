@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parent.parent
-SCRIPT = ROOT / "skills" / "patpat-formal-verify" / "statechart" / "scripts" / "render_statechart_receipts.py"
+SCRIPT = ROOT / "skills" / "patpat-statechart" / "scripts" / "render_statechart_receipts.py"
 SPEC = importlib.util.spec_from_file_location("render_statechart_receipts", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 renderer = importlib.util.module_from_spec(SPEC)

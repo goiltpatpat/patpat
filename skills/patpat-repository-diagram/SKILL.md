@@ -11,7 +11,7 @@ Before following this skill, apply the [skill state and mutation gate](../patpat
 
 Use this route only when the user explicitly asks for a diagram, map, visual explainer, or shareable view. Accept a brief, repository evidence, or both. Deliver a focused HTML artifact with editable typed JSON and SVG; preserve stable IDs when refining it. Patpat owns the schema, renderer, layout, viewer, and output contract. Do not install Archify or depend on its runtime. See [design references and attribution](references/spec-contract.md#selected-design-references) and [third-party notices](references/THIRD_PARTY_NOTICES.md). Before running a script, replace `<skill-root>` with the absolute directory containing this loaded `SKILL.md`.
 
-For a formal TLA+/TLC statechart or saved `patpat-model-check-receipt`, route to the dedicated statechart module in [patpat-formal-verify](../patpat-formal-verify/SKILL.md). This skill remains the route for general architecture, workflow, sequence, dataflow, and product-lifecycle diagrams. A TLC invariant violation is a mark on a model state, not a lifecycle terminal or proof of a runtime defect.
+When the request asks which states a flow can reach or whether a rule can break, for a TLA+/TLC statechart, or for a saved `patpat-model-check-receipt`, route to [patpat-statechart](../patpat-statechart/SKILL.md). This skill remains the route for architecture, workflow, sequence, dataflow, and product-lifecycle diagrams that show structure without checking rules. A TLC invariant violation is a mark on a model state, not a lifecycle terminal or proof of a runtime defect.
 
 ## Scope and route
 
@@ -52,8 +52,11 @@ Before authoring the graph, write down the intended reader, the question this vi
 - In architecture views, label components by evidenced responsibility and label relationships by the actual call, data, or event. Keep paths and symbols in the evidence details unless the user explicitly requested a dependency map.
 - In workflows and lifecycles, use reader-facing actions and situations for node and transition labels. Keep raw code names, state variables, and evidence IDs in the details. Color may show phase or outcome, but shape and line style must still carry meaning without color.
 - Use boundaries for evidenced ownership or system boundaries, not just to decorate the graph. Show the main path first, then only the branches needed to explain the decision or failure.
-- Aim for about 20 visible transitions or fewer. If the subject needs more, narrow the question or make a few guided views; do not shrink labels until the graph technically fits. Preserve every state and mark on a model-check counterexample path.
+- Aim for about 20 visible transitions or fewer. If the subject needs more, narrow the question or make a few guided views; do not shrink labels until the graph technically fits.
+- To show a `patpat-statechart` bug path, add a schema 2 story view whose `focus` lists that path's state and transition IDs in order and whose `note` gives the rule, the report path, and the replay label (`replayed`, `model-only`, or `replay-inconclusive`). Do not add the path as new states or as evidence: the diagram presents the finding and does not prove it. When the path passes through model states the diagram lacks, such as a stale screen, keep `focus` to the diagram elements the path touches and name the missing states in the `note`; add them as lifecycle states only when the reader confirms they are real states of the flow. Give the report path relative to the diagram JSON. When the reader asks whether a drawn lifecycle can break a rule, offer `patpat-statechart` and hand it this JSON.
 - A static dependency map is only a dependency map. State that its edges come from static imports and do not imply runtime calls or a complete architecture.
+
+For a talk or review, author schema 2 story views for the paths the audience must follow; Simulate flow plays them as a captioned walkthrough with optional sound and narration, and falls back to the main path by relationship kind when no story is selected.
 
 After rendering, inspect the artifact at reader size. Fix meaning and scope before geometry; then check label wrapping, reading direction, branch distinction, edge clearance, and visual balance. Geometry diagnostics passing does not prove the diagram tells the right story.
 

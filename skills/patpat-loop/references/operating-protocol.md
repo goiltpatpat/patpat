@@ -96,7 +96,7 @@ Without delivery intent, local reversible mutating work uses proof, focused veri
 
 With delivery intent, verify, independent review, and default delivery remain required. Auth, billing, secrets, architecture, or cross-cutting work always requires independent review even when delivery intent is absent.
 
-Overnight, going to bed, or don't stop continues until the PR is merge-ready; it does not authorize merge. Merge only when the user explicitly names land or merge and the verified head is green. Patpat may merge only a fully gated pull request; never auto-merge; never merge through the GitHub connector; release and tag still require explicit authorization. Treat ambiguous `ship it` as commit-and-PR. Do not land a real CI failure. Retry a flake once.
+Overnight, going to bed, or don't stop continues until the PR is merge-ready; it does not authorize merge. Merge only when the user explicitly names land or merge, no later instruction withdrew it, and the head is green with verify and review receipts for that exact head. Patpat may merge only a fully gated pull request; never auto-merge; never merge through the GitHub connector; release and tag still require explicit authorization. Treat ambiguous `ship it` as commit-and-PR. Do not land a real CI failure. Retry a flake once.
 
 Always pause for force-push to shared branches, production deploy, package publish, data deletion, secret rotation, and risky auth, billing, or permission changes. Explain blast radius, safer alternative, rollback, and verification before continuing.
 
