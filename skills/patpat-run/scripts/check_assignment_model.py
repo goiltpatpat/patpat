@@ -563,34 +563,71 @@ def explore_assignment_state_space_python(
     workers: tuple[str, ...] = ("workerA", "workerB"),
     enforce_generation: bool = True,
     inject_rejected_write: bool = False,
+    initial_state: AssignmentState | None = None,
 ) -> dict[str, Any]:
     """Pure-Python breadth-first state-space explorer for AssignmentGeneration model."""
-    init_state = AssignmentState(
-        generation=0,
-        assigned=False,
-        owner="noWorker",
-        issued=(),
-        writes=(),
-        attempts=(),
-        steps=0,
-    )
+    if initial_state is not None:
+        init_state = initial_state
+    else:
+        init_state = AssignmentState(
+            generation=0,
+            assigned=False,
+            owner="noWorker",
+            issued=(),
+            writes=(),
+            attempts=(),
+            steps=0,
+        )
     queue: deque[tuple[AssignmentState, list[dict[str, Any]]]] = deque()
     queue.append((init_state, [{"index": 1, "action": "Initial predicate", "changed_keys": [], "state": init_state}]))
     visited: set[AssignmentState] = {init_state}
     distinct_states = 1
     total_generated = 1
     counterexample_trace: list[dict[str, Any]] | None = None
+    violated_invariant: str | None = None
 
     while queue:
         curr, path = queue.popleft()
 
-        # Check invariant: all writes must have token == current_generation
+        # Check declared model invariants on each reachable state
+        violation: str | None = None
+
+        # 1. Invariant: NoStaleWrites
         for token, current in curr.writes:
             if token != current:
-                if counterexample_trace is None:
-                    counterexample_trace = path
+                violation = "NoStaleWrites"
                 break
-        if counterexample_trace is not None and not enforce_generation:
+
+        # 2. Invariant: WritesMatchAcceptedAttempts
+        if violation is None:
+            accepted_count = sum(1 for accepted in curr.attempts if accepted)
+            if len(curr.writes) != accepted_count:
+                violation = "WritesMatchAcceptedAttempts"
+
+        # 3. Invariant: ActiveAssignmentHasIssuedToken
+        if violation is None and curr.assigned:
+            if not any(t == curr.generation and w == curr.owner for t, w in curr.issued):
+                violation = "ActiveAssignmentHasIssuedToken"
+
+        # 4. Invariant: TypeOK
+        if violation is None:
+            if not (0 <= curr.generation <= max_generation):
+                violation = "TypeOK"
+            elif curr.assigned != (curr.owner in workers):
+                violation = "TypeOK"
+            elif curr.owner not in workers and curr.owner != "noWorker":
+                violation = "TypeOK"
+            elif (
+                len(curr.issued) > max_generation
+                or len(curr.writes) > max_steps
+                or len(curr.attempts) > max_steps
+                or curr.steps > max_steps
+            ):
+                violation = "TypeOK"
+
+        if violation is not None:
+            counterexample_trace = path
+            violated_invariant = violation
             break
 
         if curr.steps >= max_steps:
@@ -671,6 +708,7 @@ def explore_assignment_state_space_python(
         "distinct_states": distinct_states,
         "total_generated": total_generated,
         "counterexample": counterexample_trace,
+        "violated_invariant": violated_invariant,
         "passed": counterexample_trace is None,
     }
 
@@ -905,7 +943,7 @@ def self_test_contract() -> int:
     else:
         raise AssertionError("oversized TLC output was accepted")
 
-    print("TLC bounded output and counterexample contract: PASS")
+    print("TLC parser and receipt contract self-test: PASS")
     return 0
 
 
@@ -1015,7 +1053,81 @@ def self_test(jar: Path, java: str, receipt_out: Path | None = None) -> int:
     assert py_baseline["passed"], "Pure-Python model explorer failed on baseline"
     py_mutant = explore_assignment_state_space_python(enforce_generation=False)
     assert not py_mutant["passed"], "Pure-Python model explorer failed to catch stale generation mutant"
+    assert py_mutant["violated_invariant"] == MUTANT_INVARIANT, "Stale generation mutant did not violate NoStaleWrites"
     assert py_mutant["counterexample"] is not None, "Pure-Python model explorer did not produce counterexample"
+    py_rejected = explore_assignment_state_space_python(inject_rejected_write=True)
+    assert not py_rejected["passed"], "Pure-Python model explorer failed to catch rejected write mutant"
+    assert py_rejected["violated_invariant"] == REJECTED_WRITE_MUTANT_INVARIANT, "Rejected write mutant did not violate WritesMatchAcceptedAttempts"
+    assert py_rejected["counterexample"] is not None, "Pure-Python model explorer did not produce rejected-write counterexample"
+    return 0
+
+
+def verify_pure_python_model(
+    max_generation: int = 3,
+    max_steps: int = 6,
+    workers: tuple[str, ...] = ("workerA", "workerB"),
+) -> int:
+    """Run pure-Python model verification checking baseline and both required mutants."""
+    baseline = explore_assignment_state_space_python(
+        max_generation=max_generation,
+        max_steps=max_steps,
+        workers=workers,
+        enforce_generation=True,
+        inject_rejected_write=False,
+    )
+    if not baseline["passed"]:
+        print(
+            f"Pure-Python model check FAILED on baseline: violated {baseline.get('violated_invariant')}",
+            file=sys.stderr,
+        )
+        return 1
+
+    stale_mutant = explore_assignment_state_space_python(
+        max_generation=max_generation,
+        max_steps=max_steps,
+        workers=workers,
+        enforce_generation=False,
+        inject_rejected_write=False,
+    )
+    if stale_mutant["passed"] or stale_mutant.get("violated_invariant") != MUTANT_INVARIANT:
+        print(
+            f"Pure-Python model check FAILED: stale-generation mutant was not detected "
+            f"(violated={stale_mutant.get('violated_invariant')})",
+            file=sys.stderr,
+        )
+        return 1
+
+    rejected_write_mutant = explore_assignment_state_space_python(
+        max_generation=max_generation,
+        max_steps=max_steps,
+        workers=workers,
+        enforce_generation=True,
+        inject_rejected_write=True,
+    )
+    if (
+        rejected_write_mutant["passed"]
+        or rejected_write_mutant.get("violated_invariant") != REJECTED_WRITE_MUTANT_INVARIANT
+    ):
+        print(
+            f"Pure-Python model check FAILED: rejected-write mutant was not detected "
+            f"(violated={rejected_write_mutant.get('violated_invariant')})",
+            file=sys.stderr,
+        )
+        return 1
+
+    print("Bounded assignment-generation pure-Python model: PASS")
+    print(
+        f"Baseline: PASS ({baseline['distinct_states']} distinct / "
+        f"{baseline['total_generated']} generated states)"
+    )
+    print(
+        f"Generation-guard mutant: detected violation of {MUTANT_INVARIANT} "
+        f"(path length {len(stale_mutant['counterexample'])})"
+    )
+    print(
+        f"Rejected-write mutant: detected violation of {REJECTED_WRITE_MUTANT_INVARIANT} "
+        f"(path length {len(rejected_write_mutant['counterexample'])})"
+    )
     return 0
 
 
@@ -1023,7 +1135,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     check = parser.add_mutually_exclusive_group(required=True)
     check.add_argument("--tlc-jar", type=Path, help="path to tla2tools.jar")
-    check.add_argument("--self-test", action="store_true", help="check TLC output contract without running TLC")
+    check.add_argument("--self-test", action="store_true", help="test TLC parser and receipt contract fixtures (does not verify model)")
     check.add_argument("--pure-python", action="store_true", help="run pure-Python state space exploration without Java/TLC")
     parser.add_argument("--java", default="java", help="Java executable (default: java)")
     parser.add_argument(
@@ -1037,9 +1149,9 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--receipt-out requires --tlc-jar and a real TLC run")
         return self_test_contract()
     if args.pure_python:
-        res = explore_assignment_state_space_python(enforce_generation=True)
-        print(f"Pure-Python model check: baseline pass ({res['distinct_states']} distinct / {res['total_generated']} generated states)")
-        return 0
+        if args.receipt_out is not None:
+            parser.error("--receipt-out requires --tlc-jar and a real TLC run")
+        return verify_pure_python_model()
     try:
         receipt_out = (
             require_new_receipt_directory(args.receipt_out)

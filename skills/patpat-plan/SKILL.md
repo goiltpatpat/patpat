@@ -2,7 +2,7 @@
 name: patpat-plan
 description: Design a falsifiable workflow for multi-phase repository work or a task with no safe narrow route. Use when several contracts or verification surfaces must be sequenced; remain read-only.
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"EngineeringTask","requires_state":["architecture-design-settled"],"produces_state":["execution-plan-settled"],"verification_cmd":"git status --short"}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"EngineeringTask","requires_state":["architecture-design-settled"],"produces_state":["execution-plan-settled"],"verification_cmd":"python3 <loaded-skill-directory>/scripts/verify_plan.py --root <workspace-root>"}'
 ---
 
 # Patpat Plan
