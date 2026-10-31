@@ -850,7 +850,7 @@ def resolve_node_executable() -> str | None:
 def render_with_pstack(chart: ChartIR, replay: dict[str, Any], stage: Path,
                        mmd_path: Path, svg_path: Path) -> str:
     node = resolve_node_executable()
-    require(node is not None, "PStack-derived receipt rendering requires Node.js 22 or newer")
+    require(node is not None, "Statechart receipt rendering requires Node.js 22 or newer")
     script = (Path(__file__).resolve().parent / "render_receipt_chart.mjs").resolve(strict=True)
     evidence = {
         "label": "TLC ACTION · RAW RECEIPT",
@@ -877,19 +877,19 @@ def render_with_pstack(chart: ChartIR, replay: dict[str, Any], stage: Path,
             errors="replace", timeout=60, check=False,
         )
     except subprocess.TimeoutExpired as exc:
-        raise StatechartError("PStack/Pele rendering exceeded the 60-second local limit") from exc
+        raise StatechartError("Statechart rendering exceeded the 60-second local limit") from exc
     finally:
         input_path.unlink(missing_ok=True)
     require(completed.returncode == 0,
-            "PStack/Pele rendering failed. Run npm ci in skills/patpat-statechart/scripts. "
+            "Statechart rendering failed. Run npm ci in skills/patpat-statechart/scripts. "
             + completed.stderr.strip()[-1200:])
     require(not mmd_path.is_symlink() and mmd_path.is_file()
             and mmd_path.stat().st_size <= MAX_INPUT_BYTES,
-            "PStack Mermaid output must be a regular file no larger than 1 MB")
+            "Statechart Mermaid output must be a regular file no larger than 1 MB")
     require(not svg_path.is_symlink() and svg_path.is_file() and svg_path.stat().st_size <= 8_000_000,
             "Pele output must be a regular SVG file no larger than 8 MB")
     generated = mmd_path.read_text(encoding="utf-8")
-    require("stateDiagram-v2" in generated, "PStack did not emit a Mermaid state diagram")
+    require("stateDiagram-v2" in generated, "The statechart backend did not emit a Mermaid state diagram")
     svg = svg_path.read_text(encoding="utf-8")
     require(svg.lstrip().startswith("<svg") and "</svg>" in svg,
             "Pele output is not a complete SVG document")

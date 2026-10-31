@@ -23,7 +23,7 @@ try {
     for (const step of region.steps) {
       step.from = paths.get(JSON.stringify(step.from));
       step.to = paths.get(JSON.stringify(step.to));
-      if (!step.from || !step.to) throw new Error("receipt step references an unknown PStack state path");
+      if (!step.from || !step.to) throw new Error("receipt step references an unknown chart state path");
     }
   }
   const source = `${mermaid(input.chart, { includeLegend: false })}\n`;
