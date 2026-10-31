@@ -7,287 +7,222 @@
 
 **A little more proof. A lot less guesswork.**
 
-Patpat gives agents an evidence-driven work loop: understand the problem, make a focused change, and check the result against evidence. Its engineering workflows support code and repository work; its general-task guidance also addresses other deliverables and mixed work. Host discovery and behavior for each task type still need to be verified on the selected host.
+Patpat is an evidence-driven operating layer for AI agents. It gives an agent the judgment of a careful senior engineer: understand the real problem, choose the right depth of work, make a focused change, prove the result on the surface that matters, and say plainly what is still unverified. It covers code and repository work, other deliverables such as documents and analyses, and mixed work, and it runs on Codex, Claude Code, Grok CLI, Antigravity, Cursor, and other Agent Skills hosts.
 
 The mascot is friendly. The questions are quite persistent.
 
-- **Understand before changing.** Inspect the real workspace, identify the relevant contract, and protect work already in progress.
-- **Make evidence part of the work.** Decide what would demonstrate success, exercise the appropriate surface, and say what remains unverified.
-- **Keep people in control.** Scale the workflow to the task and respect the host's and user's delivery boundaries.
-
-Patpat's canonical [`skills/`](skills/) tree is host-neutral. Adapters are available for Codex, Claude Code, Grok CLI, Antigravity, and Cursor; installation, invocation, hooks, and enforcement depend on the host. Claude Code validation and fresh-session invocation, and Cursor live import and fresh-session invocation, remain unverified in this environment. The [installation guide](docs/guide/installing.md) explains each route and its limits.
+- **Understand before changing.** Inspect the real workspace, find the contract that matters, and protect work already in progress.
+- **Make evidence part of the work.** Decide what would demonstrate success before acting, exercise the authoritative surface, and separate verified from assumed.
+- **Keep people in control.** Scale the workflow to the risk, and never turn a capability into permission.
 
 [Guide](docs/guide/README.md) · [Install and update](docs/guide/installing.md) · [Capability map](docs/guide/capability-map.md) · [Releases](https://github.com/goiltpatpat/patpat/releases) · [Security](https://github.com/goiltpatpat/patpat/security/policy)
 
-At its core is the [operating protocol](skills/patpat-loop/references/operating-protocol.md): inspect, choose a proportionate path, act, and prove the result. Its instructions guide agent behavior; prose alone cannot prevent an edit. A host-enforced pre-tool gate and evidence that it ran are needed to establish that enforcement.
-
-Start with [The Patpat Guide](docs/guide/README.md), or invoke the Patpat entry on your host for non-trivial work. For a narrow task, call a focused skill directly.
-
 <br clear="all">
 
-## Install
+## What Patpat is made of
 
-Patpat's scripts and hooks require Python 3.11 or newer. For Codex, install from this repository:
-
-```bash
-codex plugin marketplace add goiltpatpat/patpat
-codex plugin add patpat@patpat
+```text
+Protocol -> Playbooks -> Skills -> Evidence -> Host Adapters
 ```
 
-Start a new task, then invoke `$patpat`. Confirm that the new session discovers it: a package listing alone cannot prove that.
+| Layer | What it gives the agent |
+| --- | --- |
+| [Operating protocol](skills/patpat-loop/references/operating-protocol.md) | One spine of judgment, safety, authority, and evidence rules that every route follows. |
+| [Playbooks](skills/patpat-loop/references/route-catalog.md) | Decision paths for specific situations: a defect, a migration, a PR handoff, a performance regression, a session takeover. |
+| [Skills](#choose-a-skill) | 29 focused entry points, from read-only inspection to checked statecharts and delivery. |
+| Evidence | Deterministic tools the agent can trust over its own summary: a durable-run state machine, plan and program validators, assignment fencing, TLA+/TLC model checking, receipt-bound reports. |
+| Host adapters | Thin packaging for each host. They never redefine behavior or grant authority. |
 
-<details>
-<summary>Other hosts and portable installation</summary>
+Each layer may narrow the one before it. No layer may weaken a safety gate.
 
-Claude Code, from this repository:
+## Quick start
 
-```bash
-claude plugin marketplace add goiltpatpat/patpat
-claude plugin install patpat@patpat
-```
+Requires Python 3.11 or newer. Install, start a **new** session, and confirm the agent can see Patpat; a package listing alone does not prove discovery.
 
-Start a new session, then invoke `/patpat:patpat`. The marketplace entry follows Patpat's package release version; see the [Claude Code install and update steps](docs/guide/installing.md#claude-code).
+| Host | Install | Invoke |
+| --- | --- | --- |
+| Codex | `codex plugin marketplace add goiltpatpat/patpat` then `codex plugin add patpat@patpat` | `$patpat` |
+| Claude Code | `claude plugin marketplace add goiltpatpat/patpat` then `claude plugin install patpat@patpat` | `/patpat:patpat` |
+| Grok CLI | `grok plugin install goiltpatpat/patpat --trust` | `/patpat` |
+| Antigravity | From a [clean clone](docs/guide/installing.md#antigravity): `agy plugin validate <clone>` then `agy plugin install <clone>` | `/patpat` or host UI |
+| Cursor | Customize → From GitHub Repository → `goiltpatpat/patpat` | `/patpat` |
+| Other Agent Skills hosts | `python3 scripts/install_skills.py --target <proven skills dir> --dry-run`, then without `--dry-run` | `Use patpat to ...` |
 
-Grok CLI, from this repository:
+Fresh-session invocation on Claude Code and Cursor, and Cursor's live import, are not yet verified by this project. The [installation guide](docs/guide/installing.md) covers local trees, portable packages, updates, removal, and per-host hook behavior. Agents installing Patpat follow [`AGENTS.md`](AGENTS.md).
 
-```bash
-grok plugin install goiltpatpat/patpat --trust
-```
-
-Start a new session, then invoke `/patpat`. Grok does not deliver output from passive hooks or an allowing `UserPromptSubmit` hook to the model, so Patpat cannot restore sticky mode there. Invoke `/patpat` again after resuming. The isolated smoke checks installation, hook discovery, and direct command behavior, not context delivery.
-
-Antigravity, from a clone that does not contain local development state:
-
-```bash
-git clone https://github.com/goiltpatpat/patpat.git
-agy plugin validate /absolute/path/to/patpat
-agy plugin install /absolute/path/to/patpat
-```
-
-For hosts that support the portable [Agent Plugins 1.0 format](https://agent-plugins.org/specification), generate a separate package from the canonical skills tree:
-
-```bash
-python3 scripts/stage_agent_plugin.py --target /absolute/path/to/patpat-agent-plugin
-python3 scripts/validate.py --agent-plugin /absolute/path/to/patpat-agent-plugin
-```
-
-This output uses the standard root `plugin.json`; it is for compatible Agent Plugins clients, not Antigravity. Git-backed staging excludes Git-ignored local files from skills; without Git metadata, inspect the artifact before installing. Follow each host's documented install path and verify fresh-session discovery there. Hooks and other host-specific behavior still depend on the selected adapter.
-
-To install the published repository in Cursor, open Customize, choose **From GitHub Repository**, and enter `goiltpatpat/patpat`. The repository includes `.cursor-plugin/marketplace.json` for this flow. After importing the repository, find Patpat in Customize, select **Install**, and choose project or user scope. Cursor's local plugin instructions describe a root Agent Plugin manifest or a `.cursor-plugin/plugin.json` manifest. Patpat's generic multi-host staging output also contains the root Antigravity `plugin.json`; that mixed package has not been tested locally in Cursor. This repository does not currently provide a Cursor-only local-test artifact. Patpat's live import and fresh-session skill invocation have not been verified here. Official Cursor marketplace listing remains a separate review process. If the plugin route is unavailable, use a proven project skills directory:
-
-```bash
-python3 scripts/install_skills.py \
-  --target /absolute/path/to/project/.agents/skills \
-  --dry-run
-```
-
-Before a native Codex, Claude Code, or Antigravity install from a working tree containing Memory Bank or local artifacts, stage it first and inspect the output for other machine-local files; staging does not apply every `.gitignore` rule. Agents should follow [`AGENTS.md`](AGENTS.md). Host commands, updates, and removal live in the [installation guide](docs/guide/installing.md).
-
-Update through the owner of the installed state: Codex marketplace upgrade plus remove/add, Claude marketplace and plugin update after a package version bump, `grok plugin update patpat`, pull/validate/install on the same Antigravity clone, or the transactional portable updater. Development symlinks follow source content and use the updater when the skill catalog changes. Cursor native update remains unverified. See the [update matrix](docs/guide/installing.md#update).
-
-</details>
-
-## Get started
-
-Install on your host, start a fresh session, and give Patpat a concrete task. For example, in Codex:
+Then give it a concrete task:
 
 ```text
 $patpat reproduce this timeout, fix the cause, and verify the result. local only
+$patpat explain where this request is validated and what could bypass it
+$patpat plan the migration, identify the risks, and tell me what evidence we need
+$patpat can our checkout charge a customer twice? show me the path
 ```
 
-Use `/patpat` in Cursor and Grok CLI, `/patpat:patpat` in Claude Code, or `Use patpat to ...` on compatible portable hosts. On Antigravity, use `/patpat` when exposed as a slash command; otherwise use the host UI or the portable wording. Verify discovery on the host you chose.
-
-For a read-only question, try `$patpat explain where this request is validated and what could bypass it`. For a larger task, try `$patpat plan the migration, identify the risks, and tell me what evidence we need`.
-
-Explicit activation authorizes the Patpat loop, proof, and verification. Commit-and-PR requires delivery intent, and merge requires an explicit request to land or merge. Patpat has paws, not permission to press every button. Say `local only` to keep work local; say `disable /patpat` to disable Patpat. Higher-priority instructions still apply. Resume continuity depends on the host and its hook evidence; see the [operating protocol](skills/patpat-loop/references/operating-protocol.md), [default delivery](skills/patpat-loop/playbooks/default-delivery.md), and [host capability map](docs/guide/capability-map.md#sticky-mode-hook-status).
-
-## Usage
-
-The [`patpat`](skills/patpat/SKILL.md) entry directs the agent to select a playbook and follow the appropriate path through inspection, proof, implementation, and verification, with independent review when required. Hook continuity is host-specific. Codex supports the context-output contract after its bundled hook is trusted, though end-to-end dispatch is not verified here. Grok does not deliver passive-hook or allowing `UserPromptSubmit` output to the model, so invoke `/patpat` again after resuming. The Cursor adapter does not currently persist mode across resumes. See the [capability map](docs/guide/capability-map.md#sticky-mode-hook-status) for current evidence by host.
+## How it works
 
 ```text
 FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY
-VERIFY -> REPORT when local reversible without delivery intent
-VERIFY -> REVIEW before delivery / high-risk / durable-run LEARN|REPORT
+VERIFY -> REPORT when local, reversible, and not shipping
+VERIFY -> REVIEW before delivery, high-risk work, or durable-run LEARN | REPORT
 REVIEW -> LEARN? -> propose and wait for approval -> approved edit -> VERIFY -> REVIEW -> REPORT
-LEARN approval pending -> hold; approval declined -> REPORT without editing
 ```
 
-A proof contract names the claim, authoritative surface, action, expected observation, and cleanup. A build supports a claim. It does not prove user-visible behavior. Green is a signal, not an alibi.
+- **The right depth, chosen for you.** A typo gets a quick check. Auth, billing, migrations, and cross-cutting work get design and independent review first. Patpat reads the risk signals; there are no modes to pick.
+- **Proof before edits.** The agent names the claim, the surface that proves it, the action, the expected observation, and the cleanup before it changes anything. A build supports a claim; it does not prove user-visible behavior. Green is a signal, not an alibi.
+- **Failures change the plan.** Failed evidence is classified as an implementation defect, a verifier defect, or an environment blocker, and the run returns to the earliest invalid step. Three identical failures stop the run and name the evidence needed to continue.
+- **Honest reports.** Every claim is labeled `verified`, `partially verified`, `implemented but not verified`, or `not implemented`.
+- **Beyond code.** For documents, analyses, and other deliverables, Patpat applies the same judgment through [general task guidance](skills/patpat-loop/references/general-task-judgment.md) without Git ceremony.
 
-Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`. Claude Code uses `/patpat:patpat`. Portable hosts use `Use patpat to ...`.
+**Your words control delivery.** Activation authorizes the loop, proof, and verification. Commit-and-PR needs delivery intent; overnight or "don't stop" means verify, review, open a PR, and stop merge-ready. Merge needs the words land or merge. `local only` keeps work local, and `disable /patpat` turns Patpat off.
 
-### Playbooks
+## Choose a skill
+
+`/patpat` routes the task for you. Call a skill directly when the task is already that operation:
+
+| Task | Skill |
+| --- | --- |
+| Explain how or why code works, without editing | [`patpat-inspect`](skills/patpat-inspect/SKILL.md) |
+| Fix a reproducible bug from its root cause | [`patpat-debug`](skills/patpat-debug/SKILL.md) |
+| Make one bounded feature or refactor | [`patpat-change`](skills/patpat-change/SKILL.md) |
+| Settle a design, contract, or migration first | [`patpat-architect`](skills/patpat-architect/SKILL.md) |
+| Prove a claim on the real app or artifact | [`patpat-verify`](skills/patpat-verify/SKILL.md) |
+| Get an independent, skeptical review | [`patpat-review`](skills/patpat-review/SKILL.md) |
+| Draw an architecture, workflow, or lifecycle diagram | [`patpat-repository-diagram`](skills/patpat-repository-diagram/SKILL.md) |
+| Check whether a flow can get stuck or break a rule, and see the bug as a path | [`patpat-statechart`](skills/patpat-statechart/SKILL.md) |
+| Drive or resume long multi-phase work | [`patpat-run`](skills/patpat-run/SKILL.md) |
+| Commit and open a PR after verified work | [`patpat-ship`](skills/patpat-ship/SKILL.md) |
+
+The diagram and statechart skills work as a pair: a lifecycle diagram can seed a statechart with the same labels, and a broken rule returns to the diagram as a guided story that marks where the flow goes wrong.
 
 <details>
-<summary>Browse all playbooks</summary>
+<summary>All 29 skills</summary>
+
+| Skill | Use it when |
+| --- | --- |
+| [`patpat`](skills/patpat/SKILL.md) | Slash alias for the loop. |
+| [`patpat-loop`](skills/patpat-loop/SKILL.md) | The work is non-trivial and needs the full loop. |
+| [`00-workspace-mapper`](skills/00-workspace-mapper/SKILL.md) | Explicitly map an unfamiliar workspace. |
+| [`patpat-inspect`](skills/patpat-inspect/SKILL.md) | Explain, audit, or diagnose without editing. |
+| [`patpat-impact`](skills/patpat-impact/SKILL.md) | Prove blast radius and downstream invariants. |
+| [`patpat-plan`](skills/patpat-plan/SKILL.md) | Sequence verifiable phases without implementing them. |
+| [`patpat-architect`](skills/patpat-architect/SKILL.md) | Settle contracts, migrations, and risk first. |
+| [`patpat-interrogate`](skills/patpat-interrogate/SKILL.md) | Challenge a design or change from adversarial perspectives. |
+| [`patpat-repository-diagram`](skills/patpat-repository-diagram/SKILL.md) | Turn an idea, plan, or codebase into an interactive diagram. |
+| [`patpat-statechart`](skills/patpat-statechart/SKILL.md) | Chart how a flow moves between states, check its rules with TLC, and show each bug as a path. |
+| [`patpat-change`](skills/patpat-change/SKILL.md) | Implement one bounded feature or refactor. |
+| [`patpat-debug`](skills/patpat-debug/SKILL.md) | Reproduce, root-cause, and fix. |
+| [`patpat-perf`](skills/patpat-perf/SKILL.md) | Improve a measured resource regression. |
+| [`patpat-game-builder`](skills/patpat-game-builder/SKILL.md) | Build a playable game slice, then verify the real player path. |
+| [`patpat-verify`](skills/patpat-verify/SKILL.md) | Test a claim on the real artifact or user surface. |
+| [`patpat-verifier`](skills/patpat-verifier/SKILL.md) | Create or maintain a project-specific verifier. |
+| [`patpat-formal-verify`](skills/patpat-formal-verify/SKILL.md) | Create and maintain bounded formal models that later changes rerun. |
+| [`patpat-review`](skills/patpat-review/SKILL.md) | Independently try to falsify a change and its evidence. |
+| [`patpat-unslop`](skills/patpat-unslop/SKILL.md) | Cut filler from engineering docs, PR text, and diffs. |
+| [`patpat-run`](skills/patpat-run/SKILL.md) | Drive or resume a durable multi-phase graph. |
+| [`patpat-engineer`](skills/patpat-engineer/SKILL.md) | Execute one isolated slice for a named owner. |
+| [`patpat-arena`](skills/patpat-arena/SKILL.md) | Compete isolated attempts and synthesize one verified result. |
+| [`patpat-swarm`](skills/patpat-swarm/SKILL.md) | Cover slices or races and return one report. |
+| [`patpat-ship`](skills/patpat-ship/SKILL.md) | Commit-and-PR with delivery intent; merge only when named. |
+| [`patpat-learn`](skills/patpat-learn/SKILL.md) | Encode a recurring failure as the smallest durable constraint. |
+| [`patpat-skill`](skills/patpat-skill/SKILL.md) | Author a reusable skill. |
+| [`patpat-eval`](skills/patpat-eval/SKILL.md) | Evaluate skill triggering and behavior with an evidence rubric. |
+| [`patpat-automation`](skills/patpat-automation/SKILL.md) | Design fail-closed automation without enabling it. |
+| [`patpat-setup`](skills/patpat-setup/SKILL.md) | Install, validate, or remove Patpat on a host. |
+
+</details>
+
+<details>
+<summary>All playbooks</summary>
 
 | Playbook | For |
 | --- | --- |
-| [Investigation](skills/patpat-loop/playbooks/investigation.md) | Read-only explanation: how it works, where it lives, who owns it, and which layer. Rationale questions stay on rationale forensics. |
-| [Defect](skills/patpat-loop/playbooks/defect.md) | Reproduce a failure, prove the root cause, and fix it with runtime evidence. |
-| [Regression first](skills/patpat-loop/playbooks/regression-first.md) | A cheap deterministic test exists. Write the failing check, then the fix. |
-| [Performance](skills/patpat-loop/playbooks/performance.md) | A measured slowness against a comparable baseline. |
-| [Metric hillclimb](skills/patpat-loop/playbooks/metric-hillclimb.md) | Sustained improvement of one metric, one accepted win at a time. |
+| [Investigation](skills/patpat-loop/playbooks/investigation.md) | Read-only explanation: how it works, where it lives, who owns it. |
+| [Rationale forensics](skills/patpat-loop/playbooks/rationale-forensics.md) | Why code reached its current shape, code anchors first. |
+| [Defect](skills/patpat-loop/playbooks/defect.md) | Reproduce a failure, prove the root cause, fix it with runtime evidence. |
+| [Regression first](skills/patpat-loop/playbooks/regression-first.md) | A cheap deterministic test exists: write the failing check, then the fix. |
 | [Runtime forensics](skills/patpat-loop/playbooks/runtime-forensics.md) | A live symptom: leak, idle spin, glitch. |
 | [Trace forensics](skills/patpat-loop/playbooks/trace-forensics.md) | A captured profile, trace, or heap snapshot. |
-| [Rationale forensics](skills/patpat-loop/playbooks/rationale-forensics.md) | Explain why code reached its current shape: code anchors first, evidence before narrative. |
-| [Blast radius](skills/patpat-loop/playbooks/blast-radius.md) | What else this change could break, proven rather than asserted. |
+| [Performance](skills/patpat-loop/playbooks/performance.md) | Measured slowness against a comparable baseline. |
+| [Metric hillclimb](skills/patpat-loop/playbooks/metric-hillclimb.md) | Sustained improvement of one metric, one accepted win at a time. |
+| [Blast radius](skills/patpat-loop/playbooks/blast-radius.md) | What else a change could break, proven rather than asserted. |
 | [Architecture change](skills/patpat-loop/playbooks/architecture-change.md) | Contracts, migrations, or a redesign that must settle before code. |
 | [Bounded change](skills/patpat-loop/playbooks/bounded-change.md) | New or changed behavior from a named data shape. |
 | [Behavior-preserving refactor](skills/patpat-loop/playbooks/behavior-preserving-refactor.md) | Structure changes without behavior changes. |
 | [Prototype](skills/patpat-loop/playbooks/prototype.md) | A throwaway sketch that makes a design decision cheap. |
 | [Visual equivalence](skills/patpat-loop/playbooks/visual-equivalence.md) | Pixel-level UI parity between two implementations. |
-| [Bespoke workflow](skills/patpat-loop/playbooks/bespoke-workflow.md) | No narrow playbook fits. Design a falsifiable sequence. |
+| [Bespoke workflow](skills/patpat-loop/playbooks/bespoke-workflow.md) | No narrow playbook fits: design a falsifiable sequence. |
 | [Multi-phase run](skills/patpat-loop/playbooks/multi-phase-run.md) | Work that spans phases, checkpoints, or a durable graph. |
-| [Session takeover](skills/patpat-loop/playbooks/session-takeover.md) | Resume or take over in-flight work from live repository state. |
+| [Session pickup](skills/patpat-loop/playbooks/session-pickup.md) | Continue your own interrupted work. |
+| [Session takeover](skills/patpat-loop/playbooks/session-takeover.md) | Take over in-flight work from live repository state. |
 | [Pause safely](skills/patpat-loop/playbooks/pause-safely.md) | Pause in-flight work without opening a PR or merging. |
-| [PR drive](skills/patpat-loop/playbooks/pr-drive.md) | Inspect a PR, address authorized findings, and land only when explicitly requested. |
-| [PR Readiness Handoff](skills/patpat-loop/playbooks/pr-handoff.md) | Move a PR to verified merge-ready status, then return control to the human. |
-| [Worktree cleanup](skills/patpat-loop/playbooks/worktree-cleanup.md) | Prune merged or abandoned git worktrees. Simulators stay outside the core. |
+| [PR drive](skills/patpat-loop/playbooks/pr-drive.md) | Address authorized PR findings; land only when explicitly requested. |
+| [PR readiness handoff](skills/patpat-loop/playbooks/pr-handoff.md) | Bring a PR to verified merge-ready, then return control. |
+| [Worktree cleanup](skills/patpat-loop/playbooks/worktree-cleanup.md) | Prune merged or abandoned Git worktrees. |
 | [Arena](skills/patpat-loop/playbooks/arena.md) | Competing isolated attempts at one brief, then a verified synthesis. |
 | [Swarm](skills/patpat-loop/playbooks/swarm.md) | Parallel slices or races, one aggregated report. |
-| [Autopilot](skills/patpat-loop/playbooks/autopilot.md) | A verified queue or stack. Merge only when named. |
-| [Issue loop](skills/patpat-loop/playbooks/issue-loop.md) | Named-provider triage and reproduce. Avoids competing fixes, stays paused until enabled, and defaults provider-triggered issue-loop PRs to draft. |
-| [Default delivery](skills/patpat-loop/playbooks/default-delivery.md) | When delivery intent exists, commit and open or update one ready PR after verify and review. Activation alone does not ship. |
-| [Authorized delivery](skills/patpat-loop/playbooks/authorized-delivery.md) | Merge a green verified PR only on explicit land or merge; pause for deploy. |
+| [Autopilot](skills/patpat-loop/playbooks/autopilot.md) | A verified queue or stack; merge only when named. |
+| [Issue loop](skills/patpat-loop/playbooks/issue-loop.md) | Named-provider triage and reproduction; paused until enabled, PRs default to draft. |
+| [Default delivery](skills/patpat-loop/playbooks/default-delivery.md) | With delivery intent, commit and open one ready PR after verify and review. |
+| [Authorized delivery](skills/patpat-loop/playbooks/authorized-delivery.md) | Merge a green verified PR only on explicit land or merge. |
 | [Independent review](skills/patpat-loop/playbooks/independent-review.md) | Challenge an implementation and its proof without editing. |
 | [Skill change](skills/patpat-loop/playbooks/skill-change.md) | Write or revise a SKILL.md. |
 | [Behavioral evaluation](skills/patpat-loop/playbooks/behavioral-eval.md) | Test whether a skill triggers and behaves correctly. |
 | [Project verifier](skills/patpat-loop/playbooks/project-verifier.md) | Build or repair project-local proof against the real system. |
 | [Learning](skills/patpat-loop/playbooks/learning.md) | Encode a recurring failure as the smallest durable constraint. |
 | [Automation design](skills/patpat-loop/playbooks/automation-design.md) | Design fail-closed automation for a named integration. |
-| [Build a playable slice](skills/patpat-game-builder/playbooks/build-playable-slice.md) | Implement the smallest end-to-end game loop for a concrete brief. |
+| [Build a playable slice](skills/patpat-game-builder/playbooks/build-playable-slice.md) | The smallest end-to-end game loop for a concrete brief. |
 | [Diagnose gameplay](skills/patpat-game-builder/playbooks/diagnose-gameplay.md) | Find the first gameplay state that diverges from the expected result. |
-| [Verify a playthrough](skills/patpat-game-builder/playbooks/verify-playthrough.md) | Prove rules, player input, visuals, and target-runtime behavior separately. |
-| [Visual iteration](skills/patpat-game-builder/playbooks/visual-iteration.md) | Improve requested game presentation against frozen, observable conditions. |
+| [Verify a playthrough](skills/patpat-game-builder/playbooks/verify-playthrough.md) | Prove rules, input, visuals, and target-runtime behavior separately. |
+| [Visual iteration](skills/patpat-game-builder/playbooks/visual-iteration.md) | Improve requested game presentation against frozen conditions. |
 
 </details>
 
-## Skills
+## Durable runs and coordination
 
-`patpat-loop` runs most of these when a step needs them. Reach for one directly when the task is already that operation.
+[`patpat-run`](skills/patpat-run/SKILL.md) is a standard-library state machine, not a prose checklist. It refuses `ACT` without a proof contract, `REVIEW` without a current content-bound evidence file, and completion without independent review. The third identical blocker stops the run, and work survives context loss because state lives in Git metadata rather than the conversation.
 
-<details>
-<summary>Browse all skills</summary>
+Multi-PR programs use a checked JSON plan. The program store validates dependencies, owned files, proof surfaces, exact-head evidence, review gates, and delivery authority; it fences each assignment with a generation token, and a dependency's head change invalidates downstream evidence. The fencing rule is model-checked with TLA+. The store coordinates state; it does not spawn agents or grant authority. See [durable runs](docs/guide/06-durable-runs.md) and [earned parallelism](docs/guide/07-earned-parallelism.md).
 
-| Skill | Use it when |
-| --- | --- |
-| [`00-workspace-mapper`](skills/00-workspace-mapper/SKILL.md) | Explicitly map an unfamiliar workspace; the current catalog has no hard consumer of its map state. |
-| [`patpat`](skills/patpat/SKILL.md) | Slash alias for the loop. `/patpat` is the default entry. |
-| [`patpat-loop`](skills/patpat-loop/SKILL.md) | The work is non-trivial and needs the full loop. |
-| [`patpat-inspect`](skills/patpat-inspect/SKILL.md) | Explain, audit, or diagnose without editing. |
-| [`patpat-repository-diagram`](skills/patpat-repository-diagram/SKILL.md) | Turn an idea, plan, or codebase into an interactive diagram; optionally derive a source-evidenced Python import map. |
-| [`patpat-game-builder`](skills/patpat-game-builder/SKILL.md) | Build a playable game slice or gameplay feature, then verify the real player path. |
-| [`patpat-plan`](skills/patpat-plan/SKILL.md) | Sequence verifiable phases without implementing them. |
-| [`patpat-impact`](skills/patpat-impact/SKILL.md) | Prove blast radius and downstream invariants. |
-| [`patpat-architect`](skills/patpat-architect/SKILL.md) | Settle contracts, migrations, and risk first. |
-| [`patpat-change`](skills/patpat-change/SKILL.md) | Implement one bounded feature or refactor. |
-| [`patpat-debug`](skills/patpat-debug/SKILL.md) | Reproduce, root-cause, and fix. |
-| [`patpat-perf`](skills/patpat-perf/SKILL.md) | Improve a measured resource regression. |
-| [`patpat-verify`](skills/patpat-verify/SKILL.md) | Test a claim on the real artifact or user surface. |
-| [`patpat-review`](skills/patpat-review/SKILL.md) | Independently try to falsify the change and its evidence. |
-| [`patpat-interrogate`](skills/patpat-interrogate/SKILL.md) | Challenge a design or change from adversarial perspectives. |
-| [`patpat-run`](skills/patpat-run/SKILL.md) | Drive or resume a durable multi-phase graph. |
-| [`patpat-arena`](skills/patpat-arena/SKILL.md) | Compete isolated attempts and synthesize one verified result. |
-| [`patpat-swarm`](skills/patpat-swarm/SKILL.md) | Cover slices or races and return one report. |
-| [`patpat-setup`](skills/patpat-setup/SKILL.md) | Install, validate, or remove Patpat on a host. |
-| [`patpat-ship`](skills/patpat-ship/SKILL.md) | Commit-and-PR when delivery intent exists; merge only when explicitly named. |
-| [`patpat-skill`](skills/patpat-skill/SKILL.md) | Author a reusable skill. |
-| [`patpat-eval`](skills/patpat-eval/SKILL.md) | Evaluate skill triggering and behavior against the authorized project with an evidence rubric. |
-| [`patpat-statechart`](skills/patpat-statechart/SKILL.md) | Chart how a flow moves between states, check its rules with TLC, and show each bug as a path. |
-| [`patpat-formal-verify`](skills/patpat-formal-verify/SKILL.md) | Create and maintain bounded formal verification models that later changes rerun. |
-| [`patpat-unslop`](skills/patpat-unslop/SKILL.md) | Cut superficial patterns and fluff from engineering docs, PR text, and code diffs. |
-| [`patpat-verifier`](skills/patpat-verifier/SKILL.md) | Create or maintain a project-specific verifier. |
-| [`patpat-learn`](skills/patpat-learn/SKILL.md) | Encode a recurring failure. |
-| [`patpat-automation`](skills/patpat-automation/SKILL.md) | Design fail-closed automation. Do not enable it yet. |
-| [`patpat-engineer`](skills/patpat-engineer/SKILL.md) | Execute one isolated slice for a named owner. |
-
-</details>
-
-Principles live under [`skills/patpat-loop/principles/`](skills/patpat-loop/principles/). They are references, not discoverable skills. The [capability map](docs/guide/capability-map.md) records what is covered, gated, or left outside the core.
-
-## Agent roles
-
-Two roles, one contract each:
-
-- `patpat-engineer` owns one bounded implementation slice and returns artifacts to the integration owner.
-- `patpat-reviewer` is read-only and tries to break the implementation and its evidence.
-
-Cursor and Antigravity ship a thin native adapter only for the reviewer. The engineer stays a portable skill until a host can enforce file ownership. Codex receives both roles as skills.
-
-## Durable runs
-
-[`patpat-run`](skills/patpat-run/SKILL.md) is a standard-library state machine, not a prose checklist. It refuses `ACT` without a proof contract, `REVIEW` without a current content-bound evidence file, and completion without independent review. The third identical blocker stops the run.
-
-Multi-PR plans use a host-neutral checked JSON contract. Validate dependencies, owned files, proof surfaces, exact-head evidence, review gates, and delivery authority before implementation:
-
-```bash
-python3 skills/patpat-run/scripts/run_state.py --self-test
-python3 skills/patpat-run/scripts/validate_plan.py --self-test
-python3 skills/patpat-run/scripts/program_state.py --self-test
-python3 skills/patpat-run/scripts/team_shape.py --self-test
-```
-
-The program store adds a dependency frontier, inbox, explicit dispatch and delivery gates, and head-bound verification records under Git metadata. It coordinates state without spawning agents or creating delivery authority. Dependency head changes invalidate downstream evidence.
-
-`team_shape.py` recommends iterative, distributed, or adversarial work from an earned-parallelism gate receipt, explicit evidence, observed capacity, and a caller-owned worker budget. It never grants authority. Coordination uses compact receipts and typed handoff cards rather than replaying full agent transcripts.
-
-## Runtime footprint & dependencies
-
-Patpat is engineered for standard-library execution:
-
-- **Core Runtime, AST Extractor, Diagram Engine, and Replay Harness**: 100% Python 3.10+ standard library (`ast`, `pathlib`, `json`, `re`, `stat`). Requires zero external package installations (`pip`), zero C-extensions, and zero external build tools.
-- **Live TLA+/TLC Model Exploration**: Optional verification toolchain for live state-space search requiring a local Java environment (`tla2tools.jar`). Saved receipts, Python model checkers (`check_assignment_model.py`), and counterexample replay harnesses (`replay_assignment_counterexample.py`) run directly with pure Python without Java.
+Two agent roles keep parallel work honest: `patpat-engineer` owns one bounded slice and returns artifacts to the integration owner, and the reviewer role ([`patpat-review`](skills/patpat-review/SKILL.md)) is read-only and tries to break the result and its evidence. Workers never ship; the parent verifies the integrated result. Host-specific reviewer adapters are listed in the [capability map](docs/guide/capability-map.md#host-adapter-boundary).
 
 ## Where Patpat stops
 
-Patpat does not turn capability into authority. These boundaries are deliberate:
+Patpat does not turn capability into authority, and it does not claim more than its evidence shows:
 
-- Writable arena, swarm, and autopilot require separate worktrees or host-enforced sandboxes and fall back to serial work
-- Issue-loop stays paused until a named provider, sandbox, canary, and enable request exist; provider-triggered PRs stay draft without fresh interactive authority
-- A real CI failure blocks merge; package publishing and production deployment require separate approval
-- Model-selection presets and persona skills
+- **It guides; hosts enforce.** Patpat is instructions plus deterministic scripts. Prose cannot stop an edit; only a host-enforced gate can, and no such edit gate ships today.
+- **No measured-improvement claim yet.** There is no published benchmark of agents with and without Patpat.
+- **It coordinates; it does not run agents.** Spawning, monitoring, waking, scheduling, and cancelling workers belong to the host.
+- **Parallel writes need isolation.** Arena, swarm, and autopilot require separate worktrees or host sandboxes and otherwise fall back to serial work.
+- **Risky actions always pause.** Production deploy, package publish, force-push, data deletion, secret rotation, and risky auth or billing changes need explicit approval. A real CI failure blocks merge.
+- **No model presets.** Workers inherit the parent model unless you or the host choose; see [model choice](skills/patpat-setup/SKILL.md#model-choice).
 
-After verify and review, delivery intent (not activation alone) commits and opens or updates a ready PR. Overnight work stops merge-ready. Only explicit land or merge language can merge when checks are green. Patpat still pauses for production deploy, force-push, secret rotation, and risky auth or billing changes.
+## Trust model
 
-## Validate
+| Question | Answer |
+| --- | --- |
+| What writes does it make? | Your working tree, only for the requested task. Durable-run state under Git metadata (`.git/patpat/`, or the worktree's Git directory). Session mode under the host's plugin data folder. `.patpat/context-graph.json` only when you ask for a workspace map. |
+| What leaves the machine? | No telemetry. Delivery pushes with `git` and calls GitHub through your `gh` CLI. The first native statechart run downloads Java and TLC through mise. Diagram source links query the public GitHub API only when you opt in. |
+| What persists across sessions? | Host hooks restore Patpat mode after resume only where the [capability map](docs/guide/capability-map.md#sticky-mode-hook-status) records it; elsewhere, invoke Patpat again. |
+| How is a result proven? | On its authoritative surface: the real app, artifact, or test, not a summary. Independent review is required before delivery and for high-risk work. |
 
-<details>
-<summary>Local validation suite</summary>
+## Requirements
 
-```bash
-python3 scripts/validate.py --self-test
-python3 scripts/dry_run_loop.py --self-test
-python3 scripts/eval_inspect.py --self-test
-python3 scripts/eval_representation.py --self-test
-python3 scripts/eval_parallel.py --self-test
-python3 scripts/eval_why.py --self-test
-python3 scripts/install_skills.py --self-test
-python3 scripts/update_skills.py --self-test
-python3 scripts/stage_plugin.py --self-test
-python3 hooks/scripts/patpat_loop_state.py --self-test
-python3 skills/patpat-run/scripts/run_state.py --self-test
-python3 skills/patpat-run/scripts/validate_plan.py --self-test
-python3 skills/patpat-run/scripts/program_state.py --self-test
-python3 skills/patpat-run/scripts/team_shape.py --self-test
-python3 skills/patpat-ship/scripts/github_observe.py --self-test
-python3 skills/patpat-ship/scripts/pr_watch.py --self-test
-python3 skills/patpat-ship/scripts/watch_pr_stack.py --self-test
-python3 scripts/smoke_codex_plugin.py
-python3 scripts/smoke_antigravity_plugin.py
-python3 scripts/smoke_grok_plugin.py
-```
+| Use | Needs |
+| --- | --- |
+| Core skills, hooks, durable runs, diagrams, saved model checks and replay | Python 3.11+, standard library only |
+| Native statechart and TLA+ model checking | Node 22.18 to 22.x or 23.6+ (or Bun 1.1.5+, Deno 2+), Java 11+, and TLC; mise installs Java and TLC on first run, or set `TLA2TOOLS` |
+| Saved-receipt statechart rendering | Node 22.18 to 22.x or 23.6+, and `npm ci` in `skills/patpat-statechart/scripts` |
+| Delivery and PR observation | `git` and an authenticated `gh` |
 
-`eval_why.py` requires a source checkout with Git history; do not use it as an installed-artifact smoke test.
-Codex and Antigravity smoke commands require their respective CLIs and use isolated homes. The GitHub workflow is the authoritative CI contract; this local list also includes extended checks that CI does not run.
+## Extend and validate
 
-</details>
+Run the repository contract checks with `python3 scripts/validate.py --self-test`; the [installation guide](docs/guide/installing.md#verification) lists the extended local checks, and the [CI workflow](https://github.com/goiltpatpat/patpat/blob/main/.github/workflows/validate.yml) is the authoritative list. [Extending Patpat](docs/guide/extending.md) and [extend and evaluate](docs/guide/08-extend-and-evaluate.md) explain how to add a skill or playbook and how to test whether it routes and behaves correctly. Principles live under [`skills/patpat-loop/principles/`](skills/patpat-loop/principles/); they are references, not discoverable skills.
 
-## Security and contributions
+## Security, support, and contributions
 
-Report vulnerabilities privately through the [security policy](https://github.com/goiltpatpat/patpat/security/policy). Do not place secrets, private logs, or exploit details in a public issue. Pull requests should keep scope narrow and include observable evidence for the claim being changed; the repository template records that contract without prescribing a development style.
+Report vulnerabilities privately through the [security policy](https://github.com/goiltpatpat/patpat/security/policy); never put secrets, private logs, or exploit details in a public issue. The current `main` branch and the latest tagged release are supported. Pull requests should keep scope narrow and include observable evidence for the claim they change.
 
 ## License
 
-MIT
+MIT. [`skills/patpat-statechart`](skills/patpat-statechart/THIRD_PARTY_NOTICES.md) and [`skills/patpat-repository-diagram`](skills/patpat-repository-diagram/references/THIRD_PARTY_NOTICES.md) include third-party code under MIT; their notices travel with each skill.

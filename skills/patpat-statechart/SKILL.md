@@ -14,7 +14,7 @@ A statechart answers one question for one reader: can this flow reach a state th
 ## Choose the route
 
 - Use this skill for behavior over time: a checkout, login, deploy, agent workflow, media player, or an order process, and whether it can get stuck, double-charge, or hand over something it should not.
-- Use [`patpat-repository-diagram`](../patpat-repository-diagram/SKILL.md) for architecture, dataflow, and sequence views with no rules to check.
+- Use [`patpat-repository-diagram`](../patpat-repository-diagram/SKILL.md) for architecture, workflow, sequence, dataflow, and lifecycle views with no rules to check. The deciding question is whether a rule must be checked, not whether the subject has states.
 - Use [`patpat-formal-verify`](../patpat-formal-verify/SKILL.md) when later changes must rerun the check as a durable project suite. It hands its TLA+ results here.
 - Use [`references/receipt-rendering.md`](references/receipt-rendering.md) to chart a saved `patpat-model-check-receipt` without running TLC.
 
@@ -22,13 +22,14 @@ A statechart answers one question for one reader: can this flow reach a state th
 
 1. Name the reader and write each rule as one sentence they would agree to, such as "we never hand over a refunded drink". Ask only when a rule is a product choice the evidence cannot settle.
 2. List the actors and events that move the flow. When the flow describes code, read the code that owns each event and note the file and function.
+   When a `patpat-repository-diagram` lifecycle or workflow JSON exists for this flow, start from it: reuse its state and transition labels as `state()` and `step()` labels, take each event's file and lines from its `evidence_ids`, and treat workflow lanes as actors. Name each TLA+ action after its diagram transition ID with `-` replaced by `_`. The diagram holds no rules; still get them from the reader.
 3. Say what the model leaves out, for example more than one instance, timing, or partial failures. Name every bound you add, such as a cap of two payment attempts, and every rule the reader waived.
 
 If the chart or model will be committed, define the five-field proof contract first. A scratch chart needs only a rerunnable command.
 
 ## Model
 
-Work in a scratch folder outside the repository. Write `SPEC.tla`, `SPEC.cfg`, and a view module.
+Work in a scratch folder outside the repository. Write `SPEC.tla`, `SPEC.cfg`, and a view as an ES module such as `view.mjs`.
 
 - Write each reader rule as an INVARIANT. If the model has no variable for a rule, add one. Never weaken a rule to make it hold.
 - Write `Next` as a disjunction of named actions, such as `YouPressPlay \/ YouPressStop`, or TLC names every step `Next`.
@@ -71,6 +72,7 @@ Then report:
 - one line per broken rule: the rule name from `report.md`, the reader's sentence, the marked chart state where it breaks, the numbered path, and its replay label;
 - the rules that hold, any rules not checked, and any rules the reader waived;
 - what the model leaves out, the bounds you added, and which steps the chart hides;
+- when the flow came from a diagram, each bug path as an ordered list of diagram state and transition IDs, so it can return to the diagram as a story view, plus the model states the diagram does not have, in the reader's words;
 - the command that rebuilds the files, with a new `--out` folder.
 
 Origin, Patpat changes, and the license notice for the bundled command are in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

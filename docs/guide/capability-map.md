@@ -69,6 +69,8 @@ Every capability in this section is `gated` and remains fail closed until its ad
 
 The canonical behavior lives in `skills/`. A host manifest, command wrapper, hook, or reviewer adapter may expose that behavior only within capabilities the host can prove. Installation does not prove prompt-time discovery; discovery does not prove execution; execution does not prove sticky state, mutation, delivery, or live evaluation. Record host claims with the host name, Patpat revision, lifecycle stage, and receipt.
 
+Agent roles: `patpat-engineer` owns one bounded slice and returns artifacts to the integration owner; it stays a portable skill until a host can enforce file ownership. The reviewer role is the read-only [`patpat-review`](../../skills/patpat-review/SKILL.md) skill on every host. Cursor (`adapters/cursor/agents/`) and Antigravity (root `agents/`) also ship a thin `patpat-reviewer` subagent over that skill. The root `agents/patpat-reviewer.md` declares Antigravity tool names (`view_file`, `grep_search`); Claude Code also loads that folder but has no tools by those names, so on Claude Code use the `patpat-review` skill instead. A Claude-specific reviewer adapter is not yet verified.
+
 ### Sticky-mode hook status
 
 These statuses describe Patpat's hook integration, not each host's general hook capability.

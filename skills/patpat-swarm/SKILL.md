@@ -14,7 +14,7 @@ When invoked directly, read the [operating protocol](../patpat-loop/references/o
 
 Read [earned parallelism](../patpat-loop/principles/earned-parallelism.md) and apply the [swarm playbook](../patpat-loop/playbooks/swarm.md).
 
-Read-only coverage may run in parallel. Every writable worker needs a separate Git worktree or host-enforced sandbox plus all earned-parallelism gates. Disjoint paths in one worktree are not isolation. If those gates fail, run serially and name missing lanes. Inherit the parent model unless the user named models. Do not invent coverage for a silent worker. The parent verifies the integrated result.
+Read-only coverage may run in parallel. Every writable worker needs a separate Git worktree or host-enforced sandbox plus all earned-parallelism gates. Disjoint paths in one worktree are not isolation. If those gates fail, run serially and name missing lanes. Inherit the parent model unless the user named models or the host lets the parent choose; then follow [model choice](../patpat-setup/SKILL.md#model-choice). Do not invent coverage for a silent worker. The parent verifies the integrated result.
 
 ## Proof closure
 

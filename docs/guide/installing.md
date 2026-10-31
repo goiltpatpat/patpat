@@ -199,4 +199,20 @@ agy plugin validate .
 claude plugin validate . --strict
 ```
 
+Extended local checks, some of which CI does not run:
+
+```bash
+python3 scripts/dry_run_loop.py --self-test
+python3 scripts/eval_inspect.py --self-test
+python3 scripts/eval_representation.py --self-test
+python3 scripts/eval_parallel.py --self-test
+python3 scripts/eval_why.py --self-test
+python3 skills/patpat-run/scripts/team_shape.py --self-test
+python3 skills/patpat-ship/scripts/github_observe.py --self-test
+python3 skills/patpat-ship/scripts/pr_watch.py --self-test
+python3 skills/patpat-ship/scripts/watch_pr_stack.py --self-test
+```
+
+`eval_why.py` needs a source checkout with Git history; do not use it as an installed-artifact smoke test. The Codex, Antigravity, and Grok smoke commands need their CLIs and use isolated homes.
+
 For each selected host, inspect the installed catalog, start a fresh task or session, invoke `patpat-loop`, and verify that it loads only the workflow and references required by the request.
