@@ -377,10 +377,12 @@ def git_head() -> str:
     result = subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=REPOSITORY_ROOT,
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
     )
+    if result.returncode != 0:
+        return "0" * 40
     return result.stdout.strip()
 
 
