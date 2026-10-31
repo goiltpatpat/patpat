@@ -6,6 +6,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { check, PINNED_FLAGS } from "../run.ts";
+import { tempDir } from "./tmp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const corpus = path.join(here, "corpus");
@@ -16,7 +17,7 @@ const read = (file: string) => fs.readFileSync(file, "utf8").replace(/\r\n/g, "\
 for (const name of fs.readdirSync(corpus)) {
   test(`${name} gives the committed chart and report when TLC runs`, { skip }, () => {
     const dir = path.join(corpus, name);
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "statechart-corpus-"));
+    const tmp = tempDir("statechart-corpus-");
     const tlc = path.join(tmp, "tlc");
     const out = path.join(tmp, "out");
     fs.mkdirSync(tlc);
@@ -60,7 +61,7 @@ for (const name of fs.readdirSync(corpus)) {
 // Java on Windows reads argv in the ANSI code page, so TLC cannot open a path outside it.
 const ansiSkip = process.platform === "win32" && "Java on Windows reads argv in the ANSI code page";
 test("a spec in a folder whose name is not ASCII checks under the POSIX locale", { skip: skip || ansiSkip }, () => {
-  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "statechart-corpus-")), "spec-é");
+  const dir = path.join(tempDir("statechart-corpus-"), "spec-é");
   fs.cpSync(path.join(corpus, "Login"), dir, { recursive: true });
   const out = path.join(dir, "out");
   const r = spawnSync(
@@ -81,7 +82,7 @@ test("a spec in a folder whose name is not ASCII checks under the POSIX locale",
 });
 
 test("an invariant named NoDeadlock and a deadlock break as two rules", { skip }, () => {
-  const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "statechart-corpus-")), "out");
+  const out = path.join(tempDir("statechart-corpus-"), "out");
   const r = spawnSync(
     process.execPath,
     [
@@ -106,7 +107,7 @@ test("an invariant named NoDeadlock and a deadlock break as two rules", { skip }
 });
 
 const writeSpec = (name: string, tla: string[], cfg: string) => {
-  const base = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "statechart-corpus-")), name);
+  const base = path.join(tempDir("statechart-corpus-"), name);
   fs.writeFileSync(`${base}.tla`, `${tla.join("\n")}\n`);
   fs.writeFileSync(`${base}.cfg`, cfg);
   return base;
@@ -391,7 +392,7 @@ test(
   { skip },
   async () => {
     const base = broken();
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "statechart-corpus-"));
+    const tmp = tempDir("statechart-corpus-");
     const saved = process.env.TMPDIR;
     process.env.TMPDIR = tmp;
     try {

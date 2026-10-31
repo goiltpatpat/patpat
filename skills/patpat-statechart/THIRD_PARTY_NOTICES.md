@@ -10,7 +10,7 @@ Patpat changes to the derived files:
 
 - `scripts/run.ts`, `scripts/statechart.ts`, `scripts/janitor.ts`, `scripts/frontends/dot.ts`: direct Node process management in place of POSIX-shell cleanup, Windows support, and CRLF handling, including the CR Java on Windows writes before each LF.
 - `scripts/backends/mermaid.ts`: optional legend suppression for receipt traces, and Unicode combining marks (`\p{M}`) kept so Thai text stays readable.
-- `scripts/test/`: CRLF-normalized golden reads, `output-lines.test.ts`, and a Windows skip for the non-ASCII folder test.
+- `scripts/test/`: CRLF-normalized golden reads, `output-lines.test.ts`, temporary folders removed at exit through `tmp.ts`, and Windows skips for the non-ASCII folder test and the `ps`-based signal test.
 - `scripts/package.json`: Patpat package identity and the pinned Pele renderer.
 
 Patpat-authored files: `SKILL.md`, `references/chart-view.md`, `references/reading-results.md`, `references/receipt-rendering.md`, `scripts/statechart.cmd`, `scripts/render_receipt_chart.mjs`, `scripts/render_statechart_receipts.py`, and `examples/`. `references/render.md` keeps the derived Pele theme.

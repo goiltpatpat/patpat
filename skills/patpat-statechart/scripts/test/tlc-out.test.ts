@@ -8,6 +8,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { plainText } from "../backends/plain-text.ts";
 import { readMessages } from "../frontends/messages.ts";
+import { tempDir } from "./tmp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const corpus = path.join(here, "corpus");
@@ -34,7 +35,7 @@ test(
       fs.readdirSync(corpus).map((name) =>
         t.test(name, async () => {
           const dir = path.join(corpus, name);
-          const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "statechart-plain-"));
+          const tmp = tempDir("statechart-plain-");
           const [tool, twin, out] = ["tool", "plain", "out"].map((f) => path.join(tmp, f));
           fs.mkdirSync(tool);
           fs.mkdirSync(twin);
