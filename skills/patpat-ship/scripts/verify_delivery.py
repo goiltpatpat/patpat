@@ -53,14 +53,21 @@ def _verify_git_head_binding(root: Path, data: dict[str, Any]) -> None:
             capture_output=True,
             text=True,
         )
-        if completed.returncode == 0:
-            actual_head = completed.stdout.strip()
-            if actual_head and actual_head.lower() != str(head_sha).lower():
-                raise DeliveryVerificationError(
-                    f"delivery receipt head_sha {head_sha!r} does not match workspace git HEAD {actual_head!r}"
-                )
-    except OSError:
-        pass
+    except (subprocess.SubprocessError, OSError) as error:
+        raise DeliveryVerificationError(f"failed to establish git HEAD in {root}: {error}") from error
+
+    if completed.returncode != 0:
+        err = completed.stderr.strip() or f"exit code {completed.returncode}"
+        raise DeliveryVerificationError(f"failed to establish git HEAD in {root}: {err}")
+
+    actual_head = completed.stdout.strip()
+    if not actual_head:
+        raise DeliveryVerificationError(f"failed to establish git HEAD in {root}: empty git rev-parse output")
+
+    if actual_head.lower() != str(head_sha).lower():
+        raise DeliveryVerificationError(
+            f"delivery receipt head_sha {head_sha!r} does not match workspace git HEAD {actual_head!r}"
+        )
 
 
 def verify_delivery(receipt_path: Path, root: Path | None = None) -> dict[str, Any]:
@@ -156,6 +163,14 @@ def self_test() -> int:
         res = verify_delivery(valid)
         if res["status"] != "ready":
             raise AssertionError("valid delivery receipt failed verification")
+
+        # 6. Non-git directory with root specified must fail closed
+        try:
+            verify_delivery(valid, root=root)
+        except DeliveryVerificationError:
+            pass
+        else:
+            raise AssertionError("delivery verification did not fail closed on non-git root")
 
     print("Delivery verifier self-test passed.")
     return 0

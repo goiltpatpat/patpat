@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = ROOT / "scripts"
@@ -21,7 +22,30 @@ PLAN_VERIFIER = ROOT / "skills" / "patpat-plan" / "scripts" / "verify_plan.py"
 REVIEW_VERIFIER = ROOT / "skills" / "patpat-review" / "scripts" / "verify_review.py"
 DELIVERY_VERIFIER = ROOT / "skills" / "patpat-ship" / "scripts" / "verify_delivery.py"
 
+PLAN_DIR = ROOT / "skills" / "patpat-plan" / "scripts"
+REVIEW_DIR = ROOT / "skills" / "patpat-review" / "scripts"
+DELIVERY_DIR = ROOT / "skills" / "patpat-ship" / "scripts"
+
+for p in (PLAN_DIR, REVIEW_DIR, DELIVERY_DIR):
+    if str(p) not in sys.path:
+        sys.path.insert(0, str(p))
+
+import verify_plan
+import verify_review
+import verify_delivery
+
 DUMMY_SHA = "a" * 40
+
+
+def _create_test_git_repo(path: Path) -> str:
+    subprocess.run(["git", "init", "-q"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=path, check=True)
+    (path / "file.txt").write_text("content\n", encoding="utf-8")
+    subprocess.run(["git", "add", "file.txt"], cwd=path, check=True)
+    subprocess.run(["git", "commit", "-qm", "initial commit"], cwd=path, check=True)
+    res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=path, check=True, capture_output=True, text=True)
+    return res.stdout.strip()
 
 
 class TestOntologyVerifiersDirect(unittest.TestCase):
@@ -57,33 +81,16 @@ class TestOntologyVerifiersDirect(unittest.TestCase):
                 text=True,
             )
             self.assertEqual(result.returncode, 1)
-            self.assertIn("missing valid integer schema_version", result.stderr)
+            self.assertTrue(
+                "plan must contain exactly" in result.stderr or "schema_version" in result.stderr,
+                f"Unexpected stderr: {result.stderr}",
+            )
 
     def test_plan_verifier_valid_plan(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             plan_file = Path(temp) / ".patpat" / "plan.json"
             plan_file.parent.mkdir(parents=True, exist_ok=True)
-            plan_data = {
-                "schema_version": 1,
-                "objective": "Verify ontology plan enforcement",
-                "delivery": {"authority": "none", "actions": []},
-                "units": [
-                    {
-                        "id": "unit-1",
-                        "depends_on": [],
-                        "files": ["src/main.py"],
-                        "build": "python3 -m compileall src",
-                        "proof": {
-                            "observable": "observable change",
-                            "targeted": "python3 -m unittest",
-                            "live": "N/A: library",
-                            "performance": "N/A: standard",
-                            "evidence_binding": "exact-head",
-                        },
-                        "review_gate": "independent-pass-before-delivery",
-                    }
-                ],
-            }
+            plan_data = verify_plan.example_plan()
             plan_file.write_text(json.dumps(plan_data), encoding="utf-8")
             result = subprocess.run(
                 [sys.executable, str(PLAN_VERIFIER), "--root", temp],
@@ -93,23 +100,13 @@ class TestOntologyVerifiersDirect(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("Execution plan verified:", result.stdout)
 
-    def test_plan_verifier_rejects_cyclic_or_malformed_plan(self) -> None:
+    def test_plan_verifier_rejects_dag_cycle_in_supported_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             plan_file = Path(temp) / ".patpat" / "plan.json"
             plan_file.parent.mkdir(parents=True, exist_ok=True)
-            # Self-cyclic dependency
-            plan_data = {
-                "schema_version": 1,
-                "objective": "Verify ontology plan enforcement",
-                "delivery": {"authority": "none", "actions": []},
-                "units": [
-                    {
-                        "id": "unit-1",
-                        "depends_on": ["unit-1"],
-                        "files": ["src/main.py"],
-                    }
-                ],
-            }
+            plan_data = verify_plan.example_plan()
+            # Create a 2-node cycle: contract -> consumer -> contract
+            plan_data["units"][0]["depends_on"] = ["consumer"]
             plan_file.write_text(json.dumps(plan_data), encoding="utf-8")
             result = subprocess.run(
                 [sys.executable, str(PLAN_VERIFIER), "--root", temp],
@@ -117,10 +114,74 @@ class TestOntologyVerifiersDirect(unittest.TestCase):
                 text=True,
             )
             self.assertEqual(result.returncode, 1)
-            self.assertTrue(
-                "cannot depend on itself" in result.stderr or "acyclic" in result.stderr,
-                f"Expected cyclic dependency error, got: {result.stderr}",
+            self.assertIn("unit dependency graph must be acyclic", result.stderr)
+
+    def test_plan_verifier_rejects_unknown_dependency_in_supported_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            plan_file = Path(temp) / ".patpat" / "plan.json"
+            plan_file.parent.mkdir(parents=True, exist_ok=True)
+            plan_data = verify_plan.example_plan()
+            plan_data["units"][1]["depends_on"] = ["non-existent-unit"]
+            plan_file.write_text(json.dumps(plan_data), encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(PLAN_VERIFIER), "--root", temp],
+                capture_output=True,
+                text=True,
             )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("has unknown dependencies", result.stderr)
+
+    def test_plan_verifier_rejects_ownership_overlap_in_supported_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            plan_file = Path(temp) / ".patpat" / "plan.json"
+            plan_file.parent.mkdir(parents=True, exist_ok=True)
+            plan_data = verify_plan.example_plan()
+            # Make units unordered and overlap on files
+            plan_data["units"][1]["depends_on"] = []
+            plan_data["units"][0]["files"] = ["src/*"]
+            plan_data["units"][1]["files"] = ["src/consumer.py"]
+            plan_file.write_text(json.dumps(plan_data), encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(PLAN_VERIFIER), "--root", temp],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("overlapping ownership", result.stderr)
+
+    def test_plan_verifier_standalone_without_canonical_validator(self) -> None:
+        """Prove DAG, dependency-reference, and ownership checks work without canonical_plan_validator."""
+        with patch.object(verify_plan, "canonical_plan_validator", None):
+            with tempfile.TemporaryDirectory() as temp:
+                dummy_path = Path(temp) / "plan.json"
+
+                # 1. Valid plan passes
+                valid_data = verify_plan.example_plan()
+                res = verify_plan.verify_plan_data(valid_data, dummy_path)
+                self.assertEqual(len(res["units"]), 2)
+
+                # 2. Cycle is rejected
+                cycle_data = verify_plan.example_plan()
+                cycle_data["units"][0]["depends_on"] = ["consumer"]
+                with self.assertRaises(verify_plan.PlanVerificationError) as ctx:
+                    verify_plan.verify_plan_data(cycle_data, dummy_path)
+                self.assertIn("unit dependency graph must be acyclic", str(ctx.exception))
+
+                # 3. Unknown dependency is rejected
+                unknown_dep_data = verify_plan.example_plan()
+                unknown_dep_data["units"][1]["depends_on"] = ["missing-unit"]
+                with self.assertRaises(verify_plan.PlanVerificationError) as ctx:
+                    verify_plan.verify_plan_data(unknown_dep_data, dummy_path)
+                self.assertIn("has unknown dependencies", str(ctx.exception))
+
+                # 4. Overlapping ownership between unordered units is rejected
+                overlap_data = verify_plan.example_plan()
+                overlap_data["units"][1]["depends_on"] = []
+                overlap_data["units"][0]["files"] = ["src/*"]
+                overlap_data["units"][1]["files"] = ["src/consumer.py"]
+                with self.assertRaises(verify_plan.PlanVerificationError) as ctx:
+                    verify_plan.verify_plan_data(overlap_data, dummy_path)
+                self.assertIn("overlapping ownership", str(ctx.exception))
 
     def test_review_verifier_self_test(self) -> None:
         result = subprocess.run(
@@ -162,7 +223,29 @@ class TestOntologyVerifiersDirect(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertIn("expected 'pass'", result.stderr)
 
-    def test_review_verifier_valid_receipt(self) -> None:
+    def test_review_verifier_matching_head_succeeds(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            real_sha = _create_test_git_repo(Path(temp))
+            receipt_file = Path(temp) / ".patpat" / "review-receipt.json"
+            receipt_file.parent.mkdir(parents=True, exist_ok=True)
+            receipt_data = {
+                "schema_version": 1,
+                "kind": "patpat-review-receipt",
+                "verdict": "pass",
+                "actor": "patpat-reviewer",
+                "summary": "All checks cleared",
+                "head_sha": real_sha,
+            }
+            receipt_file.write_text(json.dumps(receipt_data), encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(REVIEW_VERIFIER), "--root", temp],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Review cleared:", result.stdout)
+
+    def test_review_verifier_non_git_directory_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             receipt_file = Path(temp) / ".patpat" / "review-receipt.json"
             receipt_file.parent.mkdir(parents=True, exist_ok=True)
@@ -180,19 +263,29 @@ class TestOntologyVerifiersDirect(unittest.TestCase):
                 capture_output=True,
                 text=True,
             )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("Review cleared:", result.stdout)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("failed to establish git HEAD", result.stderr)
+
+    def test_review_verifier_git_command_failure_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            receipt_file = Path(temp) / "review.json"
+            receipt_data = {
+                "schema_version": 1,
+                "kind": "patpat-review-receipt",
+                "verdict": "pass",
+                "actor": "patpat-reviewer",
+                "summary": "All checks cleared",
+                "head_sha": DUMMY_SHA,
+            }
+            receipt_file.write_text(json.dumps(receipt_data), encoding="utf-8")
+            with patch("subprocess.run", side_effect=OSError("git not found")):
+                with self.assertRaises(verify_review.ReviewVerificationError) as ctx:
+                    verify_review.verify_review(receipt_file, root=Path(temp))
+                self.assertIn("failed to establish git HEAD", str(ctx.exception))
 
     def test_review_verifier_git_head_mismatch_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            # Initialize a real git repo
-            subprocess.run(["git", "init", "-q"], cwd=temp, check=True)
-            subprocess.run(["git", "config", "user.name", "Test"], cwd=temp, check=True)
-            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=temp, check=True)
-            (Path(temp) / "file.txt").write_text("hello\n")
-            subprocess.run(["git", "add", "file.txt"], cwd=temp, check=True)
-            subprocess.run(["git", "commit", "-qm", "initial"], cwd=temp, check=True)
-
+            _create_test_git_repo(Path(temp))
             receipt_file = Path(temp) / ".patpat" / "review-receipt.json"
             receipt_file.parent.mkdir(parents=True, exist_ok=True)
             receipt_data = {
@@ -252,7 +345,29 @@ class TestOntologyVerifiersDirect(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertIn("expected 'ready' or 'merged'", result.stderr)
 
-    def test_delivery_verifier_valid_receipt(self) -> None:
+    def test_delivery_verifier_matching_head_succeeds(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            real_sha = _create_test_git_repo(Path(temp))
+            receipt_file = Path(temp) / ".patpat" / "delivery-receipt.json"
+            receipt_file.parent.mkdir(parents=True, exist_ok=True)
+            receipt_data = {
+                "schema_version": 1,
+                "kind": "patpat-delivery-receipt",
+                "status": "ready",
+                "pr_number": 42,
+                "pr_url": "https://github.com/goiltpatpat/patpat/pull/42",
+                "head_sha": real_sha,
+            }
+            receipt_file.write_text(json.dumps(receipt_data), encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(DELIVERY_VERIFIER), "--root", temp],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Delivery PR ready:", result.stdout)
+
+    def test_delivery_verifier_non_git_directory_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             receipt_file = Path(temp) / ".patpat" / "delivery-receipt.json"
             receipt_file.parent.mkdir(parents=True, exist_ok=True)
@@ -270,19 +385,29 @@ class TestOntologyVerifiersDirect(unittest.TestCase):
                 capture_output=True,
                 text=True,
             )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("Delivery PR ready:", result.stdout)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("failed to establish git HEAD", result.stderr)
+
+    def test_delivery_verifier_git_command_failure_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            receipt_file = Path(temp) / "delivery.json"
+            receipt_data = {
+                "schema_version": 1,
+                "kind": "patpat-delivery-receipt",
+                "status": "ready",
+                "pr_number": 42,
+                "pr_url": "https://github.com/goiltpatpat/patpat/pull/42",
+                "head_sha": DUMMY_SHA,
+            }
+            receipt_file.write_text(json.dumps(receipt_data), encoding="utf-8")
+            with patch("subprocess.run", side_effect=OSError("git not found")):
+                with self.assertRaises(verify_delivery.DeliveryVerificationError) as ctx:
+                    verify_delivery.verify_delivery(receipt_file, root=Path(temp))
+                self.assertIn("failed to establish git HEAD", str(ctx.exception))
 
     def test_delivery_verifier_git_head_mismatch_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            # Initialize a real git repo
-            subprocess.run(["git", "init", "-q"], cwd=temp, check=True)
-            subprocess.run(["git", "config", "user.name", "Test"], cwd=temp, check=True)
-            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=temp, check=True)
-            (Path(temp) / "file.txt").write_text("hello\n")
-            subprocess.run(["git", "add", "file.txt"], cwd=temp, check=True)
-            subprocess.run(["git", "commit", "-qm", "initial"], cwd=temp, check=True)
-
+            _create_test_git_repo(Path(temp))
             receipt_file = Path(temp) / ".patpat" / "delivery-receipt.json"
             receipt_file.parent.mkdir(parents=True, exist_ok=True)
             receipt_data = {

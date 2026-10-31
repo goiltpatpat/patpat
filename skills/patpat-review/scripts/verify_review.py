@@ -53,14 +53,21 @@ def _verify_git_head_binding(root: Path, data: dict[str, Any]) -> None:
             capture_output=True,
             text=True,
         )
-        if completed.returncode == 0:
-            actual_head = completed.stdout.strip()
-            if actual_head and actual_head.lower() != str(head_sha).lower():
-                raise ReviewVerificationError(
-                    f"receipt head_sha {head_sha!r} does not match workspace git HEAD {actual_head!r}"
-                )
-    except OSError:
-        pass
+    except (subprocess.SubprocessError, OSError) as error:
+        raise ReviewVerificationError(f"failed to establish git HEAD in {root}: {error}") from error
+
+    if completed.returncode != 0:
+        err = completed.stderr.strip() or f"exit code {completed.returncode}"
+        raise ReviewVerificationError(f"failed to establish git HEAD in {root}: {err}")
+
+    actual_head = completed.stdout.strip()
+    if not actual_head:
+        raise ReviewVerificationError(f"failed to establish git HEAD in {root}: empty git rev-parse output")
+
+    if actual_head.lower() != str(head_sha).lower():
+        raise ReviewVerificationError(
+            f"receipt head_sha {head_sha!r} does not match workspace git HEAD {actual_head!r}"
+        )
 
 
 def verify_review(receipt_path: Path, root: Path | None = None) -> dict[str, Any]:
@@ -155,6 +162,14 @@ def self_test() -> int:
         res = verify_review(valid)
         if res["verdict"] != "pass":
             raise AssertionError("valid review receipt failed verification")
+
+        # 6. Non-git directory with root specified must fail closed
+        try:
+            verify_review(valid, root=root)
+        except ReviewVerificationError:
+            pass
+        else:
+            raise AssertionError("review verification did not fail closed on non-git root")
 
     print("Review verifier self-test passed.")
     return 0
