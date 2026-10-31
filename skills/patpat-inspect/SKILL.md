@@ -2,7 +2,7 @@
 name: patpat-inspect
 description: Explain repository behavior, ownership, placement, or historical design decisions without editing. Use for how, why, and diagnosis-only questions; not implementation or delivery.
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Codebase","requires_state":[],"produces_state":[],"verification_cmd":""}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Codebase","requires_state":["workspace-root-open"],"produces_state":["repository-rationale-settled"],"verification_cmd":"git status --short"}'
 ---
 
 # Patpat Inspect

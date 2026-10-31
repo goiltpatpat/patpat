@@ -1,5 +1,6 @@
 {
   "$schema": "https://antigravity.google/schemas/v1/plugin.json",
   "name": "patpat",
-  "description": "Engineering skills for code that must survive contact with reality."
+  "description": "Engineering skills for code that must survive contact with reality.",
+  "logo": "assets/logo.png"
 }

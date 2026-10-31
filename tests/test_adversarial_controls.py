@@ -1,6 +1,7 @@
 """Unit tests for Patpat adversarial controls and behavioral invariants."""
 
 import sys
+import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -143,6 +144,30 @@ def test_remote_capability_is_not_remote_authority():
     )
     assert weakened_result != res_case1, "Weakened check unexpectedly matched expected fail-closed decision"
 
+
+
+
+class TestAdversarialControls(unittest.TestCase):
+    def test_scenario_1_stale_verification(self):
+        test_scenario_1_stale_verification()
+
+    def test_scenario_2_verification_theater(self):
+        test_scenario_2_verification_theater()
+
+    def test_scenario_3_architecture_drift(self):
+        test_scenario_3_architecture_drift()
+
+    def test_scenario_4_adversarial_self_review(self):
+        test_scenario_4_adversarial_self_review()
+
+    def test_scenario_5_anti_slop_behavior(self):
+        test_scenario_5_anti_slop_behavior()
+
+    def test_scenario_6_credential_leakage_and_limits(self):
+        test_scenario_6_credential_leakage_and_limits()
+
+    def test_remote_capability_is_not_remote_authority(self):
+        test_remote_capability_is_not_remote_authority()
 
 if __name__ == "__main__":
     test_scenario_1_stale_verification()

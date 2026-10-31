@@ -195,7 +195,7 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 | [`patpat-ship`](skills/patpat-ship/SKILL.md) | Commit-and-PR when delivery intent exists; merge only when explicitly named. |
 | [`patpat-skill`](skills/patpat-skill/SKILL.md) | Author a reusable skill. |
 | [`patpat-eval`](skills/patpat-eval/SKILL.md) | Evaluate skill triggering and behavior against the authorized project with an evidence rubric. |
-| [`patpat-formal-verify`](skills/patpat-formal-verify/SKILL.md) | Create or maintain a project-local formal verification skill and suite with explicit bounds and code correspondence. |
+| [`patpat-formal-verify`](skills/patpat-formal-verify/SKILL.md) | Create, maintain, and inspect bounded formal verification models, statecharts, and saved receipts. |
 | [`patpat-unslop`](skills/patpat-unslop/SKILL.md) | Cut superficial patterns and fluff from engineering docs, PR text, and code diffs. |
 | [`patpat-verifier`](skills/patpat-verifier/SKILL.md) | Create or maintain a project-specific verifier. |
 | [`patpat-learn`](skills/patpat-learn/SKILL.md) | Encode a recurring failure. |
@@ -231,6 +231,13 @@ python3 skills/patpat-run/scripts/team_shape.py --self-test
 The program store adds a dependency frontier, inbox, explicit dispatch and delivery gates, and head-bound verification records under Git metadata. It coordinates state without spawning agents or creating delivery authority. Dependency head changes invalidate downstream evidence.
 
 `team_shape.py` recommends iterative, distributed, or adversarial work from an earned-parallelism gate receipt, explicit evidence, observed capacity, and a caller-owned worker budget. It never grants authority. Coordination uses compact receipts and typed handoff cards rather than replaying full agent transcripts.
+
+## Runtime footprint & dependencies
+
+Patpat is engineered for standard-library execution:
+
+- **Core Runtime, AST Extractor, Diagram Engine, and Replay Harness**: 100% Python 3.10+ standard library (`ast`, `pathlib`, `json`, `re`, `stat`). Requires zero external package installations (`pip`), zero C-extensions, and zero external build tools.
+- **Live TLA+/TLC Model Exploration**: Optional verification toolchain for live state-space search requiring a local Java environment (`tla2tools.jar`). Saved receipts, Python model checkers (`check_assignment_model.py`), and counterexample replay harnesses (`replay_assignment_counterexample.py`) run directly with pure Python without Java.
 
 ## Where Patpat stops
 

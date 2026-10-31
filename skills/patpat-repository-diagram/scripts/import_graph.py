@@ -429,12 +429,29 @@ def _feedback_edges(paths: list[str], edges: list[tuple[str, str, str]]) -> set[
     return feedback
 
 
-def _display_path(path: str) -> str:
-    if len(path) <= 180:
-        return path
-    digest = hashlib.sha256(path.encode("utf-8")).hexdigest()[:8]
-    tail = f"…/{PurePosixPath(path).name} [{digest}]"
-    return path[: 180 - len(tail) - 1] + "/" + tail
+def _display_paths(paths: list[str]) -> dict[str, str]:
+    parts_by_path = {path: PurePosixPath(path).parts for path in paths}
+    suffix_counts: dict[str, int] = {}
+    for parts in parts_by_path.values():
+        for width in range(1, len(parts) + 1):
+            suffix = "/".join(parts[-width:])
+            suffix_counts[suffix] = suffix_counts.get(suffix, 0) + 1
+
+    labels: dict[str, str] = {}
+    for path, parts in parts_by_path.items():
+        label = None
+        for width in range(1, len(parts) + 1):
+            candidate = "/".join(parts[-width:])
+            if suffix_counts[candidate] == 1 and len(candidate) <= 180:
+                label = candidate
+                break
+        if label is None:
+            digest = hashlib.sha256(path.encode("utf-8")).hexdigest()[:8]
+            suffix = PurePosixPath(path).name
+            max_suffix = 180 - len("…/ []") - len(digest)
+            label = f"…/{suffix[:max_suffix]} [{digest}]"
+        labels[path] = label
+    return labels
 
 
 def _build_spec(facts: list[ImportFact], language: str) -> dict[str, Any] | None:
@@ -446,6 +463,7 @@ def _build_spec(facts: list[ImportFact], language: str) -> dict[str, Any] | None
         return None
 
     used_paths = sorted({path for edge in grouped for path in edge})
+    display_labels = _display_paths(used_paths)
     node_ids = {path: _stable_id("N", path) for path in used_paths}
     edge_ids = {pair: _stable_id("R", *pair) for pair in grouped}
     edge_rows = sorted((source, target, edge_ids[(source, target)]) for source, target in grouped)
@@ -496,7 +514,7 @@ def _build_spec(facts: list[ImportFact], language: str) -> dict[str, Any] | None
     components = [
         {
             "id": node_ids[path],
-            "label": _display_path(path),
+            "label": display_labels[path],
             "kind": "component",
             "certainty": "confirmed",
             "evidence_ids": sorted(incident_evidence[path]),
@@ -505,18 +523,20 @@ def _build_spec(facts: list[ImportFact], language: str) -> dict[str, Any] | None
     ]
     unresolved = sum(item.status not in {"repository", "standard-library"} for item in facts)
     if language == "th":
-        title = "กราฟ import ของ Python"
+        title = "แผนที่ import ของ Python"
         summary = (
-            f"แสดงเฉพาะ import ที่ resolve ไปยังไฟล์ Python ในขอบเขตที่เลือกได้: "
+            f"แสดงความสัมพันธ์ import แบบ static ที่ resolve ไปยังไฟล์ Python ในขอบเขตที่เลือก: "
             f"{len(components)} โมดูล, {len(relationships)} ความสัมพันธ์; "
-            f"มี {unresolved} รายการที่ยัง resolve ไม่ได้ ดูรายงานประกอบ"
+            f"มี {unresolved} รายการที่ resolve ไม่ได้หรือเป็น external candidate; "
+            f"ไม่ใช่ call graph ขณะ runtime ดูรายงานประกอบ"
         )
     else:
-        title = "Python import graph"
+        title = "Python import map"
         summary = (
-            f"Only imports resolved to Python files in the selected scope are drawn: "
+            f"Static imports resolved to Python files in the selected scope: "
             f"{len(components)} modules, {len(relationships)} relationships; "
-            f"{unresolved} imports were unresolved or external candidates. See the sidecar report."
+            f"{unresolved} unresolved or external candidates. This is not a runtime call graph. "
+            f"See the sidecar report."
         )
     return {
         "schema_version": 2,
@@ -713,13 +733,15 @@ def _read_python_file(path: Path, root: Path) -> tuple[str | None, str | None, s
     return source, hashlib.sha256(data).hexdigest(), None, len(data)
 
 
-def _source_roots(root: Path, requested: list[str] | None) -> list[str]:
+def _source_roots(root: Path, requested: list[str] | None, scope: str = ".") -> list[str]:
     if requested:
         values = requested
     else:
         values = ["."]
         if (root / "src").is_dir() and not (root / "src").is_symlink():
             values.append("src")
+        if scope != "." and (root / scope).is_dir() and not (root / scope).is_symlink():
+            values.append(scope)
     roots: list[str] = []
     for value in values:
         relative = _normal_relpath(value, "--python-root")
@@ -749,7 +771,7 @@ def analyze_repository(
     context = git_context(repo_root)
     root = repo_root.resolve(strict=True)
     scope = _scope_path(root, scope_value)
-    roots = _source_roots(root, requested_roots)
+    roots = _source_roots(root, requested_roots, scope=scope)
     all_paths = _tracked_python_paths(root)
     scoped_paths = [
         path

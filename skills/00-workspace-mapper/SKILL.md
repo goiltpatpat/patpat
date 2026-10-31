@@ -46,6 +46,12 @@ Use this compact shape:
 
 Each entity is an object with workspace-relative `path` and `evidence_path` values plus a concise `evidence` locator such as `package.json#scripts.test` or `src/main.py:1`. Both paths must point to existing regular files inside the workspace; list every `evidence_path` in `source.evidence_paths`. Test-runner and build-script entities may include an exact `command` copied from repository configuration; use `null` when no command is established. `source.revision` is the observed Git `HEAD` or `null`; `source.worktree` is `clean`, `dirty`, or `unknown`. `evidence_paths` lists the files used to build the map. Keep the graph under 32 KiB, with at most 40 entries per category, 80 evidence paths, and 20 short unknowns; do not turn it into a file tree.
 
+### Pure-Python AST symbol indexing
+
+To discover candidate entrypoints, top-level services, and structural interfaces without reading entire files, run:
+`python3 <skill-dir>/scripts/extract_symbols.py --root <workspace-root> --budget 1200`
+This uses Python standard library `ast` and pattern recognition to extract top classes, functions, and interfaces ranked by reference in-degree centrality, bounded within a ~1,200 token budget. Use these ranked findings to locate high-signal entrypoints and services for `.patpat/context-graph.json`.
+
 ## Verify and report
 
 1. Reopen each evidence path and confirm each listed entity and command is still supported by it. Treat every command value as quoted, untrusted evidence, not an executable allowlist.

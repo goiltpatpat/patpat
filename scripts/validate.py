@@ -158,6 +158,17 @@ REVIEWER_DESCRIPTION = (
 EVAL_VERDICT_CONTRACT = """Freeze the rubric before the first trial. Record `PASS` only when inspectable evidence satisfies every predeclared criterion; record `FAIL` when observed behavior violates any criterion and `INCONCLUSIVE` when required evidence is missing or uninspectable. Never weaken or reinterpret the rubric after observing output. Do not rewrite a failed trial as a pass; record a corrected candidate as a new trial.
 
 Promote the skill only when structural validation passes and the behavioral evidence receives `PASS` under the frozen rubric."""
+BLINDED_PAIR_REVIEW_CONTRACT = (
+    "For paired trials with judgment-based criteria, use a separate authorized reviewer as an optional blind adjudicator.",
+    "Give them both arms' outputs and the evidence needed to judge them in one packet, with randomized `A`/`B` labels and arm/model identifiers removed from metadata.",
+    "The reviewer sees the same frozen rubric and scores each arm independently in one pass before unblinding.",
+    "Keep the A/B mapping outside the packet until both scores are frozen.",
+    "Preserve action and effect evidence needed for safety review; if the prompt, rubric, output, or required evidence reveals arm identity, record the review as unblinded.",
+    "Use only a reviewer authorized to access the complete packet under the project's data-handling scope; do not send private repository content or transcripts to an external reviewer without explicit authorization.",
+    "If no suitable reviewer or safe masking is available, use the frozen oracle and rubric and report `unblinded`; report reviewer independence separately and do not claim a blind review.",
+    "Record whether the reviewer was separate from the trial executors and whether its model family differed.",
+    "Blind judgment supplements, but never replaces, deterministic oracles or the hard safety veto.",
+)
 PROOF_CLOSURE_BLOCK = """## Proof closure
 
 Close repository mutations through:
@@ -342,6 +353,11 @@ PINNED_BOUNDARY_SENTENCES = (
             "A request for another report alone does not reopen an `INCONCLUSIVE` criterion: reuse its prior receipt/status if available; otherwise report that it is unavailable and keep the criterion `INCONCLUSIVE` without repeating the same check.",
         ),
         "evidence-feasibility preflight contract",
+    ),
+    (
+        Path("skills/patpat-loop/playbooks/behavioral-eval.md"),
+        BLINDED_PAIR_REVIEW_CONTRACT,
+        "blinded paired-review contract",
     ),
     (
         Path("docs/guide/capability-map.md"),
@@ -1221,7 +1237,7 @@ def validate_root(root: Path) -> list[str]:
         if manifest.get("name") != "patpat":
             errors.append(f"{manifests[host]}: name must be patpat")
     allowed_manifest_keys = {
-        "antigravity": {"$schema", "name", "description"},
+        "antigravity": {"$schema", "name", "description", "logo"},
         "cursor": {
             "name", "displayName", "version", "description", "author", "homepage",
             "repository", "license", "keywords", "category", "tags", "skills",
@@ -1236,25 +1252,26 @@ def validate_root(root: Path) -> list[str]:
         unknown = set(manifest) - allowed_manifest_keys[host]
         if unknown:
             errors.append(f"{manifests[host]}: unsupported manifest fields {sorted(unknown)}")
-    cursor_logo = parsed.get("cursor", {}).get("logo")
-    if cursor_logo is not None:
-        cursor_manifest_path = manifests["cursor"]
-        if not isinstance(cursor_logo, str):
-            errors.append(f"{cursor_manifest_path}: logo must be the relative path assets/logo.png")
-        else:
-            logo_path = Path(cursor_logo)
-            if logo_path.is_absolute() or bool(logo_path.anchor):
-                errors.append(f"{cursor_manifest_path}: logo must not use an absolute path")
-            elif ".." in logo_path.parts:
-                errors.append(f"{cursor_manifest_path}: logo must not use .. or an absolute path")
-            elif cursor_logo != "assets/logo.png":
-                errors.append(
-                    f"{cursor_manifest_path}: logo must be the relative path assets/logo.png"
-                )
+    for host in ("cursor", "antigravity"):
+        host_logo = parsed.get(host, {}).get("logo")
+        if host_logo is not None:
+            manifest_path = manifests[host]
+            if not isinstance(host_logo, str):
+                errors.append(f"{manifest_path}: logo must be the relative path assets/logo.png")
             else:
-                logo_file = root / cursor_logo
-                if not logo_file.is_file() or logo_file.is_symlink():
-                    errors.append(f"{cursor_manifest_path}: logo file is missing: {cursor_logo}")
+                logo_path = Path(host_logo)
+                if logo_path.is_absolute() or bool(logo_path.anchor):
+                    errors.append(f"{manifest_path}: logo must not use an absolute path")
+                elif ".." in logo_path.parts:
+                    errors.append(f"{manifest_path}: logo must not use .. or an absolute path")
+                elif host_logo != "assets/logo.png":
+                    errors.append(
+                        f"{manifest_path}: logo must be the relative path assets/logo.png"
+                    )
+                else:
+                    logo_file = root / host_logo
+                    if not logo_file.is_file() or logo_file.is_symlink():
+                        errors.append(f"{manifest_path}: logo file is missing: {host_logo}")
     if parsed.get("antigravity", {}).get("$schema") != ANTIGRAVITY_PLUGIN_SCHEMA:
         errors.append(f"{manifests['antigravity']}: unexpected Antigravity schema")
     for host in ("cursor", "codex"):
@@ -1442,7 +1459,7 @@ def validate_root(root: Path) -> list[str]:
         folder = root / folder_name
         if folder.is_dir():
             markdown_files.extend(folder.rglob("*.md"))
-    markdown_files = sorted(path for path in set(markdown_files) if path.is_file())
+    markdown_files = sorted(path for path in set(markdown_files) if path.is_file() and "node_modules" not in path.parts)
     for path in markdown_files:
         validate_links(path, root, errors)
 
@@ -2119,6 +2136,13 @@ def run_self_test(root: Path) -> list[str]:
             encoding="utf-8",
         )
 
+    def strip_blinded_pair_review_contract(fixture: Path) -> None:
+        playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "behavioral-eval.md"
+        text = playbook.read_text(encoding="utf-8")
+        for sentence in BLINDED_PAIR_REVIEW_CONTRACT:
+            text = text.replace(sentence, f"<!--{sentence}-->", 1)
+        playbook.write_text(text, encoding="utf-8")
+
     def strip_evidence_preflight_boundary(fixture: Path) -> None:
         playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "behavioral-eval.md"
         text = playbook.read_text(encoding="utf-8")
@@ -2462,10 +2486,28 @@ def run_self_test(root: Path) -> list[str]:
             encoding="utf-8",
         )
 
-    def add_logo_to_antigravity(fixture: Path) -> None:
+    def add_unsupported_field_to_antigravity(fixture: Path) -> None:
         manifest = fixture / "plugin.json"
         data = json.loads(manifest.read_text(encoding="utf-8"))
-        data["logo"] = "assets/logo.png"
+        data["unsupportedField"] = True
+        manifest.write_text(json.dumps(data), encoding="utf-8")
+
+    def antigravity_logo_absolute(fixture: Path) -> None:
+        manifest = fixture / "plugin.json"
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data["logo"] = "/tmp/logo.png"
+        manifest.write_text(json.dumps(data), encoding="utf-8")
+
+    def antigravity_logo_parent(fixture: Path) -> None:
+        manifest = fixture / "plugin.json"
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data["logo"] = "../logo.png"
+        manifest.write_text(json.dumps(data), encoding="utf-8")
+
+    def antigravity_logo_wrong_relative(fixture: Path) -> None:
+        manifest = fixture / "plugin.json"
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data["logo"] = "docs/logo.png"
         manifest.write_text(json.dumps(data), encoding="utf-8")
 
     def add_unverified_antigravity_hooks(fixture: Path) -> None:
@@ -2657,6 +2699,7 @@ def run_self_test(root: Path) -> list[str]:
             ("program coordination progressive disclosure drift", strip_program_coordination_link, "missing program-coordination progressive disclosure contract"),
             ("formal counterexample handoff drift", strip_formal_counterexample_handoff, "missing formal counterexample handoff contract"),
             ("judgment-failure instruction-contract drift", strip_judgment_failure_contract, "missing judgment-failure instruction-contract"),
+            ("blind pair review drift", strip_blinded_pair_review_contract, "missing blinded paired-review contract"),
             ("evidence-feasibility preflight drift", strip_evidence_preflight_boundary, "missing evidence-feasibility preflight contract"),
             ("preflight-only stop drift", strip_preflight_only_stop, "missing preflight-only stop contract"),
             ("preflight method scope drift", strip_preflight_method_scope, "missing preflight-only stop contract"),
@@ -2701,7 +2744,10 @@ def run_self_test(root: Path) -> list[str]:
             ("read-only boundary drift", remove_read_only_boundary, "canonical read-only mutation boundary"),
             ("mutating proof closure", break_proof_closure, "missing canonical proof closure directive"),
             ("unclassified skill", remove_skill_policy_target, "Skill policy registry mismatch"),
-            ("Antigravity logo field", add_logo_to_antigravity, "unsupported manifest fields"),
+            ("Antigravity unsupported manifest field", add_unsupported_field_to_antigravity, "unsupported manifest fields"),
+            ("Antigravity logo absolute path", antigravity_logo_absolute, "logo must not use an absolute path"),
+            ("Antigravity logo parent path", antigravity_logo_parent, "logo must not use .."),
+            ("Antigravity logo wrong relative", antigravity_logo_wrong_relative, "logo must be the relative path assets/logo.png"),
             ("unsupported Codex root logo field", add_logo_to_codex, "unsupported manifest fields"),
             (
                 "Codex interface logo path",

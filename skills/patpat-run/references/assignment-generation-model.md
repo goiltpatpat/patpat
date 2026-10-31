@@ -24,6 +24,16 @@ python3 skills/patpat-run/scripts/program_state.py --self-test
 
 `program_state.py --self-test` exercises stale head, state, verdict, and inbox mutations after reassignment. It verifies that each rejection leaves the authoritative `state.json` bytes unchanged. A disposable source mutant that removes the generation comparison must make this self-test fail; do not mutate the live source tree for that check.
 
+Replay the selected TLC `stale-generation` mutant path through the real Python assignment API in an isolated temporary Git repository:
+
+```sh
+python3 skills/patpat-run/scripts/replay_assignment_counterexample.py \\
+  --receipt <saved-stale-generation-receipt.json> \\
+  --out <new-replay-receipt.json>
+```
+
+This pilot accepts only the four-state `NoStaleWrites` trace for the current model/configuration digests. It replays the two assignments with `assign_unit()` and the stale write attempt with `set_head()`, then records the exception and before/after state hashes. `--out` requires a new file and refuses overwrite. The model mutant supplies the counterexample; the Python replay separately records that the current implementation rejects it. `set_head()` receives the generation but not the model worker identity, so this replay does not establish worker authentication. Pass `--replay-report <replay-receipt.json>` to `render_statechart_receipts.py` to bind that verified replay receipt to the `stale-generation` case while keeping `baseline` and `rejected-write` at `not-run / model-only`.
+
 ## Code mapping and limits
 
 | Model | Implementation |

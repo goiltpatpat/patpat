@@ -2,7 +2,7 @@
 name: patpat-formal-verify
 description: Create or maintain a project-local formal verification skill and suite for a costly invariant that ordinary tests may miss. Use for state machines, action ordering, concurrency, retries, fencing, or bounded input properties; use patpat-verifier for real-app behavior and user-surface checks.
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Codebase","requires_state":[],"produces_state":[],"verification_cmd":""}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Codebase","requires_state":["workspace-root-open"],"produces_state":["formal-model-verified"],"verification_cmd":"python3 skills/patpat-run/scripts/check_assignment_model.py --self-test"}'
 ---
 
 # Patpat Formal Verify
@@ -21,6 +21,8 @@ Read [proof over proxy](../patpat-loop/principles/proof-over-proxy.md), [preserv
 4. State what one modeled action means in code. Split a model action when the implementation can interleave at that point. Record bounds, assumptions, omitted behavior, checker/tool version, and the expected counterexample before running anything.
 5. If the task only needs example or property-based runtime checks and no formal model or implementation verifier answers a distinct property, route to [`patpat-verify`](../patpat-verify/SKILL.md) or [`patpat-debug`](../patpat-debug/SKILL.md); do not create a formal-verification suite just to host ordinary tests, and do not call those checks formal proofs.
 
+Patpat's core runtime, AST symbol extraction, architecture diagrams, and counterexample replay operate in 100% pure Python 3.10+ standard library with zero external dependencies. Live TLA+/TLC model checking is an optional verification toolchain for exploring new state spaces and requires Java (`tla2tools.jar`). When Java is absent, environments still execute the pure-Python model checker (`check_assignment_model.py`) and counterexample replayer (`replay_assignment_counterexample.py`) to verify existing bounds, state invariants, and runtime replays.
+
 ## Create or update the project check
 
 Create a durable project-local formal-verification skill and suite when later changes should rerun the property. For a one-off investigation, keep the check local to that task and do not mint a reusable skill.
@@ -37,11 +39,14 @@ Create a durable project-local formal-verification skill and suite when later ch
 2. Map every modeled state variable, action, guard, and property to code a reviewer can open. Treat actor identity, authorization, atomicity, and external effects as assumptions unless the covered implementation actually enforces them.
 3. Run the unchanged candidate first. Inspect tool identity, process status, explored states or bounds, and all counterexamples. A checker error, skipped property, empty state space, missing input, or surviving mutant is not a pass.
 4. Translate each material counterexample into the shortest available numbered action path using terms its consumer can observe. For every step, name the model action, mapped code location, and expected observable state or effect. Replay that path through a real entry point when implementation correspondence is claimed. If no implementation exists or safe replay is unavailable, label the path `model-only` or `replay-inconclusive`; never present it as a reproduced product defect.
-5. Require both the property-specific mutant and, when code correspondence is claimed, the isolated source mutant to produce their expected failures. Restore or discard each scratch mutation and rerun the unchanged check.
-6. If a counterexample exposes a product defect, preserve it in the report and route the fix through `patpat-debug` or `patpat-change`. Do not weaken the invariant or change product code unless the user asks.
-7. Keep model results, implementation tests, source-mutation evidence, and runtime observations as separate evidence layers. A passing model proves only that model within its bounds.
+5. When a saved model-check receipt would make the finding easier to inspect, use the [statechart receipt contract](statechart/references/receipt-rendering.md) and the [Patpat statechart module](statechart/STATECHART.md). Put the raw checker action and `changed_keys` on each connector or its adjacent receipt evidence; keep semantic descriptions in a separate authored-interpretation annotation. Map each edge to code and an expected effect or state why the receipt cannot support that mapping, and keep bounds, mutant, source mapping, and replay as distinct evidence. A diagram is a presentation of the receipt; it does not replace replay or source-mutation evidence.
+6. Require both the property-specific mutant and, when code correspondence is claimed, the isolated source mutant to produce their expected failures. Restore or discard each scratch mutation and rerun the unchanged check.
+7. If a counterexample exposes a product defect, preserve it in the report and route the fix through `patpat-debug` or `patpat-change`. Do not weaken the invariant or change product code unless the user asks.
+8. Keep model results, implementation tests, source-mutation evidence, and runtime observations as separate evidence layers. A passing model proves only that model within its bounds.
 
 ## Maintain the check
+
+Use the nested [statechart module](statechart/STATECHART.md) for native PStack-derived TLA+/TLC diagrams or saved-receipt rendering. The module is maintained with this formal-verification skill so the Patpat skill registry stays canonical; it is not separately auto-discovered. For general repository visuals, use [`patpat-repository-diagram`](../patpat-repository-diagram/SKILL.md).
 
 For later changes, read the recorded sync commit and run the existing check before editing its description. Inspect every commit and working-tree change touching covered code, including moved functions and new writers of guarded state. Compare the model's actions and assumptions with the code, not with commit messages alone. Update the model from the implementation before rerunning; change the property only when a contract change is supported by repository evidence. Never weaken the property to make a failure disappear.
 

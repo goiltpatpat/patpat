@@ -146,6 +146,16 @@ class WorkspaceMapperVerifierTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("32 KiB size limit", result.stderr)
 
+    def test_extract_symbols_self_test(self) -> None:
+        script = Path(__file__).resolve().parents[1] / "skills" / "00-workspace-mapper" / "scripts" / "extract_symbols.py"
+        result = subprocess.run(
+            [sys.executable, str(script), "--self-test"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertIn("checks passed", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

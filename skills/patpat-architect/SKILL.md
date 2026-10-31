@@ -2,7 +2,7 @@
 name: patpat-architect
 description: Design repository-native changes before implementation or run a requested read-only architecture-opportunity scan. Use for architecture, migrations, public contracts, security-sensitive boundaries, cross-cutting work, or decisions with meaningful compatibility risk.
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Codebase","requires_state":[],"produces_state":[],"verification_cmd":""}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Codebase","requires_state":["workspace-root-open"],"produces_state":["architecture-design-settled"],"verification_cmd":"git diff --name-only"}'
 ---
 
 # Patpat Architect
@@ -11,7 +11,7 @@ Before following this skill, apply the [skill state and mutation gate](../patpat
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 
-Read [repository truth](../patpat-loop/principles/repository-truth.md), [smallest safe change](../patpat-loop/principles/smallest-safe-change.md), and [preserve safety](../patpat-loop/principles/preserve-safety.md). Apply the [architecture change playbook](../patpat-loop/playbooks/architecture-change.md).
+Read [repository truth](../patpat-loop/principles/repository-truth.md), [smallest safe change](../patpat-loop/principles/smallest-safe-change.md), [preserve safety](../patpat-loop/principles/preserve-safety.md), [subtract before you add](../patpat-loop/principles/subtract-before-you-add.md), [attack the premise](../patpat-loop/principles/attack-the-premise.md), and [redesign from first principles](../patpat-loop/principles/redesign-from-first-principles.md). Apply the [architecture change playbook](../patpat-loop/playbooks/architecture-change.md).
 
 Ground the design in current repository evidence. Name the contract, its callers, the changed behavior, migration impact, compatibility risk, rollback path, and proof contract.
 
@@ -31,6 +31,15 @@ Produce a concise sequence in this form:
 1. <step> -> verify: <targeted check or observation>
 2. <step> -> verify: <targeted check or observation>
 ```
+
+## Placement and layering heuristics
+
+Structure new code and boundary refactors into explicit, unidirectional layers:
+- **Domain Core**: Pure domain entities, state-machine transitions, and core invariants. No dependencies on external frameworks, transports, or I/O.
+- **Application Services**: Use cases, command dispatchers, orchestration graphs, and coordination logic.
+- **Adapters**: Concrete implementations of boundary interfaces—CLI parsers, HTTP/API clients, disk storage, and external providers.
+
+Never leak adapter concerns into the domain core. Dependencies point inward toward the core.
 
 ## Mutation boundary
 

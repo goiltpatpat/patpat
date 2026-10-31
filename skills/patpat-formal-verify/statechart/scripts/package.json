@@ -1,0 +1,15 @@
+{
+  "name": "patpat-statechart",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts",
+    "render:receipt": "node --disable-warning=ExperimentalWarning render_receipt_chart.mjs"
+  },
+  "dependencies": {
+    "pele": "1.9.0"
+  },
+  "devDependencies": {
+    "fast-check": "4.5.3"
+  }
+}

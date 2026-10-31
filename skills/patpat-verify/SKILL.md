@@ -2,7 +2,7 @@
 name: patpat-verify
 description: Prove an implementation or repository claim against its authoritative artifact or user surface. Use after code changes, during acceptance checks, or whenever tests and builds are insufficient evidence of real behavior.
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Codebase","requires_state":[],"produces_state":[],"verification_cmd":""}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Codebase","requires_state":["bounded-change-staged"],"produces_state":["acceptance-verified"],"verification_cmd":"git diff --check"}'
 ---
 
 # Patpat Verify

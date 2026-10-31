@@ -3,7 +3,7 @@ name: patpat-arena
 description: Run isolated competing attempts at the same brief, pick a base, graft the strongest parts, and verify the synthesis. Use for /patpat-arena, competing designs, or when one attempt would lock the wrong shape.
 disable-model-invocation: true
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"GitRepository","requires_state":[],"produces_state":[],"verification_cmd":""}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"GitRepository","requires_state":["execution-plan-settled"],"produces_state":["arena-candidate-selected"],"verification_cmd":"git status --short"}'
 ---
 
 # Patpat Arena

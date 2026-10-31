@@ -2,7 +2,7 @@
 name: patpat-repository-diagram
 description: Turn an explicitly requested idea, question, plan, or codebase into an interactive diagram. Create a self-contained HTML/SVG artifact from a user brief, repository evidence, or both, with five typed views and stable IDs for refinement. Use patpat-inspect for prose-only explanations and engineering skills for code changes.
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Artifact","requires_state":[],"produces_state":[],"verification_cmd":""}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Artifact","requires_state":["workspace-root-open"],"produces_state":["interactive-diagram-rendered"],"verification_cmd":"python3 scripts/validate.py"}'
 ---
 
 # Patpat Interactive Diagram
@@ -10,6 +10,8 @@ metadata:
 Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
 Use this route only when the user explicitly asks for a diagram, map, visual explainer, or shareable view. Accept a brief, repository evidence, or both. Deliver a focused HTML artifact with editable typed JSON and SVG; preserve stable IDs when refining it. Patpat owns the schema, renderer, layout, viewer, and output contract. Do not install Archify or depend on its runtime. See [design references and attribution](references/spec-contract.md#selected-design-references) and [third-party notices](references/THIRD_PARTY_NOTICES.md). Before running a script, replace `<skill-root>` with the absolute directory containing this loaded `SKILL.md`.
+
+For a formal TLA+/TLC statechart or saved `patpat-model-check-receipt`, route to the dedicated statechart module in [patpat-formal-verify](../patpat-formal-verify/SKILL.md). This skill remains the route for general architecture, workflow, sequence, dataflow, and product-lifecycle diagrams. A TLC invariant violation is a mark on a model state, not a lifecycle terminal or proof of a runtime defect.
 
 ## Scope and route
 
@@ -34,6 +36,26 @@ For repository investigation, read [repository truth](../patpat-loop/principles/
 Separate user-brief claims from repository evidence. Brief claims are user-stated, not code-verified. For repository-backed diagrams, record the Git root, full HEAD, and dirty state; cite normalized relative paths and inclusive line ranges. `confirmed` means directly supported by the cited input, `inferred` means reasoned from it, and `unknown` needs a short reason. A line range proves only what those bytes show; never present static paths as observed runtime behavior. Never embed source snippets, credentials, tokens, or private remote URLs.
 
 Author typed JSON outside the target repository. Set the title, summary, and labels in the user's language. Use the [schema and evidence contract](references/spec-contract.md#schema-evidence-and-layout-fields) and [typed graph rules](references/spec-contract.md#typed-graph-contract); use `render.py guide <type> --format text` for a concise type summary. Start with automatic graph layout. Inspect geometry diagnostics and the rendered view before adding explicit positions or route hints. Add hints only to fix a measured layout problem, never suppress a blocking warning, and group components only at evidenced boundaries. In workflows, keep the success or default path visually clear. Show a feedback edge only when the source supports recovery; keep unrecoverable failure, cancellation, and rejection as terminal outcomes. Evidence certainty describes claim support, not whether a step passed.
+
+### Topology and routing guardrails
+
+Follow three core layout principles to guarantee clean geometry and readable diagrams on the first draft:
+
+1. **Contiguous Lane Principle (หลักการเลนต่อเนื่อง)**: Keep components of the same boundary or stage in contiguous topological layers and vertical spans. Do not interleave unrelated boundary nodes across distant layers. Group early-exit or terminal nodes (e.g. fail-closed stop, reject) into their originating stage lane to maintain contiguous bounds and avoid boundary overlap traps.
+2. **Left-Feedback / Right-Forward Convention (ระเบียบคืนกลับชิดซ้าย)**: In ordered flows (TB or LR), forward progress moves monotonically along center and right tracks. Nodes with retry, loop, or compensation transitions (`feedback: true`) must be positioned at the leftmost index (`Index 0`) of shared `layout.layers`, with forward-branching nodes placed to the right, to prevent left/right routing collisions and node-crossing traps.
+3. **Concise Edge Labeling (ป้ายกำกับกระชับ)**: Keep transition and relationship labels brief (≤ 25 characters per line, at most 2 lines). Concise labels preserve required clearance (> 2.0 SVG units) between routes and adjacent text boxes without manual waypoint nudging. Push secondary parameters or long descriptions into node claims and evidence records.
+
+## Reader-first composition
+
+Before authoring the graph, write down the intended reader, the question this view answers, and one conclusion supported by the available evidence. Build a semantic view for that reader instead of serializing a file list or source-shaped graph directly.
+
+- In architecture views, label components by evidenced responsibility and label relationships by the actual call, data, or event. Keep paths and symbols in the evidence details unless the user explicitly requested a dependency map.
+- In workflows and lifecycles, use reader-facing actions and situations for node and transition labels. Keep raw code names, state variables, and evidence IDs in the details. Color may show phase or outcome, but shape and line style must still carry meaning without color.
+- Use boundaries for evidenced ownership or system boundaries, not just to decorate the graph. Show the main path first, then only the branches needed to explain the decision or failure.
+- Aim for about 20 visible transitions or fewer. If the subject needs more, narrow the question or make a few guided views; do not shrink labels until the graph technically fits. Preserve every state and mark on a model-check counterexample path.
+- A static dependency map is only a dependency map. State that its edges come from static imports and do not imply runtime calls or a complete architecture.
+
+After rendering, inspect the artifact at reader size. Fix meaning and scope before geometry; then check label wrapping, reading direction, branch distinction, edge clearance, and visual balance. Geometry diagnostics passing does not prove the diagram tells the right story.
 
 Add guided story views only when ordered exploration helps the reader. Story order does not prove causality or runtime impact. Keep titles and summaries clear, labels readable, route clearance generous, and controls compact. Use semantic shapes and line styles that convey meaning without color; omit detail and decoration that do not answer the request.
 
