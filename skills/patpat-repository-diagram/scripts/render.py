@@ -225,7 +225,7 @@ VIEWER_TEXT = {
         "guide_reach": "Use upstream or downstream reach to follow authored directed relationships.",
         "guide_route": "Choose two endpoints to probe an exact directed route; geometry never creates a route.",
         "guide_roles": "Compare two component kinds to highlight direct cross-kind relationships and show both directions.",
-        "guide_keys": "Keyboard: / search · Enter or Space activate · S style · T theme · E export · R route · L semantic lens · M overview · F presentation · + and − zoom · 0 reset · ? guide · Escape close.",
+        "guide_keys": "Keyboard: / search · Enter or Space activate · S style · T theme · E export · R route · L semantic lens · M overview · F presentation · P walkthrough · Space play or pause · ← and → step · A sound · N narrate · + and − zoom · 0 reset · ? guide · Escape close.",
         "passport": "Semantic passport",
         "passport_close": "Close passport",
         "passport_copy": "Copy deep link",
@@ -281,7 +281,19 @@ VIEWER_TEXT = {
         "zoom_fit": "Fit to view",
         "simulate": "Simulate flow",
         "simulate_pause": "Pause simulation",
-        "simulate_status": "Simulating: {node} ({step}/{total})",
+        "toggle_on": "on",
+        "toggle_off": "off",
+        "presenter_label": "Walkthrough",
+        "play_step": "Step {step} of {total}",
+        "play_via": "{from} \u2192 {to}",
+        "play_exception": "Exception path",
+        "play_alternatives": "Other paths here: {paths}",
+        "play_complete": "Walkthrough complete",
+        "play_previous": "Previous step",
+        "play_next": "Next step",
+        "play_close": "Close walkthrough",
+        "sound": "Sound",
+        "narrate": "Narrate",
         "export": "Export canonical diagram",
         "png": "PNG",
         "png_copy": "Copy PNG",
@@ -377,7 +389,7 @@ VIEWER_TEXT = {
         "guide_reach": "ใช้เส้นทางขาเข้าและขาออกเพื่อตามความสัมพันธ์แบบมีทิศทางที่ผู้เขียนระบุ",
         "guide_route": "เลือกจุดเริ่มและจุดหมายเพื่อตรวจเส้นทางจริง โดยไม่อนุมานจากตำแหน่งภาพ",
         "guide_roles": "เทียบชนิดองค์ประกอบสองชนิดเพื่อเน้นความสัมพันธ์ข้ามชนิดโดยตรง พร้อมนับแยกตามทิศทาง",
-        "guide_keys": "แป้นพิมพ์: / ค้นหา · Enter หรือ Space เลือก · S เปลี่ยนรูปแบบ · T เปลี่ยนธีม · E ส่งออก · R ตรวจเส้นทาง · L เลนส์ความหมาย · M ภาพรวม · F โหมดนำเสนอ · + และ − ขยาย/ย่อ · 0 คืนค่า · ? คู่มือ · Escape ปิด",
+        "guide_keys": "แป้นพิมพ์: / ค้นหา · Enter หรือ Space เลือก · S เปลี่ยนรูปแบบ · T เปลี่ยนธีม · E ส่งออก · R ตรวจเส้นทาง · L เลนส์ความหมาย · M ภาพรวม · F โหมดนำเสนอ · P นำเสนอทีละขั้น · Space เล่นหรือพัก · ← และ → เลื่อนขั้น · A เสียง · N บรรยาย · + และ − ขยาย/ย่อ · 0 คืนค่า · ? คู่มือ · Escape ปิด",
         "passport": "ข้อมูลความหมาย",
         "passport_close": "ปิดข้อมูล",
         "passport_copy": "คัดลอกลิงก์ตรง",
@@ -433,7 +445,19 @@ VIEWER_TEXT = {
         "zoom_fit": "พอดีจอ",
         "simulate": "จำลองการทำงาน",
         "simulate_pause": "พักจำลอง",
-        "simulate_status": "กำลังจำลอง: {node} ({step}/{total})",
+        "toggle_on": "เปิด",
+        "toggle_off": "ปิด",
+        "presenter_label": "การนำเสนอทีละขั้น",
+        "play_step": "ขั้น {step} จาก {total}",
+        "play_via": "{from} \u2192 {to}",
+        "play_exception": "เส้นทางกรณีผิดปกติ",
+        "play_alternatives": "ทางอื่นจากจุดนี้: {paths}",
+        "play_complete": "จบการนำเสนอ",
+        "play_previous": "ขั้นก่อนหน้า",
+        "play_next": "ขั้นถัดไป",
+        "play_close": "ปิดการนำเสนอ",
+        "sound": "เสียง",
+        "narrate": "บรรยาย",
         "export": "ส่งออก",
         "png": "PNG",
         "png_copy": "คัดลอก PNG",
@@ -575,7 +599,7 @@ HTML_CSS += """
 body{background:var(--canvas);color:var(--ink)}main{max-width:1680px;padding:12px clamp(12px,2vw,28px) 32px}
 .diagram-tools{max-width:none;margin:0 auto 10px;padding:8px;border-radius:12px;background:var(--paper);box-shadow:none}
 .primary-toolbar{display:flex;align-items:center;gap:8px}.primary-toolbar .search-field{flex:1 1 auto;max-width:660px;min-width:210px}.primary-toolbar .search-field input{min-height:42px}
-.primary-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}.primary-actions>button,.primary-actions>.export-tools>summary{min-height:36px;padding:6px 10px;font-size:12px}#zoom-out,#zoom-in{min-width:34px;font-weight:800;font-size:15px}#zoom-reset{min-width:52px;font-variant-numeric:tabular-nums}#zoom-fit{min-width:44px}button.action-simulate{border-color:var(--accent);color:var(--accent);font-weight:700}button.action-simulate.is-running{background:var(--accent);color:#fff;border-color:var(--accent)}@keyframes edge-flow{to{stroke-dashoffset:-24}}figure svg path.edge.is-simulating{stroke:var(--accent)!important;stroke-width:3.5!important;stroke-dasharray:7 4;animation:edge-flow .5s linear infinite}@keyframes token-pulse{0%,100%{filter:drop-shadow(0 0 4px var(--accent))}50%{filter:drop-shadow(0 0 12px var(--accent))}}figure svg [data-node-id].is-active-token .node-shape{stroke:var(--accent)!important;stroke-width:3.6!important;animation:token-pulse 1.2s ease-in-out infinite}figure svg{margin:0 auto}figure.is-panning{cursor:grabbing;user-select:none}
+.primary-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}.primary-actions>button,.primary-actions>.export-tools>summary{min-height:36px;padding:6px 10px;font-size:12px}#zoom-out,#zoom-in{min-width:34px;font-weight:800;font-size:15px}#zoom-reset{min-width:52px;font-variant-numeric:tabular-nums}#zoom-fit{min-width:44px}button.action-simulate{border-color:var(--accent);color:var(--accent);font-weight:700}button.action-simulate.is-running{background:var(--accent);color:#fff;border-color:var(--accent)}.presenter{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:40;width:min(760px,calc(100vw - 32px));display:grid;grid-template-columns:1fr auto;gap:4px 14px;align-items:center;padding:12px 14px 12px 18px;background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:14px;box-shadow:0 14px 40px rgba(0,0,0,.22)}.presenter[hidden]{display:none}.presenter-progress{grid-column:1/-1;height:3px;border-radius:3px;background:var(--accent-soft);overflow:hidden}.presenter-progress span{display:block;height:100%;width:0;background:var(--accent);transition:width .35s ease}.presenter-body p{margin:0}.presenter-step{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}.presenter-title{font-size:18px;font-weight:700;line-height:1.3}.presenter-detail{font-size:13px;color:var(--muted);line-height:1.4}.presenter-actions{display:flex;gap:4px}.presenter-actions button{min-width:34px;min-height:34px;padding:4px 8px;font-size:15px}.presenter-actions button[aria-pressed=true]{background:var(--accent);color:#fff;border-color:var(--accent)}.presenter.is-exception{border-color:#c2410c}.presenter.is-exception .presenter-progress span{background:#c2410c}body.presentation .presenter{bottom:28px;width:min(980px,calc(100vw - 48px))}body.presentation .presenter-title{font-size:26px}body.presentation .presenter-detail{font-size:16px}@media (max-width:640px){.presenter{grid-template-columns:1fr;bottom:8px;padding:10px 12px}.presenter-actions{justify-content:space-between}}@media (prefers-reduced-motion:reduce){.presenter-progress span{transition:none}}@media print{.presenter{display:none}}@keyframes edge-flow{to{stroke-dashoffset:-24}}figure svg path.edge.is-simulating{stroke:var(--accent)!important;stroke-width:3.5!important;stroke-dasharray:7 4;animation:edge-flow .5s linear infinite}@keyframes token-pulse{0%,100%{filter:drop-shadow(0 0 4px var(--accent))}50%{filter:drop-shadow(0 0 12px var(--accent))}}figure svg [data-node-id].is-active-token .node-shape{stroke:var(--accent)!important;stroke-width:3.6!important;animation:token-pulse 1.2s ease-in-out infinite}figure svg{margin:0 auto}figure.is-panning{cursor:grabbing;user-select:none}
 button{border-color:var(--line);border-radius:7px;font-size:12px;letter-spacing:.005em}button:hover{border-color:var(--accent);background:var(--accent-soft)}
 .explore-tools{max-width:none;margin:4px 0 0;border:0;background:transparent}.explore-tools>summary{display:inline-flex;align-items:center;gap:6px;padding:4px 7px;color:var(--muted);font-size:12px;list-style:none}.explore-tools>summary::-webkit-details-marker{display:none}.explore-tools>summary::before{content:"＋";font-weight:800}.explore-tools[open]>summary::before{content:"−";color:var(--accent)}.advanced-tools{padding:4px 8px 2px;border-top:1px solid var(--line)}
 .advanced-tools .tool-row{margin:8px 0}.advanced-tools .tool-field{max-width:360px}.advanced-tools .tool-status{margin:4px 0}
@@ -2241,7 +2265,7 @@ def _viewer_script() -> str:
         source = script_path.read_text(encoding="utf-8")
     except OSError as error:
         raise DiagramError("trusted viewer source is unavailable") from error
-    if len(source.encode("utf-8")) > 100_000 or "</script" in source.lower():
+    if len(source.encode("utf-8")) > 128_000 or "</script" in source.lower():
         raise DiagramError("trusted viewer source failed its integrity boundary")
     return source
 

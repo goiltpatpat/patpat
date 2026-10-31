@@ -376,6 +376,7 @@
   }
 
   function clearStory({ hash = true, apply = true } = {}) {
+    if (plan?.story) stopSimulation();
     const wasActive = Boolean(currentStory);
     currentStory = null;
     if (hash && wasActive && location.hash.startsWith("#story/")) setHash("");
@@ -1687,7 +1688,7 @@
     window.addEventListener("resize", updateOverviewViewport);
     figure.addEventListener("scroll", updateOverviewViewport, { passive: true });
     window.addEventListener("hashchange", handleHash);
-    document.addEventListener("visibilitychange", () => { if (document.hidden) { stopTrace(true); stopSimulation(); } });
+    document.addEventListener("visibilitychange", () => { if (document.hidden) { stopTrace(true); if (isSim) pausePresenter(); } });
     document.addEventListener("keydown", (event) => {
       const target = event.target;
       const editable = target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName));
@@ -1698,6 +1699,12 @@
         stopTrace(true);
         stopSimulation();
       } else if (editable) return;
+      else if (presenter && !presenter.hidden && (event.key === "ArrowLeft" || event.key === "ArrowRight" || (event.key === " " && (target === document.body || target.id === "presentation-exit" || (target.closest?.("figure") && !target.closest("[data-node-id], [data-edge-id]")))))) {
+        event.preventDefault();
+        if (event.key === " ") toggleSimulation(); else stepPresenter(event.key === "ArrowRight" ? 1 : -1);
+      }
+      else if (event.key.toLowerCase() === "a") { event.preventDefault(); ensurePresenter(); togglePresenterPref("sound"); }
+      else if (event.key.toLowerCase() === "n" && window.speechSynthesis) { event.preventDefault(); ensurePresenter(); togglePresenterPref("narrate"); }
       else if (event.key === "/") { event.preventDefault(); params.search?.focus(); }
       else if (event.key.toLowerCase() === "s") { event.preventDefault(); cycleVisualPreset(); }
       else if (event.key.toLowerCase() === "t") { event.preventDefault(); toggleTheme(); }
@@ -1755,63 +1762,229 @@
     figure.scrollLeft = Math.max(0, (figure.scrollWidth - figure.clientWidth) / 2);
     figure.scrollTop = 0;
   }
+  // Walkthrough player: an authored story wins, then sequence order, then the main path chosen by relationship kind.
+  const EXCEPTION_KINDS = new Set(["error", "cancel", "timeout", "retry", "no"]);
+  const PREFERRED_KINDS = ["next", "yes", "transition", "approval", "condition", "call", "async", "event", "data", "stream", "return"];
+  const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  const presenterPrefs = (() => { try { return JSON.parse(localStorage.getItem("patpat-presenter") || "{}"); } catch { return {}; } })();
+  const savePresenterPrefs = () => { try { localStorage.setItem("patpat-presenter", JSON.stringify(presenterPrefs)); } catch {} };
+  let plan = null, planIndex = 0, playGeneration = 0, audio = null, presenter = null, finished = false;
+  const say = (template, values) => Object.entries(values).reduce((text, [key, value]) => text.replaceAll(`{${key}}`, value), template);
+  const escapeHtml = (text) => String(text).replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[char]);
+  const labelOf = (id) => byNode.get(id)?.dataset.label || edgeData.find((edge) => edge.id === id)?.label || id;
+  const edgeStep = (edge) => ({ id: edge.id, edge, alternatives: [] });
+  const diagramTitle = () => svg.querySelector("title")?.textContent?.trim() || document.title.split(" \u00b7 ")[0];
+
+  function edgeRank(edge) {
+    const index = PREFERRED_KINDS.indexOf(edge.kind);
+    return (EXCEPTION_KINDS.has(edge.kind) ? 100 : 0) + (index < 0 ? 50 : index);
+  }
+
+  function buildPlan() {
+    const view = storyViews.find((item) => item.id === (currentStory?.id || params.storyView?.value));
+    if (view) {
+      return { title: view.label, note: view.note || "", story: view.id, steps: view.focus.map((id) => {
+        const edge = edgeData.find((item) => item.id === id);
+        return edge ? edgeStep(edge) : { id, edge: null, alternatives: [] };
+      }) };
+    }
+    const ordered = edgeData.filter((edge) => edge.order !== "").sort((a, b) => Number(a.order) - Number(b.order));
+    if (ordered.length) return { title: diagramTitle(), note: "", steps: ordered.map(edgeStep) };
+    const incoming = new Set(edgeData.filter((edge) => !edge.feedback).map((edge) => edge.target));
+    const start = nodes.find((node) => ["start", "initial"].includes(node.dataset.kind))
+      || nodes.find((node) => !incoming.has(node.dataset.nodeId)) || nodes[0];
+    if (!start) return null;
+    const steps = [], visited = new Set();
+    let current = start.dataset.nodeId;
+    while (current && !visited.has(current) && steps.length < 60) {
+      visited.add(current);
+      steps.push({ id: current, edge: null, alternatives: [] });
+      const outgoing = edgeData.filter((edge) => edge.source === current && !edge.feedback).sort((a, b) => edgeRank(a) - edgeRank(b));
+      if (!outgoing.length) break;
+      steps.push({ id: outgoing[0].id, edge: outgoing[0], alternatives: outgoing.slice(1) });
+      current = outgoing[0].target;
+    }
+    return { title: diagramTitle(), note: "", steps };
+  }
+
+  function tone(frequency, duration, type = "sine", gain = 0.05, delay = 0) {
+    if (!presenterPrefs.sound) return;
+    try {
+      audio ||= new (window.AudioContext || window.webkitAudioContext)();
+      if (audio.state === "suspended") audio.resume();
+      const at = audio.currentTime + delay, oscillator = audio.createOscillator(), envelope = audio.createGain();
+      oscillator.type = type;
+      oscillator.frequency.setValueAtTime(frequency, at);
+      envelope.gain.setValueAtTime(0.0001, at);
+      envelope.gain.exponentialRampToValueAtTime(gain, at + 0.015);
+      envelope.gain.exponentialRampToValueAtTime(0.0001, at + duration);
+      oscillator.connect(envelope).connect(audio.destination);
+      oscillator.start(at);
+      oscillator.stop(at + duration + 0.03);
+    } catch {}
+  }
+
+  function cue(step, progress) {
+    if (step.edge && EXCEPTION_KINDS.has(step.edge.kind)) { tone(233, 0.26, "triangle", 0.06); tone(196, 0.3, "triangle", 0.05, 0.13); }
+    else if (step.edge) tone(740 + progress * 300, 0.06, "sine", 0.03);
+    else tone(523 + progress * 262, 0.13, "sine", 0.05);
+  }
+
+  function narrate(text) {
+    if (!presenterPrefs.narrate || !window.speechSynthesis) return Promise.resolve();
+    return new Promise((resolve) => {
+      const utterance = new SpeechSynthesisUtterance(text), lang = document.documentElement.lang || "en";
+      utterance.lang = lang;
+      const voices = speechSynthesis.getVoices().filter((voice) => voice.lang.toLowerCase().startsWith(lang.toLowerCase()));
+      utterance.voice = voices.find((voice) => voice.localService) || null;
+      utterance.onend = utterance.onerror = () => resolve();
+      speechSynthesis.cancel();
+      speechSynthesis.speak(utterance);
+      setTimeout(resolve, 15000);
+    });
+  }
+
+  function ensurePresenter() {
+    if (presenter) return presenter;
+    const button = (name, text, label) => `<button type="button" data-presenter="${name}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${text}</button>`;
+    presenter = document.createElement("div");
+    presenter.className = "presenter";
+    presenter.setAttribute("role", "region");
+    presenter.hidden = true;
+    presenter.setAttribute("aria-label", ui.presenter_label || "Walkthrough");
+    presenter.innerHTML = `<div class="presenter-progress"><span></span></div><div class="presenter-body"><p class="presenter-step"></p><p class="presenter-title"></p><p class="presenter-detail"></p><p class="presenter-live sr-only" aria-live="polite"></p></div><div class="presenter-actions">${button("previous", "⏮", ui.play_previous || "Previous step")}${button("play", "⏸", ui.simulate_pause || "Pause")}${button("next", "⏭", ui.play_next || "Next step")}${button("sound", "♪", ui.sound || "Sound")}${button("narrate", "☷", ui.narrate || "Narrate")}${button("close", "✕", ui.play_close || "Close walkthrough")}</div>`;
+    if (!window.speechSynthesis) presenter.querySelector('[data-presenter="narrate"]').hidden = true;
+    presenter.addEventListener("click", (event) => {
+      const action = event.target.closest("[data-presenter]")?.dataset.presenter;
+      if (action === "previous" || action === "next") stepPresenter(action === "next" ? 1 : -1);
+      else if (action === "play") isSim ? pausePresenter() : resumePresenter();
+      else if (action === "sound" || action === "narrate") togglePresenterPref(action);
+      else if (action === "close") { stopSimulation(); controls("workflow-simulate")?.focus({ preventScroll: true }); }
+    });
+    document.body.appendChild(presenter);
+    syncPresenterPrefs();
+    return presenter;
+  }
+
+  function syncPresenterPrefs() {
+    for (const key of ["sound", "narrate"]) presenter?.querySelector(`[data-presenter="${key}"]`)?.setAttribute("aria-pressed", String(Boolean(presenterPrefs[key])));
+  }
+
+  function togglePresenterPref(key) {
+    presenterPrefs[key] = !presenterPrefs[key];
+    if (key === "narrate" && !presenterPrefs.narrate) window.speechSynthesis?.cancel();
+    savePresenterPrefs();
+    syncPresenterPrefs();
+    announce(`${ui[key] || key}: ${presenterPrefs[key] ? (ui.toggle_on || "on") : (ui.toggle_off || "off")}`);
+    if (key === "sound") tone(660, 0.1);
+  }
+
+  function clearPlayClasses() {
+    svg.querySelectorAll(".is-active-token, .is-simulating").forEach((item) => item.classList.remove("is-active-token", "is-simulating"));
+  }
+
+  function showStep(index) {
+    const step = plan.steps[index], total = plan.steps.length, progress = total > 1 ? index / (total - 1) : 1;
+    planIndex = index;
+    clearPlayClasses();
+    if (plan.story) applyStoryBeat(plan.story, step.id, { hash: false });
+    const element = step.edge ? byEdge.get(step.id) : byNode.get(step.id);
+    element?.classList.add(step.edge ? "is-simulating" : "is-active-token", "is-highlighted");
+    if (step.edge) for (const id of [step.edge.source, step.edge.target]) byNode.get(id)?.classList.add("is-highlighted");
+    (step.edge ? byNode.get(step.edge.target) : element)?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "center", inline: "center" });
+    const title = step.edge ? step.edge.label : labelOf(step.id);
+    const details = [];
+    if (step.edge) details.push(say(ui.play_via || "{from} → {to}", { from: labelOf(step.edge.source), to: labelOf(step.edge.target) }));
+    if (step.edge && EXCEPTION_KINDS.has(step.edge.kind)) details.push(ui.play_exception || "Exception path");
+    if (step.alternatives.length) details.push(say(ui.play_alternatives || "Other paths here: {paths}", { paths: step.alternatives.map((edge) => `${edge.label} → ${labelOf(edge.target)}`).join(" · ") }));
+    if (plan.note && index === total - 1) details.push(plan.note);
+    const box = ensurePresenter();
+    box.hidden = false;
+    box.classList.toggle("is-exception", Boolean(step.edge && EXCEPTION_KINDS.has(step.edge.kind)));
+    box.querySelector(".presenter-progress span").style.width = `${Math.round(progress * 100)}%`;
+    box.querySelector(".presenter-step").textContent = `${say(ui.play_step || "Step {step} of {total}", { step: String(index + 1), total: String(total) })} · ${plan.title}`;
+    box.querySelector(".presenter-title").textContent = title;
+    box.querySelector(".presenter-detail").textContent = details.join(" — ");
+    box.querySelector('[data-presenter="previous"]').disabled = index === 0;
+    box.querySelector('[data-presenter="next"]').disabled = index >= total - 1;
+    cue(step, progress);
+    const words = [title, ...details].join(". ");
+    if (!presenterPrefs.narrate) box.querySelector(".presenter-live").textContent = words;
+    return { spoken: narrate(words), words };
+  }
+
+  function scheduleFrom(index) {
+    const generation = ++playGeneration, step = plan.steps[index];
+    finished = false;
+    const { spoken, words } = showStep(index);
+    const dwell = Math.min(9000, Math.max(2400, 1400 + words.length * 50));
+    Promise.all([spoken, new Promise((resolve) => { simTimer = setTimeout(resolve, step.edge ? dwell * 0.8 : dwell); })]).then(() => {
+      if (!isSim || generation !== playGeneration) return;
+      if (index + 1 < plan.steps.length) scheduleFrom(index + 1);
+      else finishPresenter();
+    });
+  }
+
+  function finishPresenter() {
+    isSim = false;
+    finished = true;
+    setPlayButtons();
+    tone(523, 0.16); tone(659, 0.16, "sine", 0.05, 0.14); tone(784, 0.3, "sine", 0.05, 0.28);
+    const box = ensurePresenter();
+    box.querySelector(".presenter-step").textContent = ui.play_complete || "Walkthrough complete";
+    box.querySelector(".presenter-live").textContent = ui.play_complete || "Walkthrough complete";
+  }
+
+  function setPlayButtons() {
+    const button = controls("workflow-simulate");
+    if (button) { button.textContent = `${isSim ? "⏸" : "▶"} ${isSim ? (ui.simulate_pause || "Pause") : (ui.simulate || "Simulate flow")}`; button.classList.toggle("is-running", isSim); }
+    const play = presenter?.querySelector('[data-presenter="play"]');
+    if (play) { play.textContent = isSim ? "⏸" : "▶"; play.setAttribute("aria-label", isSim ? (ui.simulate_pause || "Pause") : (ui.simulate || "Play")); }
+  }
+
+  function pausePresenter() {
+    isSim = false;
+    playGeneration += 1;
+    if (simTimer) clearTimeout(simTimer);
+    window.speechSynthesis?.cancel();
+    setPlayButtons();
+    announce(ui.simulate_pause || "Paused");
+  }
+
+  function resumePresenter() {
+    if (!plan) return;
+    isSim = true;
+    setPlayButtons();
+    scheduleFrom(finished ? 0 : planIndex);
+  }
+
+  function stepPresenter(delta) {
+    if (!plan) return;
+    pausePresenter();
+    finished = false;
+    showStep(Math.max(0, Math.min(plan.steps.length - 1, planIndex + delta)));
+  }
+
   function stopSimulation() {
     if (simTimer) clearTimeout(simTimer);
-    simTimer = 0; isSim = false;
-    const b = controls("workflow-simulate");
-    if (b) { b.textContent = `\u25b6 ${ui.simulate || "Simulate flow"}`; b.classList.remove("is-running"); }
-    svg.querySelectorAll(".is-simulating").forEach((e) => e.classList.remove("is-simulating"));
-    svg.querySelectorAll(".is-active-token").forEach((e) => e.classList.remove("is-active-token"));
+    simTimer = 0; isSim = false; plan = null; playGeneration += 1;
+    window.speechSynthesis?.cancel();
+    setPlayButtons();
+    clearPlayClasses();
+    if (presenter) presenter.hidden = true;
+    applyView();
   }
+
   function toggleSimulation() {
-    if (isSim) { stopSimulation(); announce(ui.simulate_pause || "Simulation paused"); return; }
-    const start = nodes.find((n) => ["start", "initial"].includes(n.dataset.kind)) || nodes[0];
-    if (!start) return;
-    const seq = [], visited = new Set();
-    let curr = start.dataset.nodeId;
-    while (curr && !visited.has(curr) && seq.length < 40) {
-      visited.add(curr);
-      const out = edgeData.filter((e) => e.source === curr && !e.feedback);
-      if (!out.length) { seq.push({ node: curr, edge: null }); break; }
-      const chosen = out.find((e) => {
-        const lbl = (e.label + " " + (byNode.get(e.target)?.dataset.label || "")).toLowerCase();
-        return !lbl.includes("\u0e22\u0e01\u0e40\u0e25\u0e34\u0e01") && !lbl.includes("stop") && !lbl.includes("fail") && !lbl.includes("\u0e02\u0e32\u0e14\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c");
-      }) || out[0];
-      seq.push({ node: curr, edge: chosen.id });
-      curr = chosen.target;
-    }
-    if (!seq.length) return;
+    if (isSim) { pausePresenter(); return; }
+    if (plan && presenter && !presenter.hidden) { resumePresenter(); return; }
+    plan = buildPlan();
+    if (!plan || !plan.steps.length) return;
     isSim = true;
-    const b = controls("workflow-simulate");
-    if (b) { b.textContent = `\u23f8 ${ui.simulate_pause || "Pause"}`; b.classList.add("is-running"); }
-    let step = 0;
-    const tick = () => {
-      if (!isSim || step >= seq.length) {
-        if (step >= seq.length) simTimer = setTimeout(() => { stopSimulation(); announce("Simulation completed"); }, 1200);
-        else stopSimulation();
-        return;
-      }
-      const item = seq[step];
-      const nodeEl = byNode.get(item.node), edgeEl = item.edge ? byEdge.get(item.edge) : null;
-      svg.querySelectorAll(".is-active-token").forEach((e) => e.classList.remove("is-active-token"));
-      svg.querySelectorAll(".is-simulating").forEach((e) => e.classList.remove("is-simulating"));
-      if (nodeEl) {
-        nodeEl.classList.add("is-active-token", "is-highlighted");
-        nodeEl.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
-        announce((ui.simulate_status || "{node} ({step}/{total})").replace("{node}", nodeEl.dataset.label || item.node).replace("{step}", String(step + 1)).replace("{total}", String(seq.length)));
-      }
-      if (edgeEl) {
-        simTimer = setTimeout(() => {
-          if (!isSim) return;
-          edgeEl.classList.add("is-simulating", "is-highlighted");
-          simTimer = setTimeout(() => { step++; tick(); }, 650);
-        }, 550);
-      } else {
-        step++;
-        simTimer = setTimeout(tick, 800);
-      }
-    };
-    tick();
+    setPlayButtons();
+    if (document.body.classList.contains("presentation")) fitToView();
+    if (presenterPrefs.sound) tone(440, 0.05, "sine", 0.02);
+    scheduleFrom(0);
   }
 
   function changeZoom(delta) {
