@@ -139,7 +139,15 @@ try {
     } else if ((verdict === 0 || verdict === 1) && fs.existsSync(done)) {
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       try {
-        fs.renameSync(done, dest);
+        try {
+          fs.renameSync(done, dest);
+        } catch (error) {
+          // Windows will not rename onto any existing folder; rmdir still refuses one that is not empty.
+          if (process.platform !== "win32" || codeOf(error) !== "EPERM") throw error;
+          if (!fs.statSync(dest, { throwIfNoEntry: false })?.isDirectory()) throw error;
+          fs.rmdirSync(dest);
+          fs.renameSync(done, dest);
+        }
       } catch (error) {
         if (codeOf(error) !== "ENOTEMPTY" && codeOf(error) !== "EEXIST") throw error;
         throw new Error(

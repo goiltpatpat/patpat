@@ -721,8 +721,8 @@ test("a step hidden by the view is not drawn, and the report counts it", () => {
   const view = path.join(tempDir("statechart-view-"), "view.mjs");
   fs.writeFileSync(
     view,
-    `export * from ${JSON.stringify(path.join(dir, "view.mjs"))};\n` +
-      `import { step as words } from ${JSON.stringify(path.join(dir, "view.mjs"))};\n` +
+    `export * from ${JSON.stringify(pathToFileURL(path.join(dir, "view.mjs")).href)};\n` +
+      `import { step as words } from ${JSON.stringify(pathToFileURL(path.join(dir, "view.mjs")).href)};\n` +
       `export const step = (action, from, to) => action === "ACallComesIn" ? null : words(action, from, to);\n`,
   );
   const r = run(dir, { view });
@@ -740,7 +740,7 @@ test("a view that hides a step of a bug path stops the command with exit 2", () 
   const view = path.join(tempDir("statechart-view-"), "view.mjs");
   fs.writeFileSync(
     view,
-    `export * from ${JSON.stringify(path.join(dir, "view.mjs"))};\n` +
+    `export * from ${JSON.stringify(pathToFileURL(path.join(dir, "view.mjs")).href)};\n` +
       `export const step = (action) => (action === "YouTurnItUp" ? null : action);\n`,
   );
   const r = run(dir, { view });
