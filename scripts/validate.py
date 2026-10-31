@@ -1506,7 +1506,7 @@ def validate_root(root: Path) -> list[str]:
     agents_guide = root / "AGENTS.md"
     if not agents_guide.is_file():
         errors.append(f"{agents_guide}: missing agent install contract")
-    markdown_files = [root / "README.md", agents_guide]
+    markdown_files = [path for path in root.glob("*.md") if path.is_file()] + [agents_guide]
     for folder_name in ("docs", "skills", "agents", "adapters"):
         folder = root / folder_name
         if folder.is_dir():

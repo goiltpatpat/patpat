@@ -5,6 +5,8 @@
 [![Validate](https://github.com/goiltpatpat/patpat/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/goiltpatpat/patpat/actions/workflows/validate.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2f6f5f.svg)](LICENSE)
 
+[English](README.md) · [ภาษาไทย](README.th.md)
+
 **A little more proof. A lot less guesswork.**
 
 Patpat is an evidence-driven operating layer for AI agents. It gives an agent the judgment of a careful senior engineer: understand the real problem, choose the right depth of work, make a focused change, prove the result on the surface that matters, and say plainly what is still unverified. It covers code and repository work, other deliverables such as documents and analyses, and mixed work, and it runs on Codex, Claude Code, Grok CLI, Antigravity, Cursor, and other Agent Skills hosts.
@@ -58,6 +60,13 @@ $patpat explain where this request is validated and what could bypass it
 $patpat plan the migration, identify the risks, and tell me what evidence we need
 $patpat can our checkout charge a customer twice? show me the path
 ```
+
+## Getting the best results
+
+- **Match depth to the task (Proportionality):** For simple questions, audits, or exploration, call [`patpat-inspect`](skills/patpat-inspect/SKILL.md) directly to stay read-only. Reserve the full `/patpat` loop for changes that need root-cause proof and verification.
+- **Name the verification surface upfront:** Tell the agent how you expect the claim to be proven (e.g. `$patpat fix the timeout and verify with existing integration tests`).
+- **Use safety modifiers:** Keep work sandboxed by adding `local only` (prevents Git push/PR creation), or ask to `plan first` before touching any code.
+- **Direct-call specialized skills:** When you know the exact output you want (such as [`patpat-repository-diagram`](skills/patpat-repository-diagram/SKILL.md) for architecture maps, or [`patpat-statechart`](skills/patpat-statechart/SKILL.md) to model check race conditions), invoke that skill directly instead of routing through the loop.
 
 ## How it works
 

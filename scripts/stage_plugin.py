@@ -25,6 +25,7 @@ PACKAGE_ENTRIES = (
     "AGENTS.md",
     "LICENSE",
     "README.md",
+    "README.th.md",
     "adapters",
     "agents",
     "assets",
