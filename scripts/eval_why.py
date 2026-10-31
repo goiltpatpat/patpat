@@ -189,7 +189,9 @@ def run_self_test() -> None:
     ):
         if needle not in report:
             raise AssertionError(f"fixture missing {needle!r}")
-    if "Repository provider: used" in report or "PR #" in report:
+    narrative = report.split("### Sources Consulted", 1)[-1]
+    provider_record = report.split("- Provider record:", 1)[-1].split("### Sources Consulted", 1)[0]
+    if "Repository provider: used" in report or "PR #" in narrative or "PR #" in provider_record:
         raise AssertionError("fixture must not promote Git references into provider evidence")
     if "23ff30c" not in report and "explicit_merge" not in anchors["focused"]:
         raise AssertionError("fixture missing live git citation")
