@@ -45,14 +45,14 @@ Create a new output path. The renderer refuses an output path that already exist
 Receipt diagrams use the copied PStack Mermaid backend and pinned Pele `1.9.0` renderer. Node.js 22 or newer is required. The adapter draws only the validated selected trace, disables links/images, and makes no network calls during rendering. It does not invoke the native statechart TLC runner.
 
 ```text
-python3 <repo-root>/skills/patpat-formal-verify/statechart/scripts/render_statechart_receipts.py \
+python3 <repo-root>/skills/patpat-statechart/scripts/render_statechart_receipts.py \
   --receipt-dir <directory-containing-saved-receipts> \
   --view <view-mapping.json> \
   --repo-root <repository-root> \
   --out-dir <new-output-directory>
 ```
 
-Before rendering, execute `npm ci` with the working directory set to `<repo-root>/skills/patpat-formal-verify/statechart/scripts`.
+Before rendering, execute `npm ci` with the working directory set to `<repo-root>/skills/patpat-statechart/scripts`.
 
 To include a previously saved replay report for the `stale-generation` case, add:
 

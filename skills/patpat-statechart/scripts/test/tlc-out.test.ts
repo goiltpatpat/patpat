@@ -12,7 +12,8 @@ import { readMessages } from "../frontends/messages.ts";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const corpus = path.join(here, "corpus");
 const skip = !process.env.TLA2TOOLS && "set TLA2TOOLS to the path of tla2tools.jar to run TLC";
-const read = (file: string) => fs.readFileSync(file, "utf8");
+// A core.autocrlf checkout gives the committed goldens CRLF; the tool writes LF.
+const read = (file: string) => fs.readFileSync(file, "utf8").replace(/\r\n/g, "\n");
 const maybe = (file: string) => (fs.existsSync(file) ? read(file) : "");
 const plain = (text: string) => [...plainText(readMessages(text))].join("");
 

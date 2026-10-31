@@ -100,6 +100,7 @@ SKILL_POLICIES = {
     "patpat-setup": "mutating",
     "patpat-ship": "mutating",
     "patpat-skill": "mutating",
+    "patpat-statechart": "mutating",
     "patpat-swarm": "mutating",
     "patpat-unslop": "read-only",
     "patpat-verifier": "mutating",
@@ -125,6 +126,7 @@ EXPECTED_MUTATING_SKILLS = {
     "patpat-setup",
     "patpat-ship",
     "patpat-skill",
+    "patpat-statechart",
     "patpat-swarm",
     "patpat-verifier",
 }

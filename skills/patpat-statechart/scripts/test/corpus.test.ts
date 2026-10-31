@@ -10,7 +10,8 @@ import { check, PINNED_FLAGS } from "../run.ts";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const corpus = path.join(here, "corpus");
 const skip = !process.env.TLA2TOOLS && "set TLA2TOOLS to the path of tla2tools.jar to run TLC";
-const read = (file: string) => fs.readFileSync(file, "utf8");
+// A core.autocrlf checkout gives the committed goldens CRLF; the tool writes LF.
+const read = (file: string) => fs.readFileSync(file, "utf8").replace(/\r\n/g, "\n");
 
 for (const name of fs.readdirSync(corpus)) {
   test(`${name} gives the committed chart and report when TLC runs`, { skip }, () => {
@@ -56,7 +57,9 @@ for (const name of fs.readdirSync(corpus)) {
   });
 }
 
-test("a spec in a folder whose name is not ASCII checks under the POSIX locale", { skip }, () => {
+// Java on Windows reads argv in the ANSI code page, so TLC cannot open a path outside it.
+const ansiSkip = process.platform === "win32" && "Java on Windows reads argv in the ANSI code page";
+test("a spec in a folder whose name is not ASCII checks under the POSIX locale", { skip: skip || ansiSkip }, () => {
   const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "statechart-corpus-")), "spec-é");
   fs.cpSync(path.join(corpus, "Login"), dir, { recursive: true });
   const out = path.join(dir, "out");

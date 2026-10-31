@@ -55,7 +55,7 @@ export function* fileLines(file: string) {
         kept = end;
         continue;
       }
-      yield* buf.toString("utf8", 0, cut).split(/\r?\n/);
+      yield* buf.toString("utf8", 0, cut).replace(/\r$/, "").split(/\r?\n/);
       kept = buf.copy(buf, 0, cut + 1, end);
     }
     yield buf.toString("utf8", 0, kept).replace(/\r$/, "");
@@ -137,7 +137,7 @@ const joined = (files: string[]): Output => {
 
 const utf8 = new TextDecoder("utf-8", { ignoreBOM: true });
 
-function* outputLines(output: Output) {
+export function* outputLines(output: Output) {
   let rest: Uint8Array = new Uint8Array(0);
   for (const part of output) {
     const buf = rest.length ? Buffer.concat([rest, part]) : part;
@@ -146,10 +146,11 @@ function* outputLines(output: Output) {
       rest = buf;
       continue;
     }
-    yield* utf8.decode(buf.subarray(0, cut)).split("\n");
+    // Java on Windows ends lines with CRLF; a kept CR hides every TLC message marker.
+    yield* utf8.decode(buf.subarray(0, cut)).replace(/\r$/, "").split(/\r?\n/);
     rest = buf.subarray(cut + 1);
   }
-  yield utf8.decode(rest);
+  yield utf8.decode(rest).replace(/\r$/, "");
 }
 
 const messagesOf = (output: Output): Iterable<Part> => ({
@@ -286,9 +287,12 @@ export async function check(specFile: string, configFile: string): Promise<Check
     const runJava = (name: string, main: string, args: string[], jvm: string[] = []) => {
       const tmp = path.join(dir, `tmp-${name}`);
       fs.mkdirSync(tmp);
+      // Windows cannot exec a script by its shebang, so run a JS/TS java stand-in with Node.
+      const script = process.platform === "win32" && /\.[cm]?[jt]s$/.test(tlc.java);
       return runToFiles(
-        tlc.java,
+        script ? process.execPath : tlc.java,
         [
+          ...(script ? [tlc.java] : []),
           `-Djava.io.tmpdir=${tmp}`,
           `-DTLA-Library=${folder}`,
           ...jvm,

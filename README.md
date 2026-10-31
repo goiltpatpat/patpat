@@ -195,7 +195,8 @@ Cursor uses `/patpat` or `/patpat-loop`. Codex uses `$patpat` or `$patpat-loop`.
 | [`patpat-ship`](skills/patpat-ship/SKILL.md) | Commit-and-PR when delivery intent exists; merge only when explicitly named. |
 | [`patpat-skill`](skills/patpat-skill/SKILL.md) | Author a reusable skill. |
 | [`patpat-eval`](skills/patpat-eval/SKILL.md) | Evaluate skill triggering and behavior against the authorized project with an evidence rubric. |
-| [`patpat-formal-verify`](skills/patpat-formal-verify/SKILL.md) | Create, maintain, and inspect bounded formal verification models, statecharts, and saved receipts. |
+| [`patpat-statechart`](skills/patpat-statechart/SKILL.md) | Chart how a flow moves between states, check its rules with TLC, and show each bug as a path. |
+| [`patpat-formal-verify`](skills/patpat-formal-verify/SKILL.md) | Create and maintain bounded formal verification models that later changes rerun. |
 | [`patpat-unslop`](skills/patpat-unslop/SKILL.md) | Cut superficial patterns and fluff from engineering docs, PR text, and code diffs. |
 | [`patpat-verifier`](skills/patpat-verifier/SKILL.md) | Create or maintain a project-specific verifier. |
 | [`patpat-learn`](skills/patpat-learn/SKILL.md) | Encode a recurring failure. |

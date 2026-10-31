@@ -11,7 +11,7 @@ Before following this skill, apply the [skill state and mutation gate](../patpat
 
 Use this route only when the user explicitly asks for a diagram, map, visual explainer, or shareable view. Accept a brief, repository evidence, or both. Deliver a focused HTML artifact with editable typed JSON and SVG; preserve stable IDs when refining it. Patpat owns the schema, renderer, layout, viewer, and output contract. Do not install Archify or depend on its runtime. See [design references and attribution](references/spec-contract.md#selected-design-references) and [third-party notices](references/THIRD_PARTY_NOTICES.md). Before running a script, replace `<skill-root>` with the absolute directory containing this loaded `SKILL.md`.
 
-For a formal TLA+/TLC statechart or saved `patpat-model-check-receipt`, route to the dedicated statechart module in [patpat-formal-verify](../patpat-formal-verify/SKILL.md). This skill remains the route for general architecture, workflow, sequence, dataflow, and product-lifecycle diagrams. A TLC invariant violation is a mark on a model state, not a lifecycle terminal or proof of a runtime defect.
+When the request asks which states a flow can reach or whether a rule can break, for a TLA+/TLC statechart, or for a saved `patpat-model-check-receipt`, route to [patpat-statechart](../patpat-statechart/SKILL.md). This skill remains the route for architecture, workflow, sequence, dataflow, and product-lifecycle diagrams that show structure without checking rules. A TLC invariant violation is a mark on a model state, not a lifecycle terminal or proof of a runtime defect.
 
 ## Scope and route
 

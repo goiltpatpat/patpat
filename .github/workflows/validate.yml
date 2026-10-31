@@ -151,3 +151,19 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/smoke_windows_codex_hooks.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/test_statechart_receipts.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+
+      # The Windows checkout converts goldens to CRLF and Java prints CRLF; replayed TLC output covers both.
+      - name: Statechart TLC output on a CRLF checkout
+        working-directory: skills/patpat-statechart/scripts
+        run: |
+          node --test test/output-lines.test.ts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test --test-name-pattern="writes the committed chart and report from TLC's output" test/cli.test.ts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

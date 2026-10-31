@@ -1,6 +1,17 @@
+---
+name: patpat-statechart
+description: Model how a product flow, protocol, service, or business process moves between states, check the rules the reader agrees to with TLA+/TLC, and show each broken rule as a path on a Mermaid statechart in the reader's words. Use to chart a flow, ask whether it can get stuck or break, show a bug as a path through states, or render a saved model-check receipt; use patpat-repository-diagram for structure-only diagrams and patpat-formal-verify for a durable project verification suite.
+metadata:
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Artifact","requires_state":["workspace-root-open"],"produces_state":[],"verification_cmd":""}'
+---
+
 # Patpat Statechart
 
-This is the statechart module owned by [`patpat-formal-verify`](../SKILL.md), not a separately discovered skill. Follow the parent skill's state and mutation gate. Use [`patpat-repository-diagram`](../../patpat-repository-diagram/SKILL.md) for general architecture, workflow, sequence, dataflow, and product-lifecycle diagrams. Use a scratch folder outside the repository for native TLA+/TLC runs.
+Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
+
+Use this skill when the question is about behavior over time: what states a checkout, login, media player, deploy, agent workflow, or a shop's order process can reach, and whether a rule the reader cares about can break. The flow does not need code; a written process is enough. Use [`patpat-repository-diagram`](../patpat-repository-diagram/SKILL.md) for structure, dataflow, and sequence views with no rules to check. Use [`patpat-formal-verify`](../patpat-formal-verify/SKILL.md) when later changes must rerun the check as a durable project suite; that skill hands its TLA+ results here. Use a scratch folder outside the repository for native TLA+/TLC runs.
+
+A chart is a model. A broken rule on it is a model finding until a replay against the real code or process reproduces it.
 
 The chart shows how a system moves between states, in the words of the person who reads it. That person, the reader, decides whether the behavior is right.
 
@@ -12,7 +23,11 @@ Work in a scratch folder outside the repo. Write a TLA+ spec and its config. The
 <skill dir>/scripts/statechart SPEC.tla [--config FILE] [--view FILE] [--out DIR]
 ```
 
+Write the view as an ES module such as `view.mjs`. `--out` must name a new or empty folder. Exit 0 means every rule holds, 1 means a rule breaks, and 2 means TLC or the command failed; only 0 and 1 write output.
+
 On Windows, use `<skill dir>/scripts/statechart.cmd` with the same arguments. On other systems, use `scripts/statechart`. Both entry points require Node.js 22 or a TypeScript-capable runtime.
+
+Without mise, set `TLA2TOOLS` to a `tla2tools.jar` (v1.7.4 is the pinned release) and `JAVA` to a Java 11 or later binary; the command then skips mise. On Windows, Java reads arguments in the system ANSI code page, so keep the spec in a folder whose name that code page can spell.
 
 The first native model-check run installs TLC and Java with mise and needs the network. Receipt rendering is a separate offline path: it reads a saved receipt and authored view, then calls Patpat's PStack-derived Mermaid backend and local Pele renderer. It does not invoke TLC or replay implementation code. Read [`references/receipt-rendering.md`](references/receipt-rendering.md) and [`UPSTREAM.md`](UPSTREAM.md) before rendering receipts or changing the adapter.
 
@@ -76,3 +91,10 @@ Render charts with Pele. When the user asks for an image, or a chart is too larg
 Give each chart and its Mermaid text to the person who must decide. Add one line for each bug: the rule, the reader's sentence for that rule, and the path as the report numbers it. Say what the model leaves out. Give the command that makes the files again, with a new `--out` folder.
 
 When the model describes code, replay each bug path against the real code, as a test or a live repro, one step for each action. If a bug does not occur, think that the model is wrong until you show that it is not.
+
+## Proof closure
+
+Close repository mutations through:
+
+- [`patpat-verify`](../patpat-verify/SKILL.md)
+- [`patpat-review`](../patpat-review/SKILL.md)

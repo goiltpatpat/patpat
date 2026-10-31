@@ -881,7 +881,7 @@ def render_with_pstack(chart: ChartIR, replay: dict[str, Any], stage: Path,
     finally:
         input_path.unlink(missing_ok=True)
     require(completed.returncode == 0,
-            "PStack/Pele rendering failed. Run npm ci in skills/patpat-formal-verify/statechart/scripts. "
+            "PStack/Pele rendering failed. Run npm ci in skills/patpat-statechart/scripts. "
             + completed.stderr.strip()[-1200:])
     require(not mmd_path.is_symlink() and mmd_path.is_file()
             and mmd_path.stat().st_size <= MAX_INPUT_BYTES,
