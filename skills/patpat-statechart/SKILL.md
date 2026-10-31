@@ -31,6 +31,7 @@ If the chart or model will be committed, define the five-field proof contract fi
 
 Work in a scratch folder outside the repository. Write `SPEC.tla`, `SPEC.cfg`, and a view as an ES module such as `view.mjs`.
 
+- Add `EXTENDS Naturals` (or `Integers`) when the spec uses numbers, ranges such as `0..2`, or `<` and `>`. Without it SANY fails with a Java stack trace and the command exits 2. Read the spec once against this list before the first run; each run costs a TLC start.
 - Write each reader rule as an INVARIANT. If the model has no variable for a rule, add one. Never weaken a rule to make it hold.
 - Write `Next` as a disjunction of named actions, such as `YouPressPlay \/ YouPressStop`, or TLC names every step `Next`.
 - A correct end state with no step out still breaks `NoDeadlock`. Add an action that is true only in end states and changes nothing, such as `Done == phase \in {"paid", "failed"} /\ UNCHANGED vars`, and label it in `step()`. When an INVARIANT or PROPERTY is already named `NoDeadlock`, the deadlock rule is `CHECK_DEADLOCK`.
