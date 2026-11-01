@@ -73,7 +73,7 @@ claude plugin list
 claude plugin details patpat
 ```
 
-The marketplace points to the repository root with `source: "."`; Claude loads the standard root `skills/` directory. The marketplace entry is the plugin manifest, so the Antigravity root `plugin.json` is not reused. Validate a checkout or staged package with `claude plugin validate /absolute/path/to/patpat --strict`. To validate the skill files themselves, run `claude plugin validate /absolute/path/to/patpat/skills --strict` with Claude Code v2.1.233 or later.
+The marketplace points to the repository root with `source: "."`; Claude loads the standard root `skills/` directory. The entry's `agents` key loads the Claude reviewer adapter from `adapters/claude/agents/` instead of the Antigravity root `agents/`. The marketplace entry is the plugin manifest, so the Antigravity root `plugin.json` is not reused. Validate a checkout or staged package with `claude plugin validate /absolute/path/to/patpat --strict`. To validate the skill files themselves, run `claude plugin validate /absolute/path/to/patpat/skills --strict` with Claude Code v2.1.233 or later.
 
 From a local working tree, stage first:
 
