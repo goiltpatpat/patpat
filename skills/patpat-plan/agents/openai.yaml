@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Plan"
+  short_description: "Sequence multi-phase work into verifiable units"
+policy:
+  allow_implicit_invocation: false

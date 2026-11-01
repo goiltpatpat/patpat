@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Architect"
+  short_description: "Design repository-native changes before implementation"
+policy:
+  allow_implicit_invocation: false

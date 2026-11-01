@@ -1,6 +1,7 @@
 ---
 name: patpat-learn
 description: Convert a recurring failure, correction, or verification gap from the active task into the smallest durable constraint. Use when the same engineering mistake could recur and should be prevented structurally.
+disable-model-invocation: true
 metadata:
   patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"AgentSkill","requires_state":["delivery-review-cleared"],"produces_state":["durable-constraint-recorded"],"verification_cmd":"git status --short"}'
 ---

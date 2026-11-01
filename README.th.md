@@ -87,7 +87,7 @@ REVIEW -> LEARN? -> เสนอและรอการอนุมัติ ->
 
 ## เลือก Skill ที่เหมาะสม
 
-`/patpat` จะจัดเส้นทางงานให้คุณโดยอัตโนมัติ แต่คุณสามารถเรียกใช้ skill ได้โดยตรงเมื่อทราบประเภทของงานอยู่แล้ว:
+`/patpat` จะจัดเส้นทางงานให้คุณโดยอัตโนมัติ แต่คุณสามารถเรียกใช้ skill ได้โดยตรงเมื่อทราบประเภทของงานอยู่แล้ว มีเพียง `patpat-inspect` ที่โหลดจากคำขอภาษาธรรมดาได้บนทุก host ส่วนบน Claude Code และ Cursor ทางเข้า Patpat (`patpat`, `patpat-loop`) ก็โหลดได้เช่นกัน skill อื่นต้องเรียกด้วยชื่อ เช่น `/patpat:patpat-debug` บน Claude Code, `/patpat-debug` บน Cursor หรือ `$patpat-debug` บน Codex:
 
 | งานที่ต้องการทำ | Skill |
 | --- | --- |
@@ -234,4 +234,4 @@ Patpat ไม่เปลี่ยนความสามารถทางเ�
 
 ## สัญญาอนุญาต (License)
 
-MIT. ทั้งนี้ [`skills/patpat-statechart`](skills/patpat-statechart/THIRD_PARTY_NOTICES.md) และ [`skills/patpat-repository-diagram`](skills/patpat-repository-diagram/references/THIRD_PARTY_NOTICES.md) มีโค้ดของบุคคลที่สามภายใต้สัญญาอนุญาต MIT โดยข้อความแจ้งจะแนบไปพร้อมกับแต่ละ skill
+MIT.

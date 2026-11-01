@@ -899,6 +899,7 @@ def parse_agent_frontmatter(path: Path) -> tuple[dict[str, object], str]:
 
 def validate_agent_adapters(root: Path, parsed: dict[str, dict[str, object]], errors: list[str]) -> None:
     cursor_directory = root / "adapters" / "cursor" / "agents"
+    claude_directory = root / "adapters" / "claude" / "agents"
     antigravity_directory = root / "agents"
     expected = {"patpat-reviewer"}
 
@@ -907,7 +908,7 @@ def validate_agent_adapters(root: Path, parsed: dict[str, dict[str, object]], er
     if "agents" in parsed.get("codex", {}):
         errors.append("Codex manifest must not claim packaged agents")
 
-    for directory in (cursor_directory, antigravity_directory):
+    for directory in (cursor_directory, claude_directory, antigravity_directory):
         if not directory.is_dir():
             errors.append(f"{directory}: missing agent adapter directory")
             continue
@@ -953,6 +954,32 @@ def validate_agent_adapters(root: Path, parsed: dict[str, dict[str, object]], er
         )
         if body != expected_body:
             errors.append(f"{path}: Cursor adapter body must remain the canonical thin wrapper")
+
+    # Claude Code loads the marketplace entry's agents list instead of scanning
+    # the Antigravity-owned root agents/ folder, so its tools must be Claude names.
+    claude_path = claude_directory / "patpat-reviewer.md"
+    if claude_path.is_file():
+        try:
+            data, body = parse_agent_frontmatter(claude_path)
+        except (OSError, ValueError) as error:
+            errors.append(f"{claude_path}: {error}")
+        else:
+            if set(data) != {"name", "description", "tools", "model"}:
+                errors.append(f"{claude_path}: Claude agent fields must be name, description, tools, model")
+            if data.get("name") != "patpat-reviewer" or data.get("model") != "inherit":
+                errors.append(f"{claude_path}: invalid Claude agent identity or model")
+            if data.get("description") != REVIEWER_DESCRIPTION:
+                errors.append(f"{claude_path}: Claude agent description must remain canonical")
+            if data.get("tools") != ["Read", "Grep", "Glob"]:
+                errors.append(f"{claude_path}: Claude reviewer tools must be exactly Read, Grep, Glob")
+            expected_body = (
+                "# Patpat Reviewer Adapter\n\n"
+                "Read and follow the canonical `patpat-review` contract at "
+                "`${CLAUDE_PLUGIN_ROOT}/skills/patpat-review/SKILL.md` in full. Remain read-only, "
+                "report evidence-backed findings, and never authorize delivery."
+            )
+            if body != expected_body:
+                errors.append(f"{claude_path}: Claude adapter body must remain the canonical thin wrapper")
 
     antigravity_expected = {
         "patpat-reviewer": {
@@ -1349,6 +1376,7 @@ def validate_root(root: Path) -> list[str]:
         "keywords": ["agentic-engineering", "verification", "debugging", "architecture"],
         "category": "Developer Tools",
         "tags": ["workflow", "verification", "review"],
+        "agents": ["./adapters/claude/agents/patpat-reviewer.md"],
     }
     if claude_marketplace.get("plugins") != [expected_claude_plugin]:
         errors.append(
@@ -2486,6 +2514,17 @@ def run_self_test(root: Path) -> list[str]:
     def remove_agent_adapter(fixture: Path) -> None:
         (fixture / "agents" / "patpat-reviewer.md").unlink()
 
+    def use_antigravity_tools_for_claude(fixture: Path) -> None:
+        agent = fixture / "adapters" / "claude" / "agents" / "patpat-reviewer.md"
+        text = agent.read_text(encoding="utf-8")
+        agent.write_text(text.replace("  - Read\n  - Grep\n", "  - view_file\n  - grep_search\n", 1), encoding="utf-8")
+
+    def drop_claude_agents_entry(fixture: Path) -> None:
+        marketplace = fixture / ".claude-plugin" / "marketplace.json"
+        data = json.loads(marketplace.read_text(encoding="utf-8"))
+        del data["plugins"][0]["agents"]
+        marketplace.write_text(json.dumps(data), encoding="utf-8")
+
     def grant_reviewer_command(fixture: Path) -> None:
         agent = fixture / "agents" / "patpat-reviewer.md"
         text = agent.read_text(encoding="utf-8")
@@ -2809,6 +2848,8 @@ def run_self_test(root: Path) -> list[str]:
             ("writable Cursor reviewer", weaken_cursor_reviewer, "readonly policy"),
             ("background Cursor agent", enable_background_agent, "must not run in background"),
             ("missing Antigravity agent adapter", remove_agent_adapter, "expected agent adapters"),
+            ("Antigravity tools in Claude adapter", use_antigravity_tools_for_claude, "exactly Read, Grep, Glob"),
+            ("Claude marketplace without agent adapter", drop_claude_agents_entry, "version-aligned"),
             ("Antigravity reviewer command access", grant_reviewer_command, "unexpected Antigravity skills or tools"),
             ("adapter body drift", drift_adapter_body, "canonical thin wrapper"),
             ("adapter description drift", drift_adapter_description, "description must remain canonical"),

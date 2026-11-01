@@ -34,6 +34,7 @@ jobs:
           python3 scripts/sanitize_logs.py --self-test
           python3 scripts/eval_adversarial_controls.py --self-test
           python3 scripts/eval_inspect.py --self-test
+          python3 scripts/eval_routing.py --self-test
           python3 scripts/eval_representation.py --self-test
           python3 scripts/eval_why.py --self-test
           python3 scripts/probe_codex_behavior.py --self-test
@@ -126,6 +127,8 @@ jobs:
           python scripts/sanitize_logs.py --self-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/eval_adversarial_controls.py --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/eval_routing.py --self-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/install_skills.py --self-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

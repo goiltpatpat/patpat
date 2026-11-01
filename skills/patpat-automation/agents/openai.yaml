@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Automation"
+  short_description: "Design a safe external automation for a named provider"
+policy:
+  allow_implicit_invocation: false

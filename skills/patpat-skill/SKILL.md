@@ -1,6 +1,7 @@
 ---
 name: patpat-skill
 description: Create or revise a reusable agent skill with precise triggering, progressive disclosure, and behavioral proof. Use when adding a SKILL.md workflow or changing a skill's routing contract.
+disable-model-invocation: true
 metadata:
   patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"AgentSkill","requires_state":["workspace-root-open"],"produces_state":["skill-definition-staged"],"verification_cmd":"python3 scripts/validate.py"}'
 ---

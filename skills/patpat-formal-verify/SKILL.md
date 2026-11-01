@@ -1,6 +1,7 @@
 ---
 name: patpat-formal-verify
 description: Create or maintain a project-local formal verification skill and suite for a costly invariant that ordinary tests may miss. Use for state machines, action ordering, concurrency, retries, fencing, or bounded input properties; use patpat-verifier for real-app behavior and user-surface checks.
+disable-model-invocation: true
 metadata:
   patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Codebase","requires_state":["workspace-root-open"],"produces_state":["formal-model-verified"],"verification_cmd":"python3 skills/patpat-run/scripts/check_assignment_model.py --pure-python"}'
 ---

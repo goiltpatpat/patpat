@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Impact"
+  short_description: "Trace and prove the blast radius of a change"
+policy:
+  allow_implicit_invocation: false

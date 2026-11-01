@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Review"
+  short_description: "Independently challenge a diff or verification claim"
+policy:
+  allow_implicit_invocation: false

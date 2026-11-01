@@ -1,6 +1,7 @@
 ---
 name: 00-workspace-mapper
 description: Inspect an unfamiliar software workspace and create or refresh a compact evidence index at .patpat/context-graph.json. Use when the user asks for a workspace map or a workflow declares that map as a prerequisite; do not use as a routine prelude to ordinary repository work.
+disable-model-invocation: true
 metadata:
   patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Workspace","requires_state":["workspace-root-open"],"produces_state":["workspace-map-current"],"verification_cmd":"python3 <loaded-skill-directory>/scripts/verify_context_graph.py --root <workspace-root>"}'
 ---

@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Formal Verify"
+  short_description: "Maintain a formal verification suite for a costly invariant"
+policy:
+  allow_implicit_invocation: false

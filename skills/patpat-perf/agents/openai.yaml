@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Perf"
+  short_description: "Diagnose or optimize a measurable resource target"
+policy:
+  allow_implicit_invocation: false

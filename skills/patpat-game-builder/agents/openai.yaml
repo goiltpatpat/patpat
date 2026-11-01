@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Game Builder"
+  short_description: "Build or extend a runnable game and verify a playthrough"
+policy:
+  allow_implicit_invocation: false

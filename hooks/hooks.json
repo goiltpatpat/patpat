@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "PATPAT_PLUGIN_ROOT=\"${PLUGIN_ROOT:-${GROK_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}}\"; PATPAT_PLUGIN_DATA=\"${PLUGIN_DATA:-${GROK_PLUGIN_DATA:-${CLAUDE_PLUGIN_DATA:-}}}\"; if [ -z \"$PATPAT_PLUGIN_ROOT\" ]; then echo 'Patpat hook error: PLUGIN_ROOT is missing.' >&2; exit 2; fi; if [ -z \"$PATPAT_PLUGIN_DATA\" ]; then echo 'Patpat hook error: PLUGIN_DATA is missing.' >&2; exit 2; fi; python3 \"$PATPAT_PLUGIN_ROOT/hooks/scripts/patpat_loop_state.py\"",
+            "command": "PATPAT_PLUGIN_ROOT=\"${PLUGIN_ROOT:-${GROK_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}}\"; PATPAT_PLUGIN_DATA=\"${PLUGIN_DATA:-${GROK_PLUGIN_DATA:-${CLAUDE_PLUGIN_DATA:-}}}\"; if [ -z \"$PATPAT_PLUGIN_ROOT\" ]; then echo 'Patpat hook error: PLUGIN_ROOT is missing.' >&2; exit 2; fi; if [ -z \"$PATPAT_PLUGIN_DATA\" ]; then echo 'Patpat hook error: PLUGIN_DATA is missing.' >&2; exit 2; fi; PATPAT_PY=; for PATPAT_CANDIDATE in python3 python; do PATPAT_CANDIDATE=\"$(command -v \"$PATPAT_CANDIDATE\")\" && \"$PATPAT_CANDIDATE\" -c 'import sys; sys.exit(sys.version_info < (3, 11))' >/dev/null 2>&1 && PATPAT_PY=\"$PATPAT_CANDIDATE\" && break; done; if [ -z \"$PATPAT_PY\" ]; then echo 'Patpat hook error: python3 or python 3.11+ is required on PATH.' >&2; exit 127; fi; \"$PATPAT_PY\" \"$PATPAT_PLUGIN_ROOT/hooks/scripts/patpat_loop_state.py\"",
             "commandWindows": "\"${PLUGIN_ROOT}\\hooks\\scripts\\patpat_loop_state.cmd\"",
             "timeout": 2,
             "additionalContextLimit": 1200
@@ -20,7 +20,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "PATPAT_PLUGIN_ROOT=\"${PLUGIN_ROOT:-${GROK_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}}\"; PATPAT_PLUGIN_DATA=\"${PLUGIN_DATA:-${GROK_PLUGIN_DATA:-${CLAUDE_PLUGIN_DATA:-}}}\"; if [ -z \"$PATPAT_PLUGIN_ROOT\" ]; then echo 'Patpat hook error: PLUGIN_ROOT is missing.' >&2; exit 2; fi; if [ -z \"$PATPAT_PLUGIN_DATA\" ]; then echo 'Patpat hook error: PLUGIN_DATA is missing.' >&2; exit 2; fi; python3 \"$PATPAT_PLUGIN_ROOT/hooks/scripts/patpat_loop_state.py\"",
+            "command": "PATPAT_PLUGIN_ROOT=\"${PLUGIN_ROOT:-${GROK_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}}\"; PATPAT_PLUGIN_DATA=\"${PLUGIN_DATA:-${GROK_PLUGIN_DATA:-${CLAUDE_PLUGIN_DATA:-}}}\"; if [ -z \"$PATPAT_PLUGIN_ROOT\" ]; then echo 'Patpat hook error: PLUGIN_ROOT is missing.' >&2; exit 2; fi; if [ -z \"$PATPAT_PLUGIN_DATA\" ]; then echo 'Patpat hook error: PLUGIN_DATA is missing.' >&2; exit 2; fi; PATPAT_PY=; for PATPAT_CANDIDATE in python3 python; do PATPAT_CANDIDATE=\"$(command -v \"$PATPAT_CANDIDATE\")\" && \"$PATPAT_CANDIDATE\" -c 'import sys; sys.exit(sys.version_info < (3, 11))' >/dev/null 2>&1 && PATPAT_PY=\"$PATPAT_CANDIDATE\" && break; done; if [ -z \"$PATPAT_PY\" ]; then echo 'Patpat hook error: python3 or python 3.11+ is required on PATH.' >&2; exit 127; fi; \"$PATPAT_PY\" \"$PATPAT_PLUGIN_ROOT/hooks/scripts/patpat_loop_state.py\"",
             "commandWindows": "\"${PLUGIN_ROOT}\\hooks\\scripts\\patpat_loop_state.cmd\"",
             "timeout": 2,
             "additionalContextLimit": 1200
@@ -33,7 +33,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "PATPAT_PLUGIN_ROOT=\"${PLUGIN_ROOT:-${GROK_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}}\"; PATPAT_PLUGIN_DATA=\"${PLUGIN_DATA:-${GROK_PLUGIN_DATA:-${CLAUDE_PLUGIN_DATA:-}}}\"; if [ -z \"$PATPAT_PLUGIN_ROOT\" ]; then echo 'Patpat hook error: PLUGIN_ROOT is missing.' >&2; exit 2; fi; if [ -z \"$PATPAT_PLUGIN_DATA\" ]; then echo 'Patpat hook error: PLUGIN_DATA is missing.' >&2; exit 2; fi; python3 \"$PATPAT_PLUGIN_ROOT/hooks/scripts/patpat_loop_state.py\"",
+            "command": "PATPAT_PLUGIN_ROOT=\"${PLUGIN_ROOT:-${GROK_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}}\"; PATPAT_PLUGIN_DATA=\"${PLUGIN_DATA:-${GROK_PLUGIN_DATA:-${CLAUDE_PLUGIN_DATA:-}}}\"; if [ -z \"$PATPAT_PLUGIN_ROOT\" ]; then echo 'Patpat hook error: PLUGIN_ROOT is missing.' >&2; exit 2; fi; if [ -z \"$PATPAT_PLUGIN_DATA\" ]; then echo 'Patpat hook error: PLUGIN_DATA is missing.' >&2; exit 2; fi; PATPAT_PY=; for PATPAT_CANDIDATE in python3 python; do PATPAT_CANDIDATE=\"$(command -v \"$PATPAT_CANDIDATE\")\" && \"$PATPAT_CANDIDATE\" -c 'import sys; sys.exit(sys.version_info < (3, 11))' >/dev/null 2>&1 && PATPAT_PY=\"$PATPAT_CANDIDATE\" && break; done; if [ -z \"$PATPAT_PY\" ]; then echo 'Patpat hook error: python3 or python 3.11+ is required on PATH.' >&2; exit 127; fi; \"$PATPAT_PY\" \"$PATPAT_PLUGIN_ROOT/hooks/scripts/patpat_loop_state.py\"",
             "commandWindows": "\"${PLUGIN_ROOT}\\hooks\\scripts\\patpat_loop_state.cmd\"",
             "timeout": 1
           }

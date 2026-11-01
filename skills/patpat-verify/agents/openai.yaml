@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Verify"
+  short_description: "Prove a claim on its authoritative surface"
+policy:
+  allow_implicit_invocation: false

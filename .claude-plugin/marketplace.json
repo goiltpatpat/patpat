@@ -29,6 +29,9 @@
         "workflow",
         "verification",
         "review"
+      ],
+      "agents": [
+        "./adapters/claude/agents/patpat-reviewer.md"
       ]
     }
   ]

@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Skill"
+  short_description: "Create or revise a reusable agent skill"
+policy:
+  allow_implicit_invocation: false

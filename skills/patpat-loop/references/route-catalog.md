@@ -28,6 +28,7 @@ When one request requires outputs from more than one specialized row, keep `patp
 | Named issue-source triage and reproduce loop | [`patpat-automation`](../../patpat-automation/SKILL.md) | [Issue loop](../playbooks/issue-loop.md) |
 | Pause in-flight work or go offline | [`patpat-run`](../../patpat-run/SKILL.md) | [Pause safely](../playbooks/pause-safely.md) |
 | Resume or take over in-flight work with no valid run store | [`patpat-run`](../../patpat-run/SKILL.md) | [Session takeover](../playbooks/session-takeover.md) |
+| Catch the user up on what changed and every call waiting on them (read-only) | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [Catch-up](../playbooks/catch-up.md) |
 | Rapid session pickup with active run store or clean working tree | [`patpat-run`](../../patpat-run/SKILL.md) | [Session pickup](../playbooks/session-pickup.md) |
 | Move a PR to verified merge-ready status or resolve review threads | [`patpat-change`](../../patpat-change/SKILL.md) | [PR Readiness Handoff](../playbooks/pr-handoff.md) |
 | Prune merged or abandoned Git worktrees | Use the playbook directly | [Worktree cleanup](../playbooks/worktree-cleanup.md) |

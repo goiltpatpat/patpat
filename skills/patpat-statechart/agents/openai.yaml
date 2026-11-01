@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Statechart"
+  short_description: "Model-check a flow and chart broken rules as paths"
+policy:
+  allow_implicit_invocation: false
