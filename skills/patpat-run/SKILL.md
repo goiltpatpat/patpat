@@ -30,7 +30,7 @@ Never record secrets, tokens, raw private logs, or sensitive payloads in run sta
 
 If a process interruption leaves a lock, inspect it first. Use `unlock` for a run or `recover-lock` for a program only when the engine proves a same-host owner is dead. Let the engine reject live, malformed, or cross-host locks; never delete them by assumption.
 
-Route completion through `patpat-ship` when delivery intent exists. [Delivery proof](references/delivery-proof.md) defines the `commit`, `ship`, and `merge` gates. They read state and Git, so they can pass at `REPORT`; a new head or late merge request starts a new scoped run. Explicit Patpat activation alone does not authorize default commit-and-PR; see the operating protocol and default-delivery playbook. Durable-run mechanical gates remain separate. Overnight stops merge-ready. Merge only with explicit land or merge language and green checks.
+Route completion through `patpat-ship` when delivery intent exists. [Delivery proof](references/delivery-proof.md) defines the `commit`, `ship`, and `merge` gates. They read state and Git, so they can pass at `REPORT`; a new head or late merge request starts a new scoped run. Explicit Patpat activation alone does not authorize default commit-and-PR; see the operating protocol and default-delivery playbook. Durable-run mechanical gates remain separate. Overnight stops merge-ready. Merge only with explicit land or merge language and a passing provider gate.
 
 On resume, validate the store, compare live repository state, inspect intentional and pre-existing changes, and continue from the earliest valid graph node. Never trust a checkpoint merely because it parses.
 

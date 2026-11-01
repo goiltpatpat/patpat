@@ -173,7 +173,7 @@ REVIEW -> LEARN? -> เสนอและรอการอนุมัติ ->
 | [Autopilot](skills/patpat-loop/playbooks/autopilot.md) | จัดการคิวงานหรือ stack ที่ผ่านการยืนยัน; merge เฉพาะเมื่อระบุชื่อชัดเจน |
 | [Issue loop](skills/patpat-loop/playbooks/issue-loop.md) | คัดกรองและสร้างข้อผิดพลาดซ้ำจาก issue; หยุดชั่วคราวจนกว่าจะเปิดใช้ PR เริ่มต้นเป็นแบบร่าง |
 | [Default delivery](skills/patpat-loop/playbooks/default-delivery.md) | เมื่อมีเจตนาส่งมอบ ให้ commit และเปิด PR ที่พร้อมใช้งาน 1 รายการหลังผ่าน verify และ review |
-| [Authorized delivery](skills/patpat-loop/playbooks/authorized-delivery.md) | Merge PR สีเขียวที่ผ่านการยืนยัน เฉพาะเมื่อมีคำสั่ง land หรือ merge ชัดเจน |
+| [Authorized delivery](skills/patpat-loop/playbooks/authorized-delivery.md) | Merge PR ที่ผ่านการยืนยันและผ่าน provider gate ของ repo เฉพาะเมื่อมีคำสั่ง land หรือ merge ชัดเจน |
 | [Independent review](skills/patpat-loop/playbooks/independent-review.md) | ท้าทายการนำไปใช้และหลักฐานโดยไม่มีการแก้ไขไฟล์ |
 | [Skill change](skills/patpat-loop/playbooks/skill-change.md) | เขียนหรือแก้ไขไฟล์ SKILL.md |
 | [Behavioral evaluation](skills/patpat-loop/playbooks/behavioral-eval.md) | ทดสอบว่า skill ถูกกระตุ้นและทำงานถูกต้องตามพฤติกรรมหรือไม่ |

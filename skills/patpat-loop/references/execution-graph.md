@@ -19,7 +19,7 @@ FRAME
                       -> REPORT (no lesson to encode)
 
 REPORT --delivery intent only--> patpat-ship (external; run remains terminal)
-patpat-ship -> LAND? -> MERGE (explicit land or merge; green reviewed PR)
+patpat-ship -> LAND? -> MERGE (explicit land or merge; reviewed PR that passes its provider gate)
 ```
 
 Inspect, execute, or measure before asking. Ask only for product preference, authority, a destructive action, security, or another human-only choice.
@@ -48,7 +48,7 @@ LEARN?
   -> one-off fact       -> REPORT
 ```
 
-Stop at an approval gate when the next transition would delete data, alter production, weaken a safety boundary, change billing or permissions, force-push, publish a package, or deploy. Explicit Patpat activation authorizes the loop, proof, and verify; default commit-and-PR still requires delivery intent. Merge still requires explicit land or merge language and green checks. Overnight, going to bed, and don't-stop language are delivery intent and stop at merge-ready.
+Stop at an approval gate when the next transition would delete data, alter production, weaken a safety boundary, change billing or permissions, force-push, publish a package, or deploy. Explicit Patpat activation authorizes the loop, proof, and verify; default commit-and-PR still requires delivery intent. Merge still requires explicit land or merge language and a passing provider gate. Overnight, going to bed, and don't-stop language are delivery intent and stop at merge-ready.
 
 ## Bounded retry and Diagnostic Delta
 

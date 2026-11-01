@@ -173,7 +173,7 @@ The diagram and statechart skills work as a pair: a lifecycle diagram can seed a
 | [Autopilot](skills/patpat-loop/playbooks/autopilot.md) | A verified queue or stack; merge only when named. |
 | [Issue loop](skills/patpat-loop/playbooks/issue-loop.md) | Named-provider triage and reproduction; paused until enabled, PRs default to draft. |
 | [Default delivery](skills/patpat-loop/playbooks/default-delivery.md) | With delivery intent, commit and open one ready PR after verify and review. |
-| [Authorized delivery](skills/patpat-loop/playbooks/authorized-delivery.md) | Merge a green verified PR only on explicit land or merge. |
+| [Authorized delivery](skills/patpat-loop/playbooks/authorized-delivery.md) | Merge a verified PR that passes its provider gate only on explicit land or merge. |
 | [Independent review](skills/patpat-loop/playbooks/independent-review.md) | Challenge an implementation and its proof without editing. |
 | [Skill change](skills/patpat-loop/playbooks/skill-change.md) | Write or revise a SKILL.md. |
 | [Behavioral evaluation](skills/patpat-loop/playbooks/behavioral-eval.md) | Test whether a skill triggers and behaves correctly. |

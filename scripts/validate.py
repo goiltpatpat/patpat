@@ -282,6 +282,16 @@ PINNED_BOUNDARY_SENTENCES = (
         "regression-first fail-before contract",
     ),
     (
+        Path("skills/patpat-loop/playbooks/authorized-delivery.md"),
+        (
+            "An empty check list is not proof that a repository has no CI",
+            "Green is unavailable, which is not a pass.",
+            "A check still pending at the wait's deadline has not passed.",
+            "Do not forge a receipt or bypass them.",
+        ),
+        "authorized-delivery provider-gate contract",
+    ),
+    (
         Path("skills/patpat-loop/playbooks/session-takeover.md"),
         (
             "Lock the time window before mining (default last 7 days).",
@@ -2064,6 +2074,17 @@ def run_self_test(root: Path) -> list[str]:
             encoding="utf-8",
         )
 
+    def strip_provider_gate(fixture: Path) -> None:
+        playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "authorized-delivery.md"
+        text = playbook.read_text(encoding="utf-8")
+        playbook.write_text(
+            text.replace(
+                "An empty check list is not proof that a repository has no CI",
+                "An empty check list means the repository has no CI",
+            ),
+            encoding="utf-8",
+        )
+
     def strip_regression_fail_before(fixture: Path) -> None:
         playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "regression-first.md"
         text = playbook.read_text(encoding="utf-8")
@@ -2795,6 +2816,7 @@ def run_self_test(root: Path) -> list[str]:
             ("review boundary drift", strip_review_boundary, "missing review boundary contract"),
             ("learn boundary drift", strip_learn_boundary, "missing learn boundary contract"),
             ("regression-first fail-before drift", strip_regression_fail_before, "missing regression-first fail-before contract"),
+            ("authorized-delivery provider-gate drift", strip_provider_gate, "missing authorized-delivery provider-gate contract"),
             ("session-takeover live-verify drift", strip_session_takeover_live_verify, "missing session-takeover live-verify contract"),
             ("project-verifier isolation drift", strip_project_verifier_isolation, "missing project-verifier isolation contract"),
             ("project-verifier readiness drift", strip_project_verifier_readiness, "missing project-verifier readiness and recovery contract"),
