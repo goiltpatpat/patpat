@@ -33,6 +33,7 @@ jobs:
           python3 scripts/dry_run_loop.py --self-test
           python3 scripts/sanitize_logs.py --self-test
           python3 scripts/eval_adversarial_controls.py --self-test
+          python3 scripts/eval_parallel.py --self-test
           python3 scripts/eval_inspect.py --self-test
           python3 scripts/eval_routing.py --self-test
           python3 scripts/eval_representation.py --self-test
@@ -47,6 +48,11 @@ jobs:
           python3 scripts/smoke_grok_plugin.py --commands-only
           python3 tests/test_workspace_mapper.py
           python3 tests/test_general_task_ontology.py
+          python3 tests/test_ontology_verifiers.py
+          python3 tests/test_adversarial_controls.py
+          python3 tests/test_sanitize_logs.py
+          python3 tests/test_assignment_generation_replay.py
+          python3 tests/test_assignment_model_pure_python.py
           python3 skills/patpat-run/scripts/run_state.py --self-test
           python3 skills/patpat-run/scripts/program_state.py --self-test
           python3 skills/patpat-run/scripts/decisions.py --self-test
@@ -106,9 +112,11 @@ jobs:
 
   # Python floor is 3.11+ (datetime.UTC). One Windows job covers path-sensitive
   # installer, updater, staging, and durable-state tests. No version matrix.
+  # Delivery-gate self-tests spawn many git processes, and the run-state suite alone
+  # takes about 7.5 minutes on this runner.
   windows-paths:
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository

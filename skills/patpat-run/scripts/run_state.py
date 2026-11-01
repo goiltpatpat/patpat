@@ -163,6 +163,138 @@ def current_snapshot(root: Path) -> str:
     return f"git:{head}:{digest.hexdigest()}"
 
 
+@contextmanager
+def private_objects(root: Path) -> Iterator[Any]:
+    """Run Git with a throwaway object store, so reading a gate writes nothing to the repository."""
+    raw_objects = git_text(root, "rev-parse", "--git-path", "objects")
+    if not raw_objects:
+        raise RunStateError("Git did not return an object directory")
+    objects = Path(raw_objects)
+    objects = (objects if objects.is_absolute() else root / objects).resolve()
+    with tempfile.TemporaryDirectory(prefix="patpat-candidate-") as directory:
+        private = Path(directory)
+        (private / "objects").mkdir()
+
+        def run(*args: str, index: Path | None = None) -> subprocess.CompletedProcess[bytes]:
+            environment = {
+                **os.environ,
+                "GIT_OBJECT_DIRECTORY": str(private / "objects"),
+                "GIT_ALTERNATE_OBJECT_DIRECTORIES": str(objects),
+            }
+            if index is not None:
+                environment["GIT_INDEX_FILE"] = str(index)
+            return subprocess.run(
+                ["git", "-C", str(root), *args],
+                check=False,
+                capture_output=True,
+                env=environment,
+            )
+
+        yield run, private / "index"
+
+
+def worktree_tree(root: Path) -> tuple[str | None, bool]:
+    """Return the tree a full commit of the worktree would have, and whether it holds a gitlink."""
+    with private_objects(root) as (run, index):
+        if run("read-tree", "HEAD", index=index).returncode != 0:
+            return None, False
+        if run("add", "-A", "--", ".", index=index).returncode != 0:
+            return None, False
+        stage = run("ls-files", "--stage", "-z", index=index)
+        if stage.returncode != 0:
+            return None, False
+        has_gitlink = any(entry.startswith(b"160000 ") for entry in stage.stdout.split(b"\0"))
+        tree = run("write-tree", index=index)
+        if tree.returncode != 0:
+            return None, has_gitlink
+        return os.fsdecode(tree.stdout).strip() or None, has_gitlink
+
+
+def current_candidate(root: Path) -> dict[str, Any]:
+    snapshot = current_snapshot(root)
+    worktree, has_gitlink = worktree_tree(root)
+    return {
+        "snapshot": snapshot,
+        "worktree_tree": worktree,
+        # A gitlink records only a pointer, so a tree cannot bind what the proof actually read.
+        "tree": None if has_gitlink else worktree,
+        "head": snapshot.split(":")[1],
+    }
+
+
+def worktree_matches_head(root: Path, candidate: dict[str, Any]) -> bool:
+    state = git_process(
+        root,
+        "--no-optional-locks",
+        "status",
+        "--porcelain",
+        "--ignore-submodules=none",
+    )
+    if state.returncode != 0 or state.stdout.strip():
+        return False
+    if (
+        candidate["worktree_tree"] is None
+        or candidate["worktree_tree"] != git_text(root, "rev-parse", "HEAD^{tree}")
+    ):
+        return False
+    return gitlinks_match_their_heads(root)
+
+
+def gitlinks_match_their_heads(root: Path) -> bool:
+    """The parent tree holds only a pointer, so each populated gitlink must be clean on its own."""
+    stage = git_process(root, "ls-files", "--stage", "-z")
+    if stage.returncode != 0:
+        return False
+    for entry in stage.stdout.split(b"\0"):
+        if not entry.startswith(b"160000 "):
+            continue
+        nested = root / checked_relative_path(entry.split(b"\t", 1)[1])
+        if not nested.is_dir() or not any(nested.iterdir()):
+            continue
+        try:
+            if not worktree_matches_head(nested, current_candidate(nested)):
+                return False
+        except RunStateError:
+            return False
+    return True
+
+
+def index_holds_candidate(root: Path, candidate: dict[str, Any]) -> bool:
+    """A commit of this index holds exactly the proven content."""
+    raw_index = git_text(root, "rev-parse", "--git-path", "index")
+    if not raw_index:
+        return False
+    index = Path(raw_index)
+    index = (index if index.is_absolute() else root / index).resolve()
+    with private_objects(root) as (run, private_index):
+        # Work on a copy so the real index never caches a tree from the throwaway object store.
+        try:
+            private_index.write_bytes(index.read_bytes())
+        except OSError:
+            return False
+        tree = run("write-tree", index=private_index)
+    return tree.returncode == 0 and os.fsdecode(tree.stdout).strip() == candidate["tree"]
+
+
+def git_is_ancestor(root: Path, ancestor: str, descendant: str) -> bool:
+    return git_process(root, "merge-base", "--is-ancestor", ancestor, descendant).returncode == 0
+
+
+def merge_result_is_proven(root: Path, head: str, base_head: str | None) -> tuple[bool, str]:
+    if not base_head:
+        return False, "merge gate failed: --base-head is required to prove the merged result"
+    base_commit = git_text(root, "rev-parse", "--verify", "--quiet", f"{base_head}^{{commit}}")
+    if not base_commit:
+        return False, f"merge gate failed: base head is not a local commit; fetch it first: {base_head}"
+    if not git_is_ancestor(root, base_commit, head):
+        return (
+            False,
+            f"merge gate failed: head does not contain base {base_commit}; "
+            "the merged result would be unproven, so update onto the base and prove the new head",
+        )
+    return True, "head contains the base"
+
+
 def checked_relative_path(raw_name: bytes) -> Path:
     relative = Path(os.fsdecode(raw_name))
     if relative.is_absolute() or ".." in relative.parts:
@@ -214,12 +346,16 @@ def provider_receipt_path(root: Path, run_id: str) -> Path:
 
 
 def evaluate_merge_provider_receipt(root: Path, run_id: str) -> tuple[bool, str, bool]:
+    return evaluate_provider_receipt(provider_receipt_path(root, run_id), require_git_root(root))
+
+
+def evaluate_provider_receipt(path: Path, current_head: str) -> tuple[bool, str, bool]:
     """Fail-closed until a pr_watch ready receipt binds repository, PR, head, base, and policy."""
-    path = provider_receipt_path(root, run_id)
     if not path.is_file():
         return (
             False,
-            "merge gate failed: missing bound pr_watch ready receipt; merge authority is unattested",
+            f"merge gate failed: missing bound pr_watch ready receipt at {path}; "
+            "merge authority is unattested",
             False,
         )
     try:
@@ -238,7 +374,6 @@ def evaluate_merge_provider_receipt(root: Path, run_id: str) -> tuple[bool, str,
         return False, "merge gate failed: provider receipt does not bind policy", True
     verdict = pr_watch.evaluate(document)
     binding = verdict.get("binding") if isinstance(verdict.get("binding"), dict) else {}
-    current_head = require_git_root(root)
     bound_head = str(binding.get("head_sha") or "").lower()
     if not all(
         binding.get(key) not in (None, "")
@@ -447,10 +582,22 @@ def receipt_binding_is_fresh(record: dict[str, Any]) -> bool:
         return False
 
 
+def proof_covers_candidate(root: Path, record: dict[str, Any], candidate: dict[str, Any]) -> bool:
+    snapshot = record.get("snapshot")
+    if snapshot == candidate["snapshot"]:
+        return True
+    tree = record.get("tree")
+    if not isinstance(tree, str) or tree != candidate["tree"] or not isinstance(snapshot, str):
+        return False
+    parts = snapshot.split(":")
+    return len(parts) == 3 and git_is_ancestor(root, parts[1], candidate["head"])
+
+
 def receipt_is_fresh(
+    root: Path,
     record: Any,
     state: dict[str, Any],
-    snapshot: str,
+    candidate: dict[str, Any],
     verdict: str,
     *,
     independent: bool = False,
@@ -471,7 +618,7 @@ def receipt_is_fresh(
     except RunStateError:
         return False
     return (
-        record.get("snapshot") == snapshot
+        proof_covers_candidate(root, record, candidate)
         and record.get("epoch") == state.get("epoch")
         and record.get("verdict") == verdict
         and isinstance(record.get("receipt"), str)
@@ -656,15 +803,16 @@ def transition(root: Path, run_id: str, destination: str) -> dict[str, Any]:
         source = state["node"]
         if destination not in NODES or destination not in TRANSITIONS[source]:
             raise RunStateError(f"illegal graph transition: {source} -> {destination}")
-        snapshot = current_snapshot(root)
+        candidate = current_candidate(root)
+        snapshot = candidate["snapshot"]
         if destination == "ACT" and not state["proof_contract"]:
             raise RunStateError("ACT requires a structured proof contract")
-        if destination == "REVIEW" and not receipt_is_fresh(state["verification"], state, snapshot, "verified"):
+        if destination == "REVIEW" and not receipt_is_fresh(root, state["verification"], state, candidate, "verified"):
             raise RunStateError("REVIEW requires verified evidence for the current epoch and snapshot")
         if destination in {"LEARN", "REPORT"}:
-            if not receipt_is_fresh(state["verification"], state, snapshot, "verified"):
+            if not receipt_is_fresh(root, state["verification"], state, candidate, "verified"):
                 raise RunStateError(f"{destination} requires current verified evidence")
-            if not receipt_is_fresh(state["review"], state, snapshot, "pass", independent=True):
+            if not receipt_is_fresh(root, state["review"], state, candidate, "pass", independent=True):
                 raise RunStateError(f"{destination} requires current independent review")
         revisiting_contract = (
             destination == "INSPECT" and source != "FRAME"
@@ -682,6 +830,11 @@ def transition(root: Path, run_id: str, destination: str) -> dict[str, Any]:
 
 
 PROOF_CONTRACT_CANONICAL_KEYS = ("claim", "surface", "action", "expect", "cleanup")
+
+
+def proof_contract_digest(normalized: dict[str, str]) -> str:
+    fields = [normalized.get(key) for key in PROOF_CONTRACT_CANONICAL_KEYS]
+    return hashlib.sha256(json.dumps(fields, ensure_ascii=False).encode("utf-8")).hexdigest()
 
 
 def normalize_proof_contract(fields: dict[str, str]) -> dict[str, str]:
@@ -710,15 +863,21 @@ def record_proof_contract(root: Path, run_id: str, fields: dict[str, str]) -> di
         if state["node"] not in {"INSPECT", "PROOF_CONTRACT"}:
             raise RunStateError("proof contract must be recorded during INSPECT or PROOF_CONTRACT")
         normalized = normalize_proof_contract(fields)
+        digest = proof_contract_digest(normalized)
+        # Revisiting a contract clears it, so compare against the ledger rather than the state slot.
+        latest = next((event for event in reversed(state["events"]) if event.get("kind") == "proof-contract"), {})
+        recorded_digest = latest.get("contract_digest")
         previous_contract = state["proof_contract"]
-        contract_changed = not isinstance(previous_contract, dict) or any(
-            previous_contract.get(key) != normalized[key]
-            for key in PROOF_CONTRACT_CANONICAL_KEYS
-        )
+        # Events written before digests existed fall back to the slot. With the slot also
+        # cleared, identity is unknown and the streak clears, as it did before digests.
+        if recorded_digest is None and isinstance(previous_contract, dict):
+            recorded_digest = proof_contract_digest(previous_contract)
         state["proof_contract"] = {**normalized, "recorded_at": now()}
-        if contract_changed:
+        if recorded_digest != digest:
             state["last_failure"] = None
-        append_state_event(state, "proof-contract", normalized["claim"], snapshot=current_snapshot(root))
+        append_state_event(
+            state, "proof-contract", normalized["claim"], snapshot=current_snapshot(root), contract_digest=digest
+        )
         save_state(root, run_id, state)
         return state
 
@@ -742,11 +901,12 @@ def record_receipt(
         allowed = {"verification": {"verified", "partial", "failed"}, "review": {"pass", "changes-required"}}
         if verdict not in allowed[kind]:
             raise RunStateError(f"invalid {kind} verdict")
-        snapshot = current_snapshot(root)
+        candidate = current_candidate(root)
+        snapshot = candidate["snapshot"]
         if kind == "review":
             owner_key = canonical_identity(state["owner"], "integration owner")
             verification = state.get("verification")
-            if not receipt_is_fresh(verification, state, snapshot, "verified"):
+            if not receipt_is_fresh(root, verification, state, candidate, "verified"):
                 raise RunStateError("independent review requires current verified evidence")
             verifier_key = canonical_identity(
                 verification.get("actor"), "verification actor"
@@ -762,6 +922,7 @@ def record_receipt(
             "actor": actor,
             "verdict": verdict,
             "snapshot": snapshot,
+            "tree": candidate["tree"],
             "epoch": state["epoch"],
             "recorded_at": now(),
         }
@@ -843,7 +1004,7 @@ def record_decision(root: Path, run_id: str, summary: str) -> dict[str, Any]:
 
 
 FAILURE_CLASSES = frozenset({"implementation", "verifier", "environment"})
-GATES = frozenset({"pre-edit", "verify", "ship", "merge"})
+GATES = frozenset({"pre-edit", "verify", "commit", "ship", "merge"})
 
 
 def record_failure(
@@ -893,11 +1054,13 @@ def record_failure(
         return state
 
 
-def check_gate(root: Path, run_id: str, gate: str) -> tuple[bool, str]:
+def check_gate(
+    root: Path, run_id: str, gate: str, base_head: str | None = None
+) -> tuple[bool, str]:
     if gate not in GATES:
         raise RunStateError(f"gate must be one of {sorted(GATES)}, got {gate!r}")
     state = load_state(root, run_id)
-    snapshot = current_snapshot(root)
+    candidate = current_candidate(root)
 
     if gate == "pre-edit":
         pc = state.get("proof_contract")
@@ -907,22 +1070,47 @@ def check_gate(root: Path, run_id: str, gate: str) -> tuple[bool, str]:
             return False, "pre-edit gate failed: proof contract missing required canonical fields"
         return True, "pre-edit gate passed: structured proof contract is recorded and valid"
 
+    if state["node"] == "BLOCKED":
+        return False, f"{gate} gate failed: run is BLOCKED: {state.get('blocked_reason')}"
+
     if gate == "verify":
         verification = state.get("verification")
-        if not receipt_is_fresh(verification, state, snapshot, "verified"):
+        if not receipt_is_fresh(root, verification, state, candidate, "verified"):
             return False, "verify gate failed: missing fresh verified receipt for current snapshot"
         return True, "verify gate passed: fresh verified receipt observed on authoritative surface"
 
-    if gate == "ship":
+    if gate in {"commit", "ship"}:
         verification = state.get("verification")
         review = state.get("review")
-        if not receipt_is_fresh(verification, state, snapshot, "verified"):
-            return False, "ship gate failed: verification receipt is missing or stale"
-        if not receipt_is_fresh(review, state, snapshot, "pass", independent=True):
-            return False, "ship gate failed: independent review pass is missing or stale"
+        if not receipt_is_fresh(root, verification, state, candidate, "verified"):
+            return False, f"{gate} gate failed: verification receipt is missing or stale"
+        if not receipt_is_fresh(root, review, state, candidate, "pass", independent=True):
+            return False, f"{gate} gate failed: independent review pass is missing or stale"
         if state.get("owner") == "worker":
-            return False, "ship gate failed: workers never ship; parent integration owner must ship"
-        return True, "ship gate passed: fresh verified evidence and independent review observed"
+            return False, f"{gate} gate failed: workers never ship; parent integration owner must ship"
+        matches_head = worktree_matches_head(root, candidate)
+        if gate == "ship":
+            if not matches_head:
+                return (
+                    False,
+                    "ship gate failed: the checkout differs from HEAD, so the proof does not cover "
+                    "this head; commit the proven content, or prove the head in a clean worktree",
+                )
+            return True, f"ship gate passed: proof covers the clean head {candidate['head']}"
+        if matches_head:
+            return False, "commit gate failed: HEAD already holds the proven content; use the ship gate"
+        if candidate["tree"] is None:
+            return (
+                False,
+                "commit gate failed: a Git tree cannot bind this worktree; commit first and prove that head",
+            )
+        if not index_holds_candidate(root, candidate):
+            return (
+                False,
+                "commit gate failed: the index does not hold exactly the proven content; stage all "
+                "of it, or commit the in-scope paths and prove that head in a clean worktree",
+            )
+        return True, f"commit gate passed: proof covers candidate tree {candidate['tree']}"
 
     if gate == "merge":
         authorities = set(state.get("authorities", []))
@@ -934,7 +1122,10 @@ def check_gate(root: Path, run_id: str, gate: str) -> tuple[bool, str]:
         ready, provider_reason, _present = evaluate_merge_provider_receipt(root, run_id)
         if not ready:
             return False, provider_reason
-        return True, "merge gate passed: explicit merge authority and bound pr_watch ready receipt"
+        proven, base_reason = merge_result_is_proven(root, candidate["head"], base_head)
+        if not proven:
+            return False, base_reason
+        return True, "merge gate passed: explicit merge authority, bound pr_watch ready receipt, and head contains the base"
 
     return False, f"unknown gate: {gate}"
 
@@ -945,13 +1136,13 @@ def validation_errors(root: Path, run_id: str) -> list[str]:
     except RunStateError as error:
         return [str(error)]
     errors = schema_errors(state, root, run_id)
-    snapshot = current_snapshot(root)
+    candidate = current_candidate(root)
     if state["node"] in {"ACT", "VERIFY", "REVIEW", "LEARN", "REPORT"} and not state["proof_contract"]:
         errors.append("active run is missing a proof contract")
-    if state["node"] in {"REVIEW", "LEARN", "REPORT"} and not receipt_is_fresh(state["verification"], state, snapshot, "verified"):
+    if state["node"] in {"REVIEW", "LEARN", "REPORT"} and not receipt_is_fresh(root, state["verification"], state, candidate, "verified"):
         errors.append("verification is missing or stale")
     if state["node"] in {"LEARN", "REPORT"} and not receipt_is_fresh(
-        state["review"], state, snapshot, "pass", independent=True
+        root, state["review"], state, candidate, "pass", independent=True
     ):
         errors.append("review is missing or stale")
     for event in state.get("events", []):
@@ -1007,7 +1198,8 @@ def checkpoint(root: Path, run_id: str) -> Path:
 
 def status(root: Path, run_id: str) -> dict[str, Any]:
     state = load_state(root, run_id)
-    snapshot = current_snapshot(root)
+    candidate = current_candidate(root)
+    snapshot = candidate["snapshot"]
     verification = state["verification"]
     review = state["review"]
     return {
@@ -1022,12 +1214,12 @@ def status(root: Path, run_id: str) -> dict[str, Any]:
         "verification_present": verification is not None,
         "verification_verdict": verification.get("verdict") if isinstance(verification, dict) else None,
         "verification_actor": verification.get("actor") if isinstance(verification, dict) else None,
-        "verification_stale": verification is not None and not receipt_is_fresh(verification, state, snapshot, "verified"),
+        "verification_stale": verification is not None and not receipt_is_fresh(root, verification, state, candidate, "verified"),
         "review_present": review is not None,
         "review_verdict": review.get("verdict") if isinstance(review, dict) else None,
         "review_actor": review.get("actor") if isinstance(review, dict) else None,
         "review_stale": review is not None and not receipt_is_fresh(
-            review, state, snapshot, "pass", independent=True
+            root, review, state, candidate, "pass", independent=True
         ),
         "errors": validation_errors(root, run_id),
     }
@@ -1078,7 +1270,414 @@ def symlink_creation_is_unsupported(error: OSError) -> bool:
     return error.errno in unsupported_errnos or getattr(error, "winerror", None) == 1314
 
 
+def write_test_provider_receipt(path: Path, head: str, **observation_overrides: Any) -> None:
+    def rfc3339_z(value: datetime) -> str:
+        return value.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+    observed_at = rfc3339_z(datetime.now(UTC) - timedelta(seconds=5))
+    deadline = rfc3339_z(datetime.now(UTC) + timedelta(hours=1))
+    document = {
+        "schema_version": pr_watch.SCHEMA_VERSION,
+        "binding": {
+            "repository": "example/project",
+            "pull_request": 17,
+            "head_sha": head,
+            "base_ref": "main",
+        },
+        "policy": {
+            "required_checks": ["contracts"],
+            "allow_no_required_checks": False,
+            "required_review": True,
+            "max_attempts": 3,
+            "max_observation_age_seconds": 900,
+            "deadline": deadline,
+        },
+        "observation": {
+            "observed_at": observed_at,
+            "attempt": 1,
+            "head_sha": head,
+            "provider_repository": "example/project",
+            "provider_pull_request": 17,
+            "provider_head_sha": head,
+            "state": "open",
+            "unresolved_threads": 0,
+            "base_ref": "main",
+            "draft": False,
+            "review_decision": "approved",
+            "mergeability": "mergeable",
+            "merge_state_status": "CLEAN",
+            "checks": [
+                {"name": "contracts", "state": "completed", "conclusion": "success"},
+            ],
+        },
+    }
+    document["observation"].update(observation_overrides)
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+
+def run_delivery_self_test() -> None:
+    """Exercise every path decided in references/delivery-proof.md."""
+    with (
+        tempfile.TemporaryDirectory(prefix="patpat-run-delivery-") as directory,
+        tempfile.TemporaryDirectory(prefix="patpat-run-delivery-evidence-") as evidence_directory,
+    ):
+        root = Path(directory).resolve()
+        make_test_repository(root)
+        evidence_path = Path(evidence_directory).resolve() / "evidence.txt"
+        evidence_path.write_text("observed\n", encoding="utf-8")
+        evidence = f"file:{evidence_path}"
+        source = root / "source.txt"
+
+        def git(*args: str, repository: Path = root) -> str:
+            return subprocess.run(
+                ["git", "-C", str(repository), *args], check=True, capture_output=True, text=True
+            ).stdout.strip()
+
+        def commit_all(message: str, repository: Path = root) -> str:
+            git("add", "-A", repository=repository)
+            git("commit", "-qm", message, repository=repository)
+            return git("rev-parse", "HEAD", repository=repository)
+
+        def start(run_id: str, *authorities: str, repository: Path = root) -> None:
+            initialize(repository, run_id, "Deliver", "owner", list(authorities), [], [], [])
+            transition(repository, run_id, "INSPECT")
+            record_proof_contract(
+                repository,
+                run_id,
+                {"claim": "c", "surface": "s", "action": "a", "expect": "e", "cleanup": "n"},
+            )
+            transition(repository, run_id, "PROOF_CONTRACT")
+            transition(repository, run_id, "ACT")
+
+        def prove(run_id: str, repository: Path = root) -> None:
+            transition(repository, run_id, "VERIFY")
+            record_receipt(repository, run_id, "verification", "v", evidence, "verifier", "verified")
+            transition(repository, run_id, "REVIEW")
+            record_receipt(repository, run_id, "review", "r", evidence, "reviewer", "pass")
+
+        def expect_gate(
+            run_id: str, gate: str, passed: bool, fragment: str = "", repository: Path = root, **kwargs: Any
+        ) -> None:
+            actual, reason = check_gate(repository, run_id, gate, **kwargs)
+            if actual is not passed or fragment not in reason:
+                raise AssertionError(f"{run_id} {gate}: expected {passed} {fragment!r}, got {actual} {reason!r}")
+
+        def ready_provider(run_id: str, repository: Path = root) -> None:
+            write_test_provider_receipt(
+                provider_receipt_path(repository, run_id), require_git_root(repository)
+            )
+
+        base = require_git_root(root)
+
+        # Proof first: admission survives staging, the commit carries proof, and merge is reachable from REPORT.
+        start("proof-first", "explicit-merge")
+        source.write_text("proof first\n", encoding="utf-8")
+        prove("proof-first")
+        expect_gate("proof-first", "commit", False, "does not hold exactly")
+        expect_gate("proof-first", "ship", False, "differs from HEAD")
+        git("add", "source.txt")
+        expect_gate("proof-first", "commit", True)
+        expect_gate("proof-first", "ship", False, "differs from HEAD")
+        ready_provider("proof-first")
+        expect_gate("proof-first", "merge", False, "differs from HEAD", base_head=base)
+        head = commit_all("proof first")
+        expect_gate("proof-first", "ship", True)
+        expect_gate("proof-first", "commit", False, "already holds")
+        local_receipt = root / ".patpat" / "review-receipt.json"
+        local_receipt.parent.mkdir()
+        local_receipt.write_text("{}\n", encoding="utf-8")
+        expect_gate("proof-first", "ship", False)
+        info_exclude = Path(git_text(root, "rev-parse", "--git-path", "info/exclude"))
+        info_exclude = info_exclude if info_exclude.is_absolute() else root / info_exclude
+        original_exclude = info_exclude.read_text(encoding="utf-8") if info_exclude.exists() else None
+        info_exclude.parent.mkdir(parents=True, exist_ok=True)
+        info_exclude.write_text(".patpat/\n", encoding="utf-8")
+        expect_gate("proof-first", "ship", True)
+        if original_exclude is None:
+            info_exclude.unlink()
+        else:
+            info_exclude.write_text(original_exclude, encoding="utf-8")
+        local_receipt.unlink()
+        local_receipt.parent.rmdir()
+        transition(root, "proof-first", "REPORT")
+        if validation_errors(root, "proof-first"):
+            raise AssertionError("a carried proof failed validation at REPORT")
+        try:
+            record_receipt(root, "proof-first", "verification", "v", evidence, "verifier", "verified")
+        except RunStateError:
+            pass
+        else:
+            raise AssertionError("REPORT accepted a new receipt")
+        ready_provider("proof-first")
+        expect_gate("proof-first", "merge", False, "--base-head")
+        expect_gate("proof-first", "merge", True, base_head=base)
+        write_test_provider_receipt(provider_receipt_path(root, "proof-first"), base)
+        expect_gate("proof-first", "merge", False, "not bound to the current HEAD", base_head=base)
+        ready_provider("proof-first")
+
+        # Reading a gate changes no object or index byte, on every path that computes a tree.
+        def repository_bytes() -> dict[Path, bytes]:
+            git_directory = root / ".git"
+            paths = [git_directory / "index", *(git_directory / "objects").rglob("*")]
+            return {path: path.read_bytes() for path in paths if path.is_file()}
+
+        start("gate-read")
+        nested_source = root / "sub" / "dir" / "nested.txt"
+        nested_source.parent.mkdir(parents=True)
+        nested_source.write_text("nested\n", encoding="utf-8")
+        prove("gate-read")
+        git("add", "-A")
+        before_read = repository_bytes()
+        expect_gate("gate-read", "commit", True)
+        expect_gate("gate-read", "ship", False, "differs from HEAD")
+        if repository_bytes() != before_read:
+            raise AssertionError("evaluating a gate changed repository objects or the index")
+        commit_all("gate read")
+        git("fsck", "--strict", "--connectivity-only")
+        expect_gate("gate-read", "ship", True)
+        before_read = repository_bytes()
+        nested_source.write_text("bytes the repository has never stored\n", encoding="utf-8")
+        expect_gate("gate-read", "ship", False, "stale")
+        if repository_bytes() != before_read:
+            raise AssertionError("evaluating a gate stored new objects in the repository")
+        git("checkout", "--", "sub/dir/nested.txt")
+
+        # A stopped run admits nothing, even with fresh receipts.
+        start("stopped", "explicit-merge")
+        prove("stopped")
+        expect_gate("stopped", "ship", True)
+        for _attempt in range(3):
+            record_failure(root, "stopped", "same", "same-blocker")
+        ready_provider("stopped")
+        expect_gate("stopped", "ship", False, "BLOCKED")
+        expect_gate("stopped", "commit", False, "BLOCKED")
+        expect_gate("stopped", "merge", False, "BLOCKED", base_head=base)
+
+        # A later commit leaves the proven content behind.
+        source.write_text("after proof\n", encoding="utf-8")
+        commit_all("after proof")
+        expect_gate("proof-first", "ship", False, "stale")
+        expect_gate("proof-first", "merge", False, "stale", base_head=base)
+
+        # Commit first passes the same predicate, for proofs that depend on commit identity.
+        start("commit-first", "explicit-merge")
+        source.write_text("commit first\n", encoding="utf-8")
+        head = commit_all("commit first")
+        prove("commit-first")
+        expect_gate("commit-first", "ship", True)
+        transition(root, "commit-first", "REPORT")
+        ready_provider("commit-first")
+        expect_gate("commit-first", "merge", True, base_head=base)
+
+        # A commit that differs from the proven tree carries nothing.
+        start("edited", "explicit-merge")
+        source.write_text("proven\n", encoding="utf-8")
+        prove("edited")
+        source.write_text("edited after proof\n", encoding="utf-8")
+        commit_all("edited")
+        expect_gate("edited", "ship", False, "stale")
+        ready_provider("edited")
+        expect_gate("edited", "merge", False, "stale", base_head=base)
+
+        # An amend that adds content is stale. So is a same-tree amend of a proven commit: it
+        # removes the proof's base from history, and failing closed there costs one new run.
+        start("amended")
+        source.write_text("amend base\n", encoding="utf-8")
+        commit_all("amend base")
+        prove("amended")
+        expect_gate("amended", "ship", True)
+        git("commit", "-q", "--amend", "-m", "same tree, new message")
+        expect_gate("amended", "ship", False, "stale")
+        start("amend-parent")
+        source.write_text("proven on parent\n", encoding="utf-8")
+        prove("amend-parent")
+        commit_all("first message")
+        expect_gate("amend-parent", "ship", True)
+        git("commit", "-q", "--amend", "-m", "reworded on the same parent")
+        expect_gate("amend-parent", "ship", True)
+        source.write_text("amended content\n", encoding="utf-8")
+        git("add", "source.txt")
+        git("commit", "-q", "--amend", "-m", "changed content")
+        expect_gate("amend-parent", "ship", False, "stale")
+
+        # A hook that rewrites the commit leaves it uncovered, which is why ship runs after commit.
+        start("hooked")
+        source.write_text("before hook\n", encoding="utf-8")
+        prove("hooked")
+        git("add", "source.txt")
+        expect_gate("hooked", "commit", True)
+        hook = root / ".git" / "hooks" / "pre-commit"
+        hook.write_bytes(b"#!/bin/sh\necho rewritten > source.txt\ngit add source.txt\n")
+        hook.chmod(0o755)
+        git("commit", "-qm", "hooked")
+        hook.unlink()
+        expect_gate("hooked", "ship", False, "stale")
+
+        # Proof-then-reset cannot launder a tree across unrelated history.
+        start("rewound", "explicit-merge")
+        rewound_head = require_git_root(root)
+        (root / "rewound.txt").write_text("rewound\n", encoding="utf-8")
+        prove("rewound")
+        commit_all("rewound")
+        expect_gate("rewound", "ship", True)
+        git("reset", "--hard", git("rev-parse", f"{rewound_head}~1"))
+        (root / "other.txt").write_text("other history\n", encoding="utf-8")
+        commit_all("other history")
+        git("checkout", rewound_head, "--", ".")
+        (root / "other.txt").unlink()
+        (root / "rewound.txt").write_text("rewound\n", encoding="utf-8")
+        commit_all("same tree on other history")
+        expect_gate("rewound", "ship", False, "stale")
+
+        # Partial staging is refused; unrelated dirty files need a clean worktree and a new run.
+        start("partial", "explicit-merge")
+        source.write_text("in scope\n", encoding="utf-8")
+        unrelated = root / "unrelated.txt"
+        unrelated.write_text("not in scope\n", encoding="utf-8")
+        prove("partial")
+        git("add", "source.txt")
+        expect_gate("partial", "commit", False, "does not hold exactly")
+        git("commit", "-qm", "in scope")
+        scoped_head = require_git_root(root)
+        expect_gate("partial", "ship", False, "differs from HEAD")
+        ready_provider("partial")
+        expect_gate("partial", "merge", False, "differs from HEAD", base_head=scoped_head)
+        clean = Path(evidence_directory).resolve() / "clean"
+        git("worktree", "add", "-q", "--detach", str(clean), scoped_head)
+        start("exact", "explicit-merge", repository=clean)
+        prove("exact", repository=clean)
+        expect_gate("exact", "ship", True, repository=clean)
+        transition(clean, "exact", "REPORT")
+        ready_provider("exact", repository=clean)
+        expect_gate("exact", "merge", True, repository=clean, base_head=scoped_head)
+        git("worktree", "remove", "--force", str(clean))
+        unrelated.unlink()
+
+        # A head behind its base has an unproven merged result, and a missing base proves nothing.
+        start("behind", "explicit-merge")
+        source.write_text("behind\n", encoding="utf-8")
+        behind_base = require_git_root(root)
+        branch_point = git("rev-parse", "HEAD~1")
+        prove("behind")
+        behind_head = commit_all("behind")
+        ready_provider("behind")
+        expect_gate("behind", "merge", True, base_head=behind_base)
+        git("checkout", "-q", "--detach", branch_point)
+        (root / "sibling.txt").write_text("sibling landed\n", encoding="utf-8")
+        landed_base = commit_all("sibling landed")
+        git("checkout", "-q", "--detach", behind_head)
+        expect_gate("behind", "ship", True)
+        expect_gate("behind", "merge", False, "does not contain base", base_head=landed_base)
+        expect_gate("behind", "merge", False, "not a local commit", base_head="0" * 40)
+        git("merge", "-q", "--no-edit", landed_base)
+        expect_gate("behind", "ship", False, "stale")
+        start("rebased", "explicit-merge")
+        prove("rebased")
+        ready_provider("rebased")
+        expect_gate("rebased", "merge", True, base_head=landed_base)
+
+        # A late land request starts a new run rather than editing a terminal one.
+        start("late-land")
+        source.write_text("late land\n", encoding="utf-8")
+        prove("late-land")
+        transition(root, "late-land", "REPORT")
+        git("add", "source.txt")
+        expect_gate("late-land", "commit", True)
+        late_head = commit_all("late land")
+        ready_provider("late-land")
+        expect_gate("late-land", "ship", True)
+        expect_gate("late-land", "merge", False, "explicit-merge", base_head=late_head)
+        start("late-land-2", "explicit-merge")
+        prove("late-land-2")
+        ready_provider("late-land-2")
+        expect_gate("late-land-2", "merge", True, base_head=late_head)
+
+        # Files hidden from status still void proof; assume-unchanged cannot launder an edit.
+        start("hidden")
+        prove("hidden")
+        expect_gate("hidden", "ship", True)
+        git("update-index", "--assume-unchanged", "source.txt")
+        source.write_text("hidden edit\n", encoding="utf-8")
+        expect_gate("hidden", "ship", False, "stale")
+        start("hidden-proof")
+        prove("hidden-proof")
+        expect_gate("hidden-proof", "ship", False, "differs from HEAD")
+        git("update-index", "--no-assume-unchanged", "source.txt")
+        git("checkout", "--", "source.txt")
+
+        # A receipt recorded before trees existed keeps the exact-snapshot rule.
+        start("legacy")
+        prove("legacy")
+        legacy = load_state(root, "legacy")
+        for kind in ("verification", "review"):
+            legacy[kind].pop("tree")
+        atomic_write_json(state_path(root, "legacy"), legacy)
+        expect_gate("legacy", "ship", True)
+        (root / "legacy.txt").write_text("legacy\n", encoding="utf-8")
+        expect_gate("legacy", "commit", False, "stale")
+        (root / "legacy.txt").unlink()
+
+        # A gitlink cannot bind to a tree, so proof-first refuses and only commit-first remains.
+        start("embedded")
+        nested = root / "nested"
+        nested.mkdir()
+        subprocess.run(["git", "init", "-q", str(nested)], check=True)
+        git("config", "user.email", "patpat@example.invalid", repository=nested)
+        git("config", "user.name", "Patpat Test", repository=nested)
+        (nested / "inner.txt").write_text("inner\n", encoding="utf-8")
+        commit_all("inner", repository=nested)
+        if current_candidate(root)["tree"] is not None:
+            raise AssertionError("an embedded repository was bound to a tree")
+        prove("embedded")
+        expect_gate("embedded", "commit", False, "cannot bind")
+        expect_gate("embedded", "ship", False, "differs from HEAD")
+
+        start("gitlink-first")
+        commit_all("commit the gitlink")
+        prove("gitlink-first")
+        expect_gate("gitlink-first", "ship", True)
+        (nested / "inner.txt").write_text("dirty inner\n", encoding="utf-8")
+        expect_gate("gitlink-first", "ship", False, "stale")
+        git("checkout", "--", "inner.txt", repository=nested)
+        expect_gate("gitlink-first", "ship", True)
+
+        # The parent holds only a pointer, so proof taken on nested bytes no commit holds is refused.
+        start("nested-dirty")
+        (nested / "inner.txt").write_text("dirty at proof\n", encoding="utf-8")
+        prove("nested-dirty")
+        expect_gate("nested-dirty", "ship", False, "differs from HEAD")
+        git("checkout", "--", "inner.txt", repository=nested)
+        start("nested-hidden")
+        git("update-index", "--assume-unchanged", "inner.txt", repository=nested)
+        (nested / "inner.txt").write_text("hidden at proof\n", encoding="utf-8")
+        prove("nested-hidden")
+        expect_gate("nested-hidden", "ship", False, "differs from HEAD")
+        git("update-index", "--no-assume-unchanged", "inner.txt", repository=nested)
+        git("checkout", "--", "inner.txt", repository=nested)
+        git("config", "status.showUntrackedFiles", "no", repository=nested)
+        start("nested-untracked")
+        (nested / "untracked-inner.txt").write_text("input\n", encoding="utf-8")
+        prove("nested-untracked")
+        expect_gate("nested-untracked", "ship", False, "differs from HEAD")
+        (nested / "untracked-inner.txt").unlink()
+
+        # Tree-less proof still cannot cover a hidden edit or an untracked input.
+        start("gitlink-hidden")
+        git("update-index", "--assume-unchanged", "source.txt")
+        source.write_text("hidden beside a gitlink\n", encoding="utf-8")
+        prove("gitlink-hidden")
+        expect_gate("gitlink-hidden", "ship", False, "differs from HEAD")
+        git("update-index", "--no-assume-unchanged", "source.txt")
+        git("checkout", "--", "source.txt")
+        git("config", "status.showUntrackedFiles", "no")
+        start("gitlink-untracked")
+        (root / "untracked-input.txt").write_text("input\n", encoding="utf-8")
+        prove("gitlink-untracked")
+        expect_gate("gitlink-untracked", "ship", False, "differs from HEAD")
+
+
 def run_self_test() -> bool:
+    run_delivery_self_test()
     with (
         tempfile.TemporaryDirectory(prefix="patpat-run-state-") as directory,
         tempfile.TemporaryDirectory(prefix="patpat-run-evidence-") as evidence_directory,
@@ -1456,51 +2055,9 @@ def run_self_test() -> bool:
         if "unattested" not in merge_reason:
             raise AssertionError("merge gate did not report authority-unattested without provider receipt")
 
-        def rfc3339_z(value: datetime) -> str:
-            return value.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
         def write_provider_receipt(**observation_overrides: Any) -> Path:
-            head = require_git_root(root)
-            observed_at = rfc3339_z(datetime.now(UTC) - timedelta(seconds=5))
-            deadline = rfc3339_z(datetime.now(UTC) + timedelta(hours=1))
-            document = {
-                "schema_version": pr_watch.SCHEMA_VERSION,
-                "binding": {
-                    "repository": "example/project",
-                    "pull_request": 17,
-                    "head_sha": head,
-                    "base_ref": "main",
-                },
-                "policy": {
-                    "required_checks": ["contracts"],
-                    "allow_no_required_checks": False,
-                    "required_review": True,
-                    "max_attempts": 3,
-                    "max_observation_age_seconds": 900,
-                    "deadline": deadline,
-                },
-                "observation": {
-                    "observed_at": observed_at,
-                    "attempt": 1,
-                    "head_sha": head,
-                    "provider_repository": "example/project",
-                    "provider_pull_request": 17,
-                    "provider_head_sha": head,
-                    "state": "open",
-                    "unresolved_threads": 0,
-                    "base_ref": "main",
-                    "draft": False,
-                    "review_decision": "approved",
-                    "mergeability": "mergeable",
-                    "merge_state_status": "CLEAN",
-                    "checks": [
-                        {"name": "contracts", "state": "completed", "conclusion": "success"},
-                    ],
-                },
-            }
-            document["observation"].update(observation_overrides)
             receipt = provider_receipt_path(root, "main-run")
-            receipt.write_text(json.dumps(document), encoding="utf-8")
+            write_test_provider_receipt(receipt, require_git_root(root), **observation_overrides)
             return receipt
 
         write_provider_receipt(draft=True)
@@ -1512,7 +2069,9 @@ def run_self_test() -> bool:
         if merge_gate_pass:
             raise AssertionError("merge gate passed a changes_requested provider receipt")
         write_provider_receipt()
-        merge_gate_pass, merge_reason = check_gate(root, "main-run", "merge")
+        merge_gate_pass, merge_reason = check_gate(
+            root, "main-run", "merge", require_git_root(root)
+        )
         provider_receipt_present = provider_receipt_path(root, "main-run").is_file()
         if not merge_gate_pass or not provider_receipt_present:
             raise AssertionError(f"merge gate failed with a bound pr_watch ready receipt: {merge_reason}")
@@ -1732,6 +2291,56 @@ def run_self_test() -> bool:
         if changed_blocker["last_failure"]["count"] != 1:
             raise AssertionError("blocker count did not reset after blocker changed")
 
+        contract = {"claim": "c", "surface": "s", "action": "a", "expect": "e", "cleanup": "n"}
+        initialize(root, "streak-contract-run", "Identical contracts keep the streak", "owner", [], [], [], [])
+        transition(root, "streak-contract-run", "INSPECT")
+        record_proof_contract(root, "streak-contract-run", contract)
+        for node in ("PROOF_CONTRACT", "ACT", "VERIFY"):
+            transition(root, "streak-contract-run", node)
+        record_failure(root, "streak-contract-run", "First", "same-key", failure_class="verifier")
+        transition(root, "streak-contract-run", "PROOF_CONTRACT")
+        record_proof_contract(root, "streak-contract-run", contract)
+        for node in ("ACT", "VERIFY"):
+            transition(root, "streak-contract-run", node)
+        kept = record_failure(root, "streak-contract-run", "Second", "same-key", failure_class="verifier")
+        if kept["last_failure"]["count"] != 2:
+            raise AssertionError("re-recording an identical contract cleared the failure streak")
+        transition(root, "streak-contract-run", "PROOF_CONTRACT")
+        record_proof_contract(root, "streak-contract-run", {**contract, "action": "a different action"})
+        if load_state(root, "streak-contract-run")["last_failure"] is not None:
+            raise AssertionError("a revised contract did not clear the failure streak")
+
+        initialize(root, "legacy-digest-run", "Events without digests keep the streak", "owner", [], [], [], [])
+        transition(root, "legacy-digest-run", "INSPECT")
+        record_proof_contract(root, "legacy-digest-run", contract)
+        record_failure(root, "legacy-digest-run", "First", "same-key", failure_class="verifier")
+        legacy_state = load_state(root, "legacy-digest-run")
+        for event in legacy_state["events"]:
+            event.pop("contract_digest", None)
+        save_state(root, "legacy-digest-run", legacy_state)
+        record_proof_contract(root, "legacy-digest-run", contract)
+        if load_state(root, "legacy-digest-run")["last_failure"] is None:
+            raise AssertionError("an identical contract cleared the streak on a legacy event")
+
+        initialize(root, "blocked-gates-run", "Blocked runs close evidence gates", "owner", [], [], [], [])
+        transition(root, "blocked-gates-run", "INSPECT")
+        record_proof_contract(root, "blocked-gates-run", contract)
+        for node in ("PROOF_CONTRACT", "ACT", "VERIFY"):
+            transition(root, "blocked-gates-run", node)
+        blocked_evidence = evidence_root.resolve() / "blocked-gates.txt"
+        blocked_evidence.write_text("evidence\n", encoding="utf-8")
+        record_receipt(root, "blocked-gates-run", "verification", "Seen", f"file:{blocked_evidence}", "verifier", "verified")
+        transition(root, "blocked-gates-run", "REVIEW")
+        record_receipt(root, "blocked-gates-run", "review", "Seen", f"file:{blocked_evidence}", "reviewer", "pass")
+        if not check_gate(root, "blocked-gates-run", "verify")[0]:
+            raise AssertionError("verify gate rejected fresh evidence before the run was blocked")
+        for _ in range(3):
+            record_failure(root, "blocked-gates-run", "Later problem", "later-key", failure_class="verifier")
+        if check_gate(root, "blocked-gates-run", "verify")[0]:
+            raise AssertionError("verify gate passed on a blocked run")
+        if not check_gate(root, "blocked-gates-run", "pre-edit")[0]:
+            raise AssertionError("pre-edit gate stopped reporting the recorded contract on a blocked run")
+
         try:
             initialize(root, "conflict-run", "Reject conflicts", "owner", ["deploy"], ["deploy"], [], [])
         except RunStateError:
@@ -1915,7 +2524,11 @@ def build_parser() -> argparse.ArgumentParser:
         command_parser.add_argument("--run-id", required=True)
         if command == "check-gate":
             command_parser.add_argument(
-                "--gate", required=True, choices=("pre-edit", "verify", "ship", "merge")
+                "--gate", required=True, choices=("pre-edit", "verify", "commit", "ship", "merge")
+            )
+            command_parser.add_argument(
+                "--base-head",
+                help="Freshly fetched commit of the merge target; required by the merge gate",
             )
         elif command == "transition":
             command_parser.add_argument("--to", required=True, choices=sorted(NODES))
@@ -1973,7 +2586,7 @@ def main() -> int:
         elif args.command == "transition":
             print_state_result(root, transition(root, args.run_id, args.to), "transition", args.full)
         elif args.command == "check-gate":
-            passed, reason = check_gate(root, args.run_id, args.gate)
+            passed, reason = check_gate(root, args.run_id, args.gate, args.base_head)
             payload = {
                 "run_id": args.run_id,
                 "gate": args.gate,

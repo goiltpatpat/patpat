@@ -1,5 +1,7 @@
-"""Unit tests for Patpat adversarial controls and behavioral invariants."""
+"""Unit tests for Patpat adversarial control contracts."""
 
+import contextlib
+import io
 import sys
 import unittest
 from pathlib import Path
@@ -7,6 +9,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts.eval_adversarial_controls import (
+    CLASSIFICATION,
+    SCENARIOS,
+    main,
+    mutation_is_rejected,
+    run_all_adversarial_evals,
+    run_scenario,
     eval_stale_verification,
     eval_verification_theater,
     eval_architecture_drift,
@@ -18,42 +26,74 @@ from scripts.eval_adversarial_controls import (
 
 def test_scenario_1_stale_verification():
     res = eval_stale_verification()
-    assert res["status"] == "PASS"
-    assert res["classification"] == "VERIFIED — end-to-end executable"
+    assert res["classification"] == CLASSIFICATION
     assert res["observable"] == "stale-verification"
 
 
 def test_scenario_2_verification_theater():
     res = eval_verification_theater()
-    assert res["status"] == "PASS"
-    assert res["classification"] == "VERIFIED — end-to-end executable"
+    assert res["classification"] == CLASSIFICATION
     assert res["observable"].startswith("proxy-theater-rejected")
 
 
 def test_scenario_3_architecture_drift():
     res = eval_architecture_drift()
-    assert res["status"] == "PASS"
-    assert res["classification"] == "VERIFIED — end-to-end executable"
+    assert res["classification"] == CLASSIFICATION
     assert res["observable"] == "return-to-design"
 
 
 def test_scenario_4_adversarial_self_review():
     res = eval_adversarial_self_review()
-    assert res["status"] == "PASS"
-    assert res["classification"] == "VERIFIED — end-to-end executable"
+    assert res["classification"] == CLASSIFICATION
     assert "findings-surfaced" in res["observable"]
 
 
 def test_scenario_5_anti_slop_behavior():
     res = eval_anti_slop_behavior()
-    assert res["status"] == "PASS"
-    assert res["classification"] == "VERIFIED — end-to-end executable"
+    assert res["classification"] == CLASSIFICATION
 
 
 def test_scenario_6_credential_leakage_and_limits():
     res = eval_credential_leakage_and_limits()
-    assert res["status"] == "PASS"
-    assert res["classification"] == "VERIFIED — end-to-end executable"
+    assert res["classification"] == CLASSIFICATION
+
+
+def test_every_scenario_rejects_its_real_collaborator_mutant():
+    results = run_all_adversarial_evals()
+    assert len(results) == 6
+    assert all(r["status"] == "PASS" and r["mutation_rejected"] is True for r in results)
+
+
+def test_mutation_probe_restores_collaborator_and_reports_vacuous_scenario():
+    scenario, module, attribute, mutant = SCENARIOS[0]
+    original = getattr(module, attribute)
+    assert mutation_is_rejected(scenario, module, attribute, mutant) is True
+    assert getattr(module, attribute) is original
+    assert mutation_is_rejected(lambda: {}, module, attribute, mutant) is False
+    assert getattr(module, attribute) is original
+
+
+def test_vacuous_scenario_and_failing_scenario_are_reported_as_failures():
+    module, attribute, mutant = SCENARIOS[0][1:]
+    vacuous = run_scenario(lambda: {"scenario": "vacuous"}, module, attribute, mutant)
+    assert vacuous["status"] == "FAIL" and vacuous["mutation_rejected"] is False
+
+    def failing():
+        raise AssertionError("seeded failure")
+
+    failed = run_scenario(failing, module, attribute, mutant)
+    assert failed["status"] == "FAIL" and failed["error"] == "seeded failure"
+
+
+def test_main_exits_nonzero_when_a_scenario_regresses():
+    _, module, attribute, mutant = SCENARIOS[0]
+    original = getattr(module, attribute)
+    setattr(module, attribute, mutant)
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert main() == 1
+    finally:
+        setattr(module, attribute, original)
 
 
 def test_remote_capability_is_not_remote_authority():
@@ -135,14 +175,6 @@ def test_remote_capability_is_not_remote_authority():
     )
     assert res_case5 == "checkpoint-local-only", f"Remote capability alone must not grant push authority, got {res_case5}"
 
-    # Mutation test: weakened verifier assuming remote existence implies consent is rejected
-    def weakened_unit_checkpoint_plan(*, remote_configured: bool, **kwargs) -> str:
-        return "push-verified-unit-snapshot" if remote_configured else "checkpoint-local-only"
-
-    weakened_result = weakened_unit_checkpoint_plan(
-        unit_verified=True, patpat_activated=True, remote_configured=True
-    )
-    assert weakened_result != res_case1, "Weakened check unexpectedly matched expected fail-closed decision"
 
 
 
@@ -166,6 +198,18 @@ class TestAdversarialControls(unittest.TestCase):
     def test_scenario_6_credential_leakage_and_limits(self):
         test_scenario_6_credential_leakage_and_limits()
 
+    def test_every_scenario_rejects_its_real_collaborator_mutant(self):
+        test_every_scenario_rejects_its_real_collaborator_mutant()
+
+    def test_mutation_probe_restores_collaborator_and_reports_vacuous_scenario(self):
+        test_mutation_probe_restores_collaborator_and_reports_vacuous_scenario()
+
+    def test_vacuous_scenario_and_failing_scenario_are_reported_as_failures(self):
+        test_vacuous_scenario_and_failing_scenario_are_reported_as_failures()
+
+    def test_main_exits_nonzero_when_a_scenario_regresses(self):
+        test_main_exits_nonzero_when_a_scenario_regresses()
+
     def test_remote_capability_is_not_remote_authority(self):
         test_remote_capability_is_not_remote_authority()
 
@@ -176,5 +220,9 @@ if __name__ == "__main__":
     test_scenario_4_adversarial_self_review()
     test_scenario_5_anti_slop_behavior()
     test_scenario_6_credential_leakage_and_limits()
+    test_every_scenario_rejects_its_real_collaborator_mutant()
+    test_mutation_probe_restores_collaborator_and_reports_vacuous_scenario()
+    test_vacuous_scenario_and_failing_scenario_are_reported_as_failures()
+    test_main_exits_nonzero_when_a_scenario_regresses()
     test_remote_capability_is_not_remote_authority()
     print("All adversarial control tests passed.")

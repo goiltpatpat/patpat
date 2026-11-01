@@ -21,7 +21,7 @@ Audit the candidate diff and proof evidence against the checks material to its c
 - **Assertion integrity**: Identify deleted, relaxed, commented, or conditionalized assertions and validation rules. Require an explicit contract reason and replacement proof; reject unexplained weakening that manufactures a pass.
 - **Genuine execution**: For behavioral claims, confirm proof exercises the real target path and material state or side effects when applicable. Fixtures and mocks may support the proof but must not replace its authoritative surface.
 - **Generalization**: Probe representative valid inputs, material boundaries, and relevant error paths. Reject hardcoded fixture answers; use code-path reasoning where exhaustive execution is impossible.
-- **Fresh binding**: Bind evidence to the exact candidate revision or a reproducible working-tree snapshot, plus the material inputs, environment, and oracle. Require the committed head for commit-, push-, PR-, or delivery-bound claims.
+- **Fresh binding**: Bind evidence to the exact candidate revision or a reproducible working-tree snapshot, plus the material inputs, environment, and oracle. For push-, PR-, or delivery-bound claims, require the committed head or the durable gate in [delivery proof](../../patpat-run/references/delivery-proof.md), which accepts a proof-first review when the proven tree equals that head's tree.
 
 Classify proven evidence laundering or a bypass that invalidates the correctness claim as `blocker`. Grade other integrity findings by concrete impact; unavailable evidence is a verification gap, not proof of manipulation.
 

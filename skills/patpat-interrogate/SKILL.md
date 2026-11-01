@@ -15,7 +15,7 @@ Run adversarial multi-perspective review to stress-test designs, code changes, a
 ## Process
 
 1. State Intent: Explicitly formulate the objective, target invariant, and non-goals from commit messages, task briefs, and changed contracts.
-2. Determine Scope: Bind evidence to the exact candidate revision or reproducible working-tree snapshot; require a committed head only for commit- or delivery-bound claims. Never review an ambiguous or undefined scope.
+2. Determine Scope: Bind evidence to the exact candidate revision or reproducible working-tree snapshot; for push-, PR-, or delivery-bound claims, require the committed head or the durable gate in [delivery proof](../patpat-run/references/delivery-proof.md). Never review an ambiguous or undefined scope.
 3. Multi-Angle Skepticism:
    - Boundary & Security angle: Look for unsanitized inputs, unmasked credentials, missing permission gates, and denial-of-service paths.
    - Concurrency & State angle: Look for race conditions, cache incoherence, re-entrancy, and non-idempotent side effects.
