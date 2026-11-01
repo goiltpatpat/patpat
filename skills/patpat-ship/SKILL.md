@@ -20,6 +20,8 @@ Apply [authorized delivery](../patpat-loop/playbooks/authorized-delivery.md) to 
 
 For CI monitoring or PR readiness work, use [PR Readiness Handoff](../patpat-loop/playbooks/pr-handoff.md). It is the canonical source for GitHub observation, native stack discovery, watcher budgets, stale handling, and authority boundaries.
 
+Consume durable state when it exists. [Delivery proof](../patpat-run/references/delivery-proof.md) defines what binds a commit, which gate each delivered head uses, and how slices and whole programs differ. A failed gate stops delivery; a passed gate grants no authority.
+
 Inspect version-control state, unrelated dirty files, and secrets before any git write. Workers never ship. Re-check the remote revision after the action.
 
 Pause for production deploy, package publish, force-push, secret rotation, and risky auth, billing, or permission changes. Explain blast radius, rollback, and verification before continuing.

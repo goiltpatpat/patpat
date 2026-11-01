@@ -20,7 +20,7 @@ Read [proof over proxy](../patpat-loop/principles/proof-over-proxy.md) and [pres
 NO COMPLETION CLAIMS WITHOUT FRESH, CANDIDATE-BOUND EVIDENCE
 ```
 
-For work outside a durable `patpat-run`, execute the authoritative check in the current turn. Within a durable run, prior evidence may be reused only when `patpat-run validate` accepts its receipt as fresh for the current candidate, proof contract, evidence epoch, and repository snapshot, and the bound evidence content still matches. Never describe reused evidence as executed in the current turn. The run snapshot does not cover ignored files, external inputs, or the process and dependency environment; bind task-relevant non-secret inputs separately or rerun the check.
+For work outside a durable `patpat-run`, execute the authoritative check in the current turn. Within a durable run, prior evidence may be reused only when `patpat-run validate` accepts its receipt as fresh for the current candidate, proof contract, evidence epoch, and repository snapshot or identical proven tree, and the bound evidence content still matches. Never describe reused evidence as executed in the current turn. The run snapshot does not cover ignored files, external inputs, or the process and dependency environment; bind task-relevant non-secret inputs separately or rerun the check.
 
 ### The 5-Step Gate Function
 
@@ -50,7 +50,7 @@ Match verification depth to the claim and risk:
 - **Behavioral claims**: Vary material inputs, relevant error branches, or state transitions when safe and practical. Call the subject through the authoritative interface and assert the literal observed result or material effect. A mock interaction, call count, truthiness check, copied constant, or clean compilation does not prove the behavior by itself.
 - **Static claims**: Use deterministic structure, schema, type, or content checks when that is the authoritative surface. Do not manufacture runtime theater for a non-runtime claim.
 - **Proxy evidence**: Fixtures and mocks may isolate a contract, but they do not replace the real system when the claim concerns that system. Reject narrative summaries, hardcoded fixture answers, and clean compilation as sole behavioral proof.
-- **Fresh binding**: Bind evidence to the exact candidate revision or a reproducible working-tree snapshot, plus material inputs, environment, and oracle. Require the committed head for commit-, push-, PR-, or delivery-bound claims. Reject stale, cached, or transferred logs.
+- **Fresh binding**: Bind evidence to the exact candidate revision or a reproducible working-tree snapshot, plus material inputs, environment, and oracle. Require the committed head for push-, PR-, or delivery-bound claims: run the check at that head, or use the durable gate from [delivery proof](../patpat-run/references/delivery-proof.md), which accepts a receipt only when the proven tree equals that head's tree and the checkout is clean. Report such a receipt as reused. When a check depends on commit identity, such as Git history or a derived version, it must run at the head. Reject stale, cached, or transferred logs.
 
 Do not accept an implementing agent's report as evidence. Inspect the artifact and results directly. For high-risk boundaries, obtain an independent review without leaking the intended conclusion.
 
