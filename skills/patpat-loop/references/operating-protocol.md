@@ -110,8 +110,8 @@ Default to one owner. Workers return compact findings and evidence, not transcri
 
 Engineering and repository work progresses through four strict gates:
 1. **Pre-edit**: Define a 5-field proof contract (`Claim`, `Surface`, `Action`, `Expect`, `Cleanup`) before editing code.
-2. **Verify**: For engineering behavior, observe execution on the authoritative surface, read its exit code, and bind the evidence to the exact current snapshot. For a non-code repository artifact, run applicable objective checks and inspect the artifact; report subjective or unavailable evidence separately. Do not treat technical checks as creative approval.
-3. **Ship**: Entered when delivery intent exists: commit and open or update one ready PR after fresh verification and independent review pass.
+2. **Verify**: For engineering behavior, observe execution on the authoritative surface, read its exit code, and bind the evidence to the exact current snapshot or identical proven tree. For a non-code repository artifact, run applicable objective checks and inspect the artifact; report subjective or unavailable evidence separately. Do not treat technical checks as creative approval.
+3. **Ship**: Entered when delivery intent exists: commit and open or update one ready PR after fresh verification and independent review pass. The proof must cover the committed head, as [delivery proof](../../patpat-run/references/delivery-proof.md) defines.
 4. **Merge**: Land only upon explicit user `land` or `merge` language with green provider checks.
 
 Enforcement boundaries:

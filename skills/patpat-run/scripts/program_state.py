@@ -24,6 +24,7 @@ SCRIPT_DIRECTORY = str(Path(__file__).resolve().parent)
 if SCRIPT_DIRECTORY not in sys.path:
     sys.path.insert(0, SCRIPT_DIRECTORY)
 
+import run_state
 from state_lock import (
     bounded_file_binding,
     path_guard,
@@ -74,6 +75,7 @@ UNIT_STATES = {"pending", "running", "completed", "blocked"}
 VERDICT_KINDS = {"verification", "review"}
 VERDICTS = {"pass", "fail"}
 GATE_NAMES = {"dispatch", "delivery"}
+DELIVERY_CHECK_GATES = {"ship", "merge"}
 PROGRAM_KEYS = {
     "schema_version",
     "program_id",
@@ -729,7 +731,7 @@ def unit_is_complete(root: Path, state: dict[str, Any], unit: dict[str, Any]) ->
 def dependencies_complete(root: Path, state: dict[str, Any], unit: dict[str, Any]) -> bool:
     return all(
         unit_is_complete(root, state, state["units"][dependency])
-        for dependency in unit["depends_on"]
+        for dependency in transitive_dependencies(state, unit["id"])
     )
 
 
@@ -764,9 +766,137 @@ def delivery_ready(
             evidence_fresh = dispatch_evidence_is_fresh(dispatch_binding)
         if not evidence_fresh:
             return False
-    return bool(state["units"]) and all(
-        unit_is_complete(root, state, unit) for unit in state["units"].values()
+    return (
+        bool(state["units"])
+        and all(unit_is_complete(root, state, unit) for unit in state["units"].values())
+        and integrated_head(root, state) is not None
     )
+
+
+def transitive_dependencies(state: dict[str, Any], unit_id: str) -> set[str]:
+    found: set[str] = set()
+    pending = list(state["units"][unit_id]["depends_on"])
+    while pending:
+        dependency = pending.pop()
+        if dependency not in found:
+            found.add(dependency)
+            pending.extend(state["units"][dependency]["depends_on"])
+    return found
+
+
+def integrated_head(root: Path, state: dict[str, Any]) -> str | None:
+    """Return the head of the unit that declares and contains every other unit, if one exists."""
+    for unit_id, unit in sorted(state["units"].items()):
+        others = set(state["units"]) - {unit_id}
+        head = unit.get("head_sha")
+        if (
+            transitive_dependencies(state, unit_id) == others
+            and isinstance(head, str)
+            and git_commit_exists(root, head)
+            and all(
+                isinstance(state["units"][other].get("head_sha"), str)
+                and git_commit_exists(root, state["units"][other]["head_sha"])
+                and git_is_ancestor(root, state["units"][other]["head_sha"], head)
+                for other in others
+            )
+        ):
+            return head
+    return None
+
+
+def checked_delivery_checkout(root: Path, checkout: Path | None) -> Path:
+    """Program stores live in the coordinator's worktree; the delivered head may live in another."""
+    if checkout is None:
+        return root
+    checkout = require_git_root(checkout)
+
+    def common_directory(path: Path) -> Path | None:
+        raw = git_text(path, "rev-parse", "--git-common-dir")
+        if not raw:
+            return None
+        candidate = Path(raw)
+        return (candidate if candidate.is_absolute() else path / candidate).resolve()
+
+    if common_directory(checkout) != common_directory(root):
+        raise ProgramStateError("delivery checkout belongs to another repository")
+    return checkout
+
+
+def check_delivery(
+    root: Path,
+    program_id: str,
+    unit_id: str | None = None,
+    gate: str = "ship",
+    checkout: Path | None = None,
+    provider_receipt: Path | None = None,
+    base_head: str | None = None,
+) -> dict[str, Any]:
+    """Decide whether a checkout holds a proven slice or integrated head. Grants no authority."""
+    if gate not in DELIVERY_CHECK_GATES:
+        raise ProgramStateError(f"delivery check must be one of {sorted(DELIVERY_CHECK_GATES)}")
+    state = load_state(root, program_id)
+    if unit_id is not None and unit_id not in state["units"]:
+        raise ProgramStateError(f"unknown unit: {unit_id}")
+    checkout = checked_delivery_checkout(root, checkout)
+    target: str | None = None
+
+    def result(passed: bool, reason: str) -> dict[str, Any]:
+        return {
+            "program_id": program_id,
+            "scope": "whole-program" if unit_id is None else "slice",
+            "unit_id": unit_id,
+            "gate": gate,
+            "head_sha": target,
+            "pass": passed,
+            "reason": reason,
+            "delivery_authority_granted": False,
+        }
+
+    delivery = state["delivery"]
+    if delivery["authority"] == "none":
+        return result(False, "the plan claims no delivery authority")
+    if not dispatch_evidence_is_fresh(state["dispatch_binding"]):
+        return result(False, "dispatch evidence is missing or changed")
+    if unit_id is None:
+        if not state["gates"]["delivery"]["open"]:
+            return result(False, "the whole-program delivery gate is closed")
+        if not delivery_ready(root, state):
+            return result(
+                False,
+                "whole-program delivery requires complete units and one unit that depends on and "
+                "contains every other unit; deliver slices or add an integration unit",
+            )
+        target = integrated_head(root, state)
+    else:
+        unit = state["units"][unit_id]
+        target = unit["head_sha"]
+        if not unit_is_complete(root, state, unit):
+            return result(False, f"unit {unit_id} lacks complete fresh evidence for its head")
+        if not dependencies_complete(root, state, unit):
+            return result(False, f"unit {unit_id} has an incomplete dependency")
+    try:
+        candidate = run_state.current_candidate(checkout)
+        if candidate["head"] != target:
+            return result(False, f"checkout HEAD {candidate['head']} is not the proven head")
+        if not run_state.worktree_matches_head(checkout, candidate):
+            return result(False, "the checkout differs from the proven head; deliver from a clean checkout")
+        if gate == "ship":
+            if "non-force-push" not in delivery["actions"]:
+                return result(False, "the plan claims no push action")
+            return result(True, "proof covers the clean checkout head")
+        if delivery["authority"] != "explicit-merge" or "merge" not in delivery["actions"]:
+            return result(False, "the plan claims no explicit-merge authority")
+        if provider_receipt is None:
+            return result(False, "merge requires a bound pr_watch ready receipt")
+        ready, reason, _present = run_state.evaluate_provider_receipt(provider_receipt, target)
+        if not ready:
+            return result(False, reason)
+        proven, reason = run_state.merge_result_is_proven(checkout, target, base_head)
+        if not proven:
+            return result(False, reason)
+    except run_state.RunStateError as error:
+        raise ProgramStateError(str(error)) from error
+    return result(True, "proof, plan-claimed merge authority, provider receipt, and base all bind this head")
 
 
 def dependent_units(state: dict[str, Any], changed_unit: str) -> set[str]:
@@ -1506,7 +1636,10 @@ def set_gate(
         state = load_state(root, program_id)
         dispatch_was_open = state["gates"]["dispatch"]["open"] is True
         if opened and name == "delivery" and not delivery_ready(root, state):
-            raise ProgramStateError("delivery gate requires every unit to have complete fresh evidence")
+            raise ProgramStateError(
+                "delivery gate requires every unit to have complete fresh evidence "
+                "and one unit that depends on and contains every other unit"
+            )
         if opened and name == "dispatch":
             if receipt_path is None or integration_owner is None:
                 raise ProgramStateError(
@@ -2003,6 +2136,7 @@ def status(
         "delivery_gate_open": state["gates"]["delivery"]["open"],
         "delivery_authority_granted": False,
         "delivery_admitted": state["gates"]["delivery"]["open"] and ready,
+        "integrated_head": integrated_head(root, state),
         "inbox_count": len(state["inbox"]),
     }
     if brief:
@@ -2106,7 +2240,352 @@ def expect_unchanged_state_error(
         raise AssertionError("rejected stale assignment mutation changed persisted state")
 
 
+def run_delivery_self_test() -> None:
+    """Exercise every program path decided in references/delivery-proof.md."""
+    # A fully declared stack checks each dependency once; walking its paths would be exponential.
+    declared = {
+        f"unit-{index}": {"id": f"unit-{index}", "depends_on": [f"unit-{lower}" for lower in range(index)]}
+        for index in range(40)
+    }
+    checked: list[str] = []
+    real_unit_is_complete = globals()["unit_is_complete"]
+    globals()["unit_is_complete"] = lambda _root, _state, unit: checked.append(unit["id"]) or True
+    try:
+        assert dependencies_complete(Path("."), {"units": declared}, declared["unit-39"])
+    finally:
+        globals()["unit_is_complete"] = real_unit_is_complete
+    assert sorted(checked) == sorted(f"unit-{index}" for index in range(39))
+
+    with (
+        tempfile.TemporaryDirectory(prefix="patpat-program-delivery-") as raw,
+        tempfile.TemporaryDirectory(prefix="patpat-program-delivery-out-") as raw_outside,
+    ):
+        root = Path(raw).resolve()
+        outside = Path(raw_outside).resolve()
+        run_state.make_test_repository(root)
+
+        def git(*args: str, repository: Path = root) -> str:
+            return subprocess.run(
+                ["git", "-C", str(repository), *args], check=True, capture_output=True, text=True
+            ).stdout.strip()
+
+        def commit_file(name: str, repository: Path = root) -> str:
+            (repository / name).write_text(f"{name}\n", encoding="utf-8")
+            git("add", name, repository=repository)
+            git("commit", "-qm", name, repository=repository)
+            return git("rev-parse", "HEAD", repository=repository)
+
+        evidence = outside / "evidence.txt"
+        evidence.write_text("proof\n", encoding="utf-8")
+
+        def open_program(program_id: str, plan: dict[str, Any]) -> None:
+            plan_path = outside / f"{program_id}.json"
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
+            initialize(root, program_id, plan_path)
+            binding = bind_parallel_gate_evidence(evidence)
+            receipt = {
+                "schema_version": 2,
+                "kind": PARALLEL_GATE_KIND,
+                "program_id": program_id,
+                "plan_digest": load_state(root, program_id)["plan_digest"],
+                "integration_owner": "Owner",
+                "checks": {name: True for name in PARALLEL_GATE_CHECKS},
+                "supporting_evidence": {name: [binding] for name in PARALLEL_GATE_CHECKS},
+                "isolation_identities": {
+                    unit["id"]: f"worktree-{unit['id']}" for unit in plan["units"]
+                },
+            }
+            receipt_path = outside / f"{program_id}-gate.json"
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            set_gate(root, program_id, "dispatch", True, "self-test", receipt_path, "Owner", worker_limit=4)
+
+        def prove_unit(program_id: str, unit_id: str, head: str) -> None:
+            generation = assign_unit(
+                root, program_id, unit_id, f"Worker {unit_id}", f"worktree-{unit_id}", 0
+            )["units"][unit_id]["assignment"]["generation"]
+            set_unit_state(root, program_id, unit_id, "running", generation)
+            set_head(root, program_id, unit_id, head, None, generation)
+            record_verdict(root, program_id, unit_id, "verification", "pass", head, "Verifier", evidence, generation)
+            record_verdict(root, program_id, unit_id, "review", "pass", head, "Reviewer", evidence, generation)
+            set_unit_state(root, program_id, unit_id, "completed", generation)
+
+        def expect(fragment: str, passed: bool, *args: Any, **kwargs: Any) -> None:
+            verdict = check_delivery(root, *args, **kwargs)
+            if verdict["pass"] is not passed or fragment not in verdict["reason"]:
+                raise AssertionError(f"{args} {kwargs}: {verdict}")
+            if verdict["delivery_authority_granted"] is not False:
+                raise AssertionError("a delivery check claimed authority")
+
+        def merge_plan(*dependencies: list[str]) -> dict[str, Any]:
+            plan = example_plan()
+            plan["delivery"] = {
+                "authority": "explicit-merge",
+                "actions": ["commit", "non-force-push", "create-or-update-ready-pr", "merge"],
+            }
+            plan["units"][1]["depends_on"] = list(dependencies[0]) if dependencies else []
+            return plan
+
+        base = git("rev-parse", "HEAD")
+        branch = git("rev-parse", "--abbrev-ref", "HEAD")
+
+        # A queue slice delivers while its sibling is pending, from a clean checkout at its head.
+        open_program("queue", merge_plan())
+        git("checkout", "-qb", "contract", base)
+        contract_head = commit_file("contract.txt")
+        git("checkout", "-qb", "consumer", base)
+        consumer_head = commit_file("consumer.txt")
+        expect("lacks complete fresh evidence", False, "queue", "contract")
+        prove_unit("queue", "contract", contract_head)
+        expect("not the proven head", False, "queue", "contract")
+        git("checkout", "-q", "contract")
+        expect("proof covers", True, "queue", "contract")
+        assert status(root, "queue")["units"]["consumer"]["state"] == "pending"
+        assert not status(root, "queue")["delivery_ready"]
+        (root / "dirty.txt").write_text("dirty\n", encoding="utf-8")
+        expect("differs from the proven head", False, "queue", "contract")
+        (root / "dirty.txt").unlink()
+
+        # A linked worktree holds the delivered head; a checkout from another repository is refused.
+        linked = outside / "linked"
+        git("worktree", "add", "-q", str(linked), "consumer")
+        expect("not the proven head", False, "queue", "contract", checkout=linked)
+        foreign = outside / "foreign"
+        foreign.mkdir()
+        run_state.make_test_repository(foreign)
+        expect_error(
+            lambda: check_delivery(root, "queue", "contract", checkout=foreign),
+            "another repository",
+        )
+
+        # Independent complete units have no integrated head, so the whole program stays closed.
+        prove_unit("queue", "consumer", consumer_head)
+        expect("proof covers", True, "queue", "consumer", checkout=linked)
+        queue_status = status(root, "queue")
+        assert queue_status["integrated_head"] is None and not queue_status["delivery_ready"]
+        expect_error(
+            lambda: set_gate(root, "queue", "delivery", True, "ship all"),
+            "depends on and contains every other unit",
+        )
+        expect("delivery gate is closed", False, "queue")
+
+        # A stale gate opened before this contract does not admit independent heads.
+        stale_gate = load_state(root, "queue")
+        stale_gate["gates"]["delivery"]["open"] = True
+        atomic_write_json(state_path(root, "queue"), stale_gate)
+        assert not status(root, "queue")["delivery_admitted"]
+        expect("add an integration unit", False, "queue")
+
+        # Ancestry alone is not integration: a head that happens to contain a sibling never declared it.
+        open_program("accidental", merge_plan())
+        accidental_head = consumer_head
+        git("checkout", "-qb", "accidental", accidental_head)
+        accidental_tip = commit_file("accidental.txt")
+        prove_unit("accidental", "contract", accidental_head)
+        prove_unit("accidental", "consumer", accidental_tip)
+        assert git_is_ancestor(root, accidental_head, accidental_tip)
+        assert status(root, "accidental")["integrated_head"] is None
+        expect_error(
+            lambda: set_gate(root, "accidental", "delivery", True, "ship all"),
+            "depends on and contains every other unit",
+        )
+        git("checkout", "-q", "contract")
+
+        # A slice merge binds authority, provider head, and base.
+        provider = outside / "provider.json"
+        run_state.write_test_provider_receipt(provider, contract_head)
+        expect("pr_watch", False, "queue", "contract", gate="merge")
+        expect(
+            "--base-head", False, "queue", "contract", gate="merge", provider_receipt=provider
+        )
+        expect(
+            "base all bind", True, "queue", "contract",
+            gate="merge", provider_receipt=provider, base_head=base,
+        )
+        run_state.write_test_provider_receipt(provider, consumer_head)
+        expect(
+            "not bound to the current HEAD", False, "queue", "contract",
+            gate="merge", provider_receipt=provider, base_head=base,
+        )
+
+        # After a sibling lands, the next slice's merged result is unproven until it updates.
+        run_state.write_test_provider_receipt(provider, contract_head)
+        expect(
+            "does not contain base", False, "queue", "contract",
+            gate="merge", provider_receipt=provider, base_head=consumer_head,
+        )
+
+        # A stack slice waits for its dependency, and the tip is the integrated head.
+        git("worktree", "remove", "--force", str(linked))
+        open_program("stack", merge_plan(["contract"]))
+        git("checkout", "-q", "contract")
+        stack_lower = git("rev-parse", "HEAD")
+        git("checkout", "-qb", "stack-tip")
+        stack_tip = commit_file("tip.txt")
+        prove_unit("stack", "contract", stack_lower)
+        generation = assign_unit(
+            root, "stack", "consumer", "Worker consumer", "worktree-consumer", 0
+        )["units"]["consumer"]["assignment"]["generation"]
+        set_unit_state(root, "stack", "consumer", "running", generation)
+        set_head(root, "stack", "consumer", stack_tip, None, generation)
+        expect("lacks complete fresh evidence", False, "stack", "consumer")
+        record_verdict(root, "stack", "consumer", "verification", "pass", stack_tip, "Verifier", evidence, generation)
+        record_verdict(root, "stack", "consumer", "review", "pass", stack_tip, "Reviewer", evidence, generation)
+        set_unit_state(root, "stack", "consumer", "completed", generation)
+        assert status(root, "stack")["integrated_head"] == stack_tip
+        expect("delivery gate is closed", False, "stack")
+        set_gate(root, "stack", "delivery", True, "tip contains every unit")
+        assert status(root, "stack", brief=True)["delivery_admitted"]
+        expect("proof covers", True, "stack")
+        run_state.write_test_provider_receipt(provider, stack_tip)
+        expect(
+            "base all bind", True, "stack",
+            gate="merge", provider_receipt=provider, base_head=base,
+        )
+        expect("not the proven head", False, "stack", "contract")
+
+        # A squash-landed dependency revokes its dependents until both are proven on the new base.
+        git("checkout", "-q", "--detach", base)
+        git("merge", "-q", "--squash", stack_lower)
+        git("commit", "-qm", "squash landed")
+        squashed = git("rev-parse", "HEAD")
+        contract_generation = load_state(root, "stack")["units"]["contract"]["assignment"]["generation"]
+        expect_error(
+            lambda: set_head(root, "stack", "consumer", squashed, stack_tip, generation),
+            "dependency head",
+        )
+        set_head(root, "stack", "contract", squashed, stack_lower, contract_generation)
+        assert not status(root, "stack")["delivery_ready"]
+        expect("lacks complete fresh evidence", False, "stack", "contract")
+        record_verdict(root, "stack", "contract", "verification", "pass", squashed, "Verifier", evidence, contract_generation)
+        record_verdict(root, "stack", "contract", "review", "pass", squashed, "Reviewer", evidence, contract_generation)
+        set_unit_state(root, "stack", "contract", "completed", contract_generation)
+        expect("proof covers", True, "stack", "contract")
+        git("checkout", "-q", "--detach", squashed)
+        rebased_tip = commit_file("rebased-tip.txt")
+        consumer_generation = load_state(root, "stack")["units"]["consumer"]["assignment"]["generation"]
+        generation = assign_unit(
+            root, "stack", "consumer", "Worker consumer", "worktree-consumer", consumer_generation
+        )["units"]["consumer"]["assignment"]["generation"]
+        set_unit_state(root, "stack", "consumer", "running", generation)
+        set_head(root, "stack", "consumer", rebased_tip, stack_tip, generation)
+        record_verdict(root, "stack", "consumer", "verification", "pass", rebased_tip, "Verifier", evidence, generation)
+        record_verdict(root, "stack", "consumer", "review", "pass", rebased_tip, "Reviewer", evidence, generation)
+        set_unit_state(root, "stack", "consumer", "completed", generation)
+        expect("proof covers", True, "stack", "consumer")
+
+        # Revoked evidence anywhere below a slice closes it, not just on its direct dependency.
+        chain_plan = merge_plan(["contract"])
+        chain_plan["units"].append(
+            {**chain_plan["units"][1], "id": "tip", "depends_on": ["consumer"], "files": ["src/tip.py"]}
+        )
+        open_program("chain", chain_plan)
+        git("checkout", "-q", "--detach", base)
+        chain_a = commit_file("chain-a.txt")
+        chain_b = commit_file("chain-b.txt")
+        chain_c = commit_file("chain-c.txt")
+        prove_unit("chain", "contract", chain_a)
+        prove_unit("chain", "consumer", chain_b)
+        prove_unit("chain", "tip", chain_c)
+        expect("proof covers", True, "chain", "tip")
+        chain_generation = load_state(root, "chain")["units"]["contract"]["assignment"]["generation"]
+        assign_unit(root, "chain", "contract", "Replacement", "worktree-contract", chain_generation)
+        expect("incomplete dependency", False, "chain", "tip")
+        run_state.write_test_provider_receipt(provider, chain_c)
+        expect(
+            "incomplete dependency", False, "chain", "tip",
+            gate="merge", provider_receipt=provider, base_head=base,
+        )
+
+        # Changed evidence below a slice closes it too.
+        open_program("chain-evidence", chain_plan)
+        lower_evidence = outside / "lower-evidence.txt"
+        lower_evidence.write_text("lower\n", encoding="utf-8")
+        generation = assign_unit(
+            root, "chain-evidence", "contract", "Worker contract", "worktree-contract", 0
+        )["units"]["contract"]["assignment"]["generation"]
+        set_unit_state(root, "chain-evidence", "contract", "running", generation)
+        set_head(root, "chain-evidence", "contract", chain_a, None, generation)
+        record_verdict(root, "chain-evidence", "contract", "verification", "pass", chain_a, "Verifier", lower_evidence, generation)
+        record_verdict(root, "chain-evidence", "contract", "review", "pass", chain_a, "Reviewer", lower_evidence, generation)
+        set_unit_state(root, "chain-evidence", "contract", "completed", generation)
+        prove_unit("chain-evidence", "consumer", chain_b)
+        prove_unit("chain-evidence", "tip", chain_c)
+        expect("proof covers", True, "chain-evidence", "tip")
+        lower_evidence.write_text("changed\n", encoding="utf-8")
+        expect("incomplete dependency", False, "chain-evidence", "tip")
+
+        # An integration unit gives independent work one proven head.
+        integration_plan = merge_plan()
+        integration_plan["units"].append(
+            {
+                **integration_plan["units"][1],
+                "id": "integration",
+                "depends_on": ["contract", "consumer"],
+                "files": ["src/contract.py", "src/consumer.py"],
+            }
+        )
+        open_program("integrated", integration_plan)
+        prove_unit("integrated", "contract", contract_head)
+        prove_unit("integrated", "consumer", consumer_head)
+        git("checkout", "-q", "contract")
+        git("checkout", "-qb", "integration")
+        git("merge", "-q", "--no-edit", "consumer")
+        integration_head = git("rev-parse", "HEAD")
+        prove_unit("integrated", "integration", integration_head)
+        assert status(root, "integrated")["integrated_head"] == integration_head
+        set_gate(root, "integrated", "delivery", True, "integration unit proven")
+        expect("proof covers", True, "integrated")
+        run_state.write_test_provider_receipt(provider, integration_head)
+        expect(
+            "base all bind", True, "integrated",
+            gate="merge", provider_receipt=provider, base_head=base,
+        )
+        commit_file("after-proof.txt")
+        expect("not the proven head", False, "integrated")
+
+        # A plan without push, merge authority, or any delivery claim never passes.
+        commit_only = example_plan()
+        commit_only["delivery"] = {"authority": "explicit-delivery", "actions": ["commit"]}
+        commit_only["units"][1]["depends_on"] = []
+        open_program("commit-only", commit_only)
+        prove_unit("commit-only", "contract", contract_head)
+        git("checkout", "-q", "contract")
+        expect("no push action", False, "commit-only", "contract")
+        merge_only = merge_plan()
+        merge_only["delivery"]["actions"] = ["merge"]
+        open_program("merge-only", merge_only)
+        prove_unit("merge-only", "contract", contract_head)
+        run_state.write_test_provider_receipt(provider, contract_head)
+        expect(
+            "base all bind", True, "merge-only", "contract",
+            gate="merge", provider_receipt=provider, base_head=base,
+        )
+        explicit_delivery = example_plan()
+        explicit_delivery["units"][1]["depends_on"] = []
+        open_program("no-merge", explicit_delivery)
+        prove_unit("no-merge", "contract", contract_head)
+        git("checkout", "-q", "contract")
+        expect("proof covers", True, "no-merge", "contract")
+        run_state.write_test_provider_receipt(provider, contract_head)
+        expect(
+            "explicit-merge", False, "no-merge", "contract",
+            gate="merge", provider_receipt=provider, base_head=base,
+        )
+        no_claim = example_plan()
+        no_claim["delivery"] = {"authority": "none", "actions": []}
+        no_claim["units"][1]["depends_on"] = []
+        open_program("no-claim", no_claim)
+        prove_unit("no-claim", "contract", contract_head)
+        expect("no delivery authority", False, "no-claim", "contract")
+
+        # Changed dispatch evidence closes slice delivery.
+        evidence.write_text("changed\n", encoding="utf-8")
+        expect("dispatch evidence", False, "no-merge", "contract")
+        git("checkout", "-q", branch)
+
+
 def run_self_test() -> None:
+    run_delivery_self_test()
     with tempfile.TemporaryDirectory(prefix="patpat-program-state-") as raw:
         root = Path(raw).resolve()
         subprocess.run(["git", "init", "-q", str(root)], check=True)
@@ -3197,6 +3676,15 @@ def build_parser() -> argparse.ArgumentParser:
     migrate_v3_parser.add_argument("--invalidate-legacy-evidence", action="store_true")
     migrate_v3_parser.add_argument("--full", action="store_true", help="Print the complete state ledger")
 
+    delivery_parser = commands.add_parser("check-delivery")
+    delivery_parser.add_argument("--unit", help="Check one slice; omit for the whole program")
+    delivery_parser.add_argument("--gate", choices=sorted(DELIVERY_CHECK_GATES), default="ship")
+    delivery_parser.add_argument("--checkout", type=Path, help="Worktree holding the delivered head")
+    delivery_parser.add_argument("--provider-receipt", type=Path)
+    delivery_parser.add_argument(
+        "--base-head", help="Freshly fetched commit of the merge target; required by the merge gate"
+    )
+
     gate_parser = commands.add_parser("set-gate")
     gate_parser.add_argument("name", choices=sorted(GATE_NAMES))
     gate_parser.add_argument("state", choices=["open", "closed"])
@@ -3278,6 +3766,18 @@ def main() -> int:
             result = status(root, args.program, args.unit, args.brief)
         elif args.command == "validate":
             result = {"valid": True, "program_id": load_state(root, args.program)["program_id"]}
+        elif args.command == "check-delivery":
+            result = check_delivery(
+                root,
+                args.program,
+                args.unit,
+                args.gate,
+                args.checkout,
+                args.provider_receipt,
+                args.base_head,
+            )
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return 0 if result["pass"] else 1
         elif args.command == "lock-status":
             result = inspect_lock(root, args.program)
         elif args.command == "recover-lock":

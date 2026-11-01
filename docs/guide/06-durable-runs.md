@@ -53,6 +53,6 @@ Keep dispatch closed until the integration owner supplies one bounded schema-v2 
 
 State mutations return bounded receipts by default so long ledgers do not flood agent context. Plan, state, receipt, and inbox inputs are bounded and reject linked files where they cross a trust boundary. Use `status --brief`, `status --unit <id>`, and bounded inbox pages for normal coordination; request full state only for a deliberate audit. Lock acquisition has a bounded timeout. Inspect abandoned locks before recovery. Only a dead same-host owner is recoverable automatically.
 
-`delivery_admitted` remains a compatibility field for evidence plus gate state; it never means delivery authority. Check `delivery_authority_granted`, which is always false, and reacquire current delivery authority through `patpat-ship`.
+`delivery_admitted` reports evidence plus gate state for the whole program, and requires one unit that depends on and contains every other unit. It does not inspect a checkout and never means delivery authority. Check a delivered head with `check-delivery`, which compares it with a live checkout and reports `delivery_authority_granted` as false, and reacquire current delivery authority through `patpat-ship`. [Delivery proof](../../skills/patpat-run/references/delivery-proof.md) covers run gates, slices, integrated heads, and merges.
 
 Next: [Earn parallelism](./07-earned-parallelism.md).
