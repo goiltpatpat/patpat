@@ -2327,7 +2327,7 @@ def run_self_test() -> bool:
         record_proof_contract(root, "blocked-gates-run", contract)
         for node in ("PROOF_CONTRACT", "ACT", "VERIFY"):
             transition(root, "blocked-gates-run", node)
-        blocked_evidence = evidence_root / "blocked-gates.txt"
+        blocked_evidence = evidence_root.resolve() / "blocked-gates.txt"
         blocked_evidence.write_text("evidence\n", encoding="utf-8")
         record_receipt(root, "blocked-gates-run", "verification", "Seen", f"file:{blocked_evidence}", "verifier", "verified")
         transition(root, "blocked-gates-run", "REVIEW")
