@@ -112,9 +112,11 @@ jobs:
 
   # Python floor is 3.11+ (datetime.UTC). One Windows job covers path-sensitive
   # installer, updater, staging, and durable-state tests. No version matrix.
+  # Delivery-gate self-tests spawn many git processes, and the run-state suite alone
+  # takes about 7.5 minutes on this runner.
   windows-paths:
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
