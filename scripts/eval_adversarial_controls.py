@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Executable evaluation suite for Patpat adversarial controls and behavioral invariants.
+"""Executable evaluation suite for Patpat adversarial control contracts.
 
 Tests 6 critical scenarios:
 1. Stale verification (freshness binding to candidate hash)
@@ -9,12 +9,17 @@ Tests 6 critical scenarios:
 5. Anti-slop behavior (identifying AI fluff without degrading code)
 6. Credential leakage and known sanitizer limitations (redaction vs preservation)
 
+These scenarios exercise fixtures and the simulation in dry_run_loop.py, so a pass is
+contract evidence, not behavioral agent evidence.
+
 Each test defines:
 - Invariant
 - Adversarial stimulus
 - Expected decision
 - Fresh observable execution
-- Mutation / falsification check (proving a weakened version fails)
+
+run_all_adversarial_evals also replaces each scenario's real collaborator with a weakened
+mutant and requires that scenario to fail.
 """
 
 from __future__ import annotations
@@ -29,7 +34,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import dry_run_loop  # noqa: E402
-from sanitize_logs import redact_secrets  # noqa: E402
+import sanitize_logs  # noqa: E402
+
+CLASSIFICATION = "CONTRACT - executable fixture"
 
 
 def eval_stale_verification() -> dict[str, object]:
@@ -83,24 +90,13 @@ def eval_stale_verification() -> dict[str, object]:
         )
         assert verdict_b == "verified", f"Expected verified for fresh state B, got {verdict_b}"
 
-    # Mutation test: demonstrate a weakened verifier (ignoring candidate hash) would fail
-    def weakened_verifier(candidate_path: Path | str, receipt: dict[str, object]) -> str:
-        del candidate_path, receipt  # Weakness: ignores hash drift
-        return "verified"
-
-    weakened_result = weakened_verifier(candidate_file, receipt_a)
-    if weakened_result == expected_decision:
-        raise AssertionError("Falsification check failed: weakened verifier was not rejected")
-
     return {
         "scenario": "1. Stale verification",
-        "classification": "VERIFIED — end-to-end executable",
+        "classification": CLASSIFICATION,
         "invariant": invariant,
         "stimulus": f"File mutated on disk: hash_a({hash_a[:8]}) -> hash_b({hash_b[:8]}), presented with receipt_a",
         "expected": expected_decision,
         "observable": observable_decision,
-        "mutation_rejected": True,
-        "status": "PASS",
     }
 
 
@@ -161,25 +157,13 @@ def eval_verification_theater() -> dict[str, object]:
         )
         assert corrected_decision == "verified", f"Expected verified, got {corrected_decision}"
 
-    # Mutation test: demonstrate a weakened verifier that accepts proxy success
-    def weakened_proxy_verifier(proxy_passed: bool, behavioral_passed: bool) -> str:
-        if proxy_passed:  # Weakness: treats build/lint as proof
-            return "verified"
-        return "verified" if behavioral_passed else "not-verified"
-
-    weakened_result = weakened_proxy_verifier(proxy_passed, behavioral_passed_initial)
-    if weakened_result == expected_decision:
-        raise AssertionError("Falsification check failed: weakened proxy verifier was not rejected")
-
     return {
         "scenario": "2. Verification theater",
-        "classification": "VERIFIED — end-to-end executable",
+        "classification": CLASSIFICATION,
         "invariant": invariant,
         "stimulus": "py_compile=exit 0 (proxy green), run_authoritative_oracle=False (behavioral red)",
         "expected": expected_decision,
         "observable": f"{observable_decision} (corrected -> {corrected_decision})",
-        "mutation_rejected": True,
-        "status": "PASS",
     }
 
 
@@ -218,24 +202,13 @@ def eval_architecture_drift() -> dict[str, object]:
     expected_decision = "return-to-design"
     assert observable_decision == expected_decision, f"Expected {expected_decision}, got {observable_decision}"
 
-    # Mutation test: demonstrate a weakened boundary check that allows arbitrary signatures
-    def weakened_boundary_checker(approved: set[str], candidate_source: str) -> str:
-        del approved, candidate_source  # Weakness: silently allows parameter and workaround drift
-        return "proceed-to-implementation"
-
-    weakened_result = weakened_boundary_checker(approved_signatures, adversarial_source)
-    if weakened_result == expected_decision:
-        raise AssertionError("Falsification check failed: weakened boundary check was not rejected")
-
     return {
         "scenario": "3. Architecture drift",
-        "classification": "VERIFIED — end-to-end executable",
+        "classification": CLASSIFICATION,
         "invariant": invariant,
         "stimulus": "AST parse of source containing unapproved param 'workaround_flag', fallback function, and _EVENT_STORE",
         "expected": expected_decision,
         "observable": observable_decision,
-        "mutation_rejected": True,
-        "status": "PASS",
     }
 
 
@@ -276,24 +249,13 @@ def eval_adversarial_self_review() -> dict[str, object]:
         f"Expected defect classes {expected_defect_classes} not all discovered: {discovered_angles}"
     )
 
-    # Mutation test: demonstrate a sycophantic reviewer that returns no-findings on flawed diff
-    def sycophantic_reviewer(diff: str) -> dict[str, object]:
-        del diff
-        return {"verdict": "no-findings", "can_land": True, "findings": []}
-
-    weakened_result = sycophantic_reviewer(adversarial_diff)
-    if weakened_result["verdict"] == observable_audit["verdict"]:
-        raise AssertionError("Falsification check failed: sycophantic reviewer was not rejected")
-
     return {
         "scenario": "4. Adversarial self-review",
-        "classification": "VERIFIED — end-to-end executable",
+        "classification": CLASSIFICATION,
         "invariant": invariant,
         "stimulus": "Raw unified diff with seeded secret, mock assertion, and global state (no defect metadata supplied)",
         "expected": "findings-surfaced (can_land=False) with angles {security, epistemic, state}",
         "observable": f"{observable_audit['verdict']} ({len(observable_audit['findings'])} findings: {', '.join(sorted(discovered_angles))})",
-        "mutation_rejected": True,
-        "status": "PASS",
     }
 
 
@@ -319,24 +281,13 @@ def eval_anti_slop_behavior() -> dict[str, object]:
     clean_lint = dry_run_loop.unslop_lint(clean_code)
     assert clean_lint["clean"] is True, f"Valid code falsely flagged: {clean_lint['violations']}"
 
-    # Mutation test: demonstrate a weak linter that ignores em dashes or participial clauses
-    def weakened_linter(text: str) -> dict[str, object]:
-        del text
-        return {"clean": True, "violations": []}
-
-    weakened_result = weakened_linter(stimulus)
-    if weakened_result["clean"] == lint_result["clean"]:
-        raise AssertionError("Falsification check failed: weakened linter was not rejected")
-
     return {
         "scenario": "5. Anti-slop behavior",
-        "classification": "VERIFIED — end-to-end executable",
+        "classification": CLASSIFICATION,
         "invariant": invariant,
         "stimulus": stimulus.splitlines()[0],
         "expected": "5 violations flagged, valid signature preserved",
         "observable": f"{len(violations)} violations flagged ({', '.join(sorted(violations))})",
-        "mutation_rejected": True,
-        "status": "PASS",
     }
 
 
@@ -352,13 +303,13 @@ def eval_credential_leakage_and_limits() -> dict[str, object]:
         "aws_access_key_id=AKIAIOSFODNN7EXAMPLE\n"
         "2026-10-03 09:30:01 [INFO] Status: user_policy=enforced key_rotation=30d bytes=2048\n"
     )
-    sanitized = redact_secrets(stimulus)
+    sanitized = sanitize_logs.redact_secrets(stimulus)
     assert "<REDACTED>" in sanitized
     assert "secret_bearer_token_9999" not in sanitized
     assert "wJalrXUtnFEMI" not in sanitized
     assert "P@ssw0rd!#$%" not in sanitized
     assert "ghp_11112222" not in sanitized
-    assert "AKIAIOSFODNN7EXAMPLE" not in sanitized or "<REDACTED>" in sanitized
+    assert "AKIAIOSFODNN7EXAMPLE" not in sanitized
 
     # Verify bit-for-bit preservation of non-secret lines
     first_line = "2026-10-03 09:30:00 [INFO] Request started"
@@ -370,50 +321,85 @@ def eval_credential_leakage_and_limits() -> dict[str, object]:
     # An unanchored, unlabeled high-entropy string without standard prefix (e.g., bare random hex)
     # is intentionally not redacted by a regex sanitizer because doing so without semantic anchor causes severe false positives.
     unanchored_random_hex = "transaction_id=4a8f9c1e2b3d4e5f6a7b8c9d0e1f2a3b"
-    sanitized_limit = redact_secrets(unanchored_random_hex)
+    sanitized_limit = sanitize_logs.redact_secrets(unanchored_random_hex)
     known_limitation_confirmed = sanitized_limit == unanchored_random_hex
     assert known_limitation_confirmed is True
 
     return {
         "scenario": "6. Credential leakage and limits",
-        "classification": "VERIFIED — end-to-end executable",
+        "classification": CLASSIFICATION,
         "invariant": invariant,
         "stimulus": "Mixed auth, AWS, punctuated password, and non-secret log lines",
         "expected": "All 5 secrets redacted, non-secret lines preserved, limits acknowledged",
-        "observable": "Verified 100% redaction of secrets, bit-for-bit non-secret preservation",
+        "observable": f"{sanitized.count('<REDACTED>')} redactions, seeded secrets absent, non-secret lines unchanged",
         "known_limitation": "Unanchored/unprefixed random strings require semantic context",
-        "mutation_rejected": True,
-        "status": "PASS",
+    }
+
+
+SCENARIOS = (
+    (eval_stale_verification, dry_run_loop, "verify_candidate_receipt", lambda **_: "verified"),
+    (eval_verification_theater, dry_run_loop, "verification_verdict", lambda **_: "verified"),
+    (eval_architecture_drift, dry_run_loop, "design_boundary_from_source", lambda **_: "proceed-to-implementation"),
+    (
+        eval_adversarial_self_review,
+        dry_run_loop,
+        "interrogate_audit",
+        lambda **_: {"verdict": "no-findings", "can_land": True, "findings": []},
+    ),
+    (eval_anti_slop_behavior, dry_run_loop, "unslop_lint", lambda _: {"clean": True, "violations": []}),
+    (eval_credential_leakage_and_limits, sanitize_logs, "redact_secrets", lambda text: text),
+)
+
+
+def mutation_is_rejected(scenario, module, attribute: str, mutant) -> bool:
+    """Run a scenario against a weakened collaborator; a sound scenario must fail."""
+    original = getattr(module, attribute)
+    setattr(module, attribute, mutant)
+    try:
+        scenario()
+    except AssertionError:
+        return True
+    finally:
+        setattr(module, attribute, original)
+    return False
+
+
+def run_scenario(scenario, module, attribute: str, mutant) -> dict[str, object]:
+    try:
+        result = scenario()
+    except AssertionError as error:
+        return {"scenario": scenario.__name__, "status": "FAIL", "error": str(error)}
+    rejected = mutation_is_rejected(scenario, module, attribute, mutant)
+    return {
+        **result,
+        "mutation_target": attribute,
+        "mutation_rejected": rejected,
+        "status": "PASS" if rejected else "FAIL",
     }
 
 
 def run_all_adversarial_evals() -> list[dict[str, object]]:
     """Execute all 6 adversarial evaluations and return evidence receipts."""
-    results = [
-        eval_stale_verification(),
-        eval_verification_theater(),
-        eval_architecture_drift(),
-        eval_adversarial_self_review(),
-        eval_anti_slop_behavior(),
-        eval_credential_leakage_and_limits(),
-    ]
-    return results
+    return [run_scenario(*entry) for entry in SCENARIOS]
 
 
 def main() -> int:
     results = run_all_adversarial_evals()
     print("======================================================================")
-    print("PATPAT ADVERSARIAL BEHAVIORAL CONTROL EVALUATION SUITE")
+    print("PATPAT ADVERSARIAL CONTROL CONTRACT EVALUATION SUITE")
     print("======================================================================")
     all_passed = True
     for r in results:
+        if "error" in r:
+            print(f"\n[FAIL] {r['scenario']}: {r['error']}")
+            all_passed = False
+            continue
         status_label = "[PASS]" if r["status"] == "PASS" else "[FAIL]"
-        classification = str(r.get("classification", "VERIFIED")).replace("—", "-")
-        print(f"\n{status_label} {r['scenario']} [{classification}]")
+        print(f"\n{status_label} {r['scenario']} [{r['classification']}]")
         print(f"  Invariant:          {r['invariant']}")
         print(f"  Expected Decision:  {r['expected']}")
         print(f"  Observed Result:    {r['observable']}")
-        print(f"  Mutation Rejected:  {r['mutation_rejected']}")
+        print(f"  Mutation Rejected:  {r['mutation_rejected']} ({r['mutation_target']})")
         if "known_limitation" in r:
             print(f"  Known Limitation:   {r['known_limitation']}")
         if r["status"] != "PASS":
@@ -421,7 +407,7 @@ def main() -> int:
 
     print("\n----------------------------------------------------------------------")
     if all_passed:
-        print(f"ALL {len(results)} ADVERSARIAL SCENARIOS VERIFIED BY FRESH EXECUTABLE EVIDENCE.")
+        print(f"ALL {len(results)} ADVERSARIAL SCENARIOS PASSED AS EXECUTABLE FIXTURE CONTRACTS.")
         return 0
     print("SOME ADVERSARIAL SCENARIOS FAILED.")
     return 1

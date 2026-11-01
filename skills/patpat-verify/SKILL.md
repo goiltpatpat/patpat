@@ -20,7 +20,7 @@ Read [proof over proxy](../patpat-loop/principles/proof-over-proxy.md) and [pres
 NO COMPLETION CLAIMS WITHOUT FRESH, CANDIDATE-BOUND EVIDENCE
 ```
 
-For work outside a durable `patpat-run`, execute the authoritative check in the current turn. Within a durable run, prior evidence may be reused only when `patpat-run validate` accepts its receipt as fresh for the current candidate, proof contract, evidence epoch, and repository snapshot, and the bound evidence content still matches. Never describe reused evidence as executed in the current turn. The run snapshot does not cover ignored files, external inputs, or the process and dependency environment; bind task-relevant non-secret inputs separately or rerun the check.
+For work outside a durable `patpat-run`, execute the authoritative check in the current turn. Within a durable run, prior evidence may be reused only when `patpat-run check-gate` passes for the gate it serves, which proves the receipt fresh for the current candidate, proof contract, evidence epoch, and repository snapshot, and the bound evidence content still matches. Never describe reused evidence as executed in the current turn. The run snapshot does not cover ignored files, external inputs, or the process and dependency environment; bind task-relevant non-secret inputs separately or rerun the check.
 
 ### The 5-Step Gate Function
 
@@ -35,7 +35,7 @@ For work outside a durable `patpat-run`, execute the authoritative check in the 
 1. Reconcile the requested outcomes with the proof contract using proof over proxy; name missing requirements before running checks.
 2. Identify the authoritative artifact or user surface.
 3. Capture a baseline or reproduce the prior state when relevant.
-4. Run the smallest targeted automated check.
+4. Run the smallest targeted automated check. A targeted pass does not show that earlier behavior survived. Treat design-gated work, a changed shared contract, or a caller set that is not small and understood as an unresolved concern that requires the broader existing suite; when that suite cannot run within a stated budget, name it and report `partially verified`. A broader-suite failure counts as pre-existing only when the same test fails with the same signature on the pinned base SHA, using an equivalent environment in a temporary worktree outside the repository that you remove with `git worktree remove`; that worktree is diagnostic, never part of the candidate, and needs no proof-contract revision. If the base run cannot be made equivalent, report the failure as unclassified; otherwise report it as new. A new or unclassified failure blocks `verified`; a pre-existing one may accompany it only when listed and when it does not exercise the changed behavior.
 5. For behavioral claims, exercise the changed logic through the authoritative interface under representative conditions when safe and practical. For static claims, use the strongest deterministic check on the authoritative artifact.
 6. Observe visible output and material side effects directly.
 7. Inspect the final diff and version-control state for unrelated changes.

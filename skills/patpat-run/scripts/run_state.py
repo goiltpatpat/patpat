@@ -684,6 +684,11 @@ def transition(root: Path, run_id: str, destination: str) -> dict[str, Any]:
 PROOF_CONTRACT_CANONICAL_KEYS = ("claim", "surface", "action", "expect", "cleanup")
 
 
+def proof_contract_digest(normalized: dict[str, str]) -> str:
+    fields = [normalized.get(key) for key in PROOF_CONTRACT_CANONICAL_KEYS]
+    return hashlib.sha256(json.dumps(fields, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
 def normalize_proof_contract(fields: dict[str, str]) -> dict[str, str]:
     if not isinstance(fields, dict):
         raise RunStateError("proof contract must be a key-value mapping")
@@ -710,15 +715,21 @@ def record_proof_contract(root: Path, run_id: str, fields: dict[str, str]) -> di
         if state["node"] not in {"INSPECT", "PROOF_CONTRACT"}:
             raise RunStateError("proof contract must be recorded during INSPECT or PROOF_CONTRACT")
         normalized = normalize_proof_contract(fields)
+        digest = proof_contract_digest(normalized)
+        # Revisiting a contract clears it, so compare against the ledger rather than the state slot.
+        latest = next((event for event in reversed(state["events"]) if event.get("kind") == "proof-contract"), {})
+        recorded_digest = latest.get("contract_digest")
         previous_contract = state["proof_contract"]
-        contract_changed = not isinstance(previous_contract, dict) or any(
-            previous_contract.get(key) != normalized[key]
-            for key in PROOF_CONTRACT_CANONICAL_KEYS
-        )
+        # Events written before digests existed fall back to the slot. With the slot also
+        # cleared, identity is unknown and the streak clears, as it did before digests.
+        if recorded_digest is None and isinstance(previous_contract, dict):
+            recorded_digest = proof_contract_digest(previous_contract)
         state["proof_contract"] = {**normalized, "recorded_at": now()}
-        if contract_changed:
+        if recorded_digest != digest:
             state["last_failure"] = None
-        append_state_event(state, "proof-contract", normalized["claim"], snapshot=current_snapshot(root))
+        append_state_event(
+            state, "proof-contract", normalized["claim"], snapshot=current_snapshot(root), contract_digest=digest
+        )
         save_state(root, run_id, state)
         return state
 
@@ -906,6 +917,9 @@ def check_gate(root: Path, run_id: str, gate: str) -> tuple[bool, str]:
         if not all(pc.get(k) for k in PROOF_CONTRACT_CANONICAL_KEYS):
             return False, "pre-edit gate failed: proof contract missing required canonical fields"
         return True, "pre-edit gate passed: structured proof contract is recorded and valid"
+
+    if state["node"] == "BLOCKED":
+        return False, f"{gate} gate failed: run is BLOCKED: {state.get('blocked_reason')}"
 
     if gate == "verify":
         verification = state.get("verification")
@@ -1731,6 +1745,57 @@ def run_self_test() -> bool:
         )
         if changed_blocker["last_failure"]["count"] != 1:
             raise AssertionError("blocker count did not reset after blocker changed")
+
+        contract = {"claim": "c", "surface": "s", "action": "a", "expect": "e", "cleanup": "n"}
+        initialize(root, "streak-contract-run", "Identical contracts keep the streak", "owner", [], [], [], [])
+        transition(root, "streak-contract-run", "INSPECT")
+        record_proof_contract(root, "streak-contract-run", contract)
+        for node in ("PROOF_CONTRACT", "ACT", "VERIFY"):
+            transition(root, "streak-contract-run", node)
+        record_failure(root, "streak-contract-run", "First", "same-key", failure_class="verifier")
+        transition(root, "streak-contract-run", "PROOF_CONTRACT")
+        record_proof_contract(root, "streak-contract-run", contract)
+        for node in ("ACT", "VERIFY"):
+            transition(root, "streak-contract-run", node)
+        kept = record_failure(root, "streak-contract-run", "Second", "same-key", failure_class="verifier")
+        if kept["last_failure"]["count"] != 2:
+            raise AssertionError("re-recording an identical contract cleared the failure streak")
+        transition(root, "streak-contract-run", "PROOF_CONTRACT")
+        record_proof_contract(root, "streak-contract-run", {**contract, "action": "a different action"})
+        if load_state(root, "streak-contract-run")["last_failure"] is not None:
+            raise AssertionError("a revised contract did not clear the failure streak")
+
+        initialize(root, "legacy-digest-run", "Events without digests keep the streak", "owner", [], [], [], [])
+        transition(root, "legacy-digest-run", "INSPECT")
+        record_proof_contract(root, "legacy-digest-run", contract)
+        record_failure(root, "legacy-digest-run", "First", "same-key", failure_class="verifier")
+        legacy_state = load_state(root, "legacy-digest-run")
+        for event in legacy_state["events"]:
+            event.pop("contract_digest", None)
+        save_state(root, "legacy-digest-run", legacy_state)
+        record_proof_contract(root, "legacy-digest-run", contract)
+        if load_state(root, "legacy-digest-run")["last_failure"] is None:
+            raise AssertionError("an identical contract cleared the streak on a legacy event")
+
+        initialize(root, "blocked-gates-run", "Blocked runs close evidence gates", "owner", [], [], [], [])
+        transition(root, "blocked-gates-run", "INSPECT")
+        record_proof_contract(root, "blocked-gates-run", contract)
+        for node in ("PROOF_CONTRACT", "ACT", "VERIFY"):
+            transition(root, "blocked-gates-run", node)
+        blocked_evidence = evidence_root / "blocked-gates.txt"
+        blocked_evidence.write_text("evidence\n", encoding="utf-8")
+        record_receipt(root, "blocked-gates-run", "verification", "Seen", f"file:{blocked_evidence}", "verifier", "verified")
+        transition(root, "blocked-gates-run", "REVIEW")
+        record_receipt(root, "blocked-gates-run", "review", "Seen", f"file:{blocked_evidence}", "reviewer", "pass")
+        if not check_gate(root, "blocked-gates-run", "ship")[0]:
+            raise AssertionError("ship gate rejected fresh evidence before the run was blocked")
+        for _ in range(3):
+            record_failure(root, "blocked-gates-run", "Later problem", "later-key", failure_class="verifier")
+        for gate in ("verify", "ship", "merge"):
+            if check_gate(root, "blocked-gates-run", gate)[0]:
+                raise AssertionError(f"{gate} gate passed on a blocked run")
+        if not check_gate(root, "blocked-gates-run", "pre-edit")[0]:
+            raise AssertionError("pre-edit gate stopped reporting the recorded contract on a blocked run")
 
         try:
             initialize(root, "conflict-run", "Reject conflicts", "owner", ["deploy"], ["deploy"], [], [])

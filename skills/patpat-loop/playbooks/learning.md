@@ -19,7 +19,7 @@ Run this pass only when the user asks to reflect on the session. Give up to thre
 
 ## Repository history pass
 
-Run this pass only when the user asks why agents keep making the same mistake in this repository. Read recent commits, reverts, review comments, and workaround comments, and group them into mistake classes. A class counts once it has two independent occurrences. Fix each class at the highest level that works: remove the wrong path from the architecture, make the bad state fail type checking, add a check whose error names the correct path, test the behavior, and write a rule only for a judgment call. Prove each new check fails on a real past occurrence.
+Run this pass only when the user asks why agents keep making the same mistake in this repository. Start with `git log -i --grep='^fix' --name-only --format= | sort | uniq -c | sort -rn | head` for fix hotspots and `git log -i --grep='^revert' --oneline` for reverts. A hotspot is a lead, not a mistake class, and a squash-merge history may show no reverts. Read recent commits, reverts, review comments, and workaround comments, and group them into mistake classes. A class counts once it has two independent occurrences. Fix each class at the highest level that works: remove the wrong path from the architecture, make the bad state fail type checking, add a check whose error names the correct path, test the behavior, and write a rule only for a judgment call. Prove each new check fails on a real past occurrence.
 
 ## Existing files after approval
 

@@ -110,12 +110,12 @@ Default to one owner. Workers return compact findings and evidence, not transcri
 
 Engineering and repository work progresses through four strict gates:
 1. **Pre-edit**: Define a 5-field proof contract (`Claim`, `Surface`, `Action`, `Expect`, `Cleanup`) before editing code.
-2. **Verify**: For engineering behavior, observe execution on the authoritative surface and produce an exit-code-0 receipt for the exact current snapshot. For a non-code repository artifact, run applicable objective checks and inspect the artifact; report subjective or unavailable evidence separately. Do not treat technical checks as creative approval.
+2. **Verify**: For engineering behavior, observe execution on the authoritative surface, read its exit code, and bind the evidence to the exact current snapshot. For a non-code repository artifact, run applicable objective checks and inspect the artifact; report subjective or unavailable evidence separately. Do not treat technical checks as creative approval.
 3. **Ship**: Entered when delivery intent exists: commit and open or update one ready PR after fresh verification and independent review pass.
 4. **Merge**: Land only upon explicit user `land` or `merge` language with green provider checks.
 
 Enforcement boundaries:
-- The durable engineering graph retains its exit-code receipt requirement for its verification gate, including when a run covers non-code artifacts. That receipt cannot prove subjective quality; report missing human or other evidence separately.
+- The durable engineering graph requires a content-bound `file:` receipt for its verification gate, including when a run covers non-code artifacts. `run_state.py` binds that file to the snapshot; it neither runs the check nor reads an exit code, so the recorded verdict remains the actor's claim. The receipt cannot prove subjective quality; report missing human or other evidence separately.
 - In durable graph runs, [`skills/patpat-run/scripts/run_state.py check-gate`](../../patpat-run/scripts/run_state.py) enforces these transitions mechanically.
 - In ordinary session turns, these gates operate as an instruction contract unless a host hook or pre-tool mechanism actively blocks writes. A CLI that agents can ignore is not mechanical host enforcement.
 - After 3 consecutive failures from the same unresolved blocker, stop and classify the failure into: `implementation defect`, `verifier defect`, or `environment blocker`. In durable runs, the blocker key, failure class, and graph node define the streak; a changed snapshot alone does not clear it.
