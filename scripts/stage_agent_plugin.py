@@ -334,14 +334,32 @@ def run_self_test(source: Path) -> None:
         if set(actual_skill_files) != set(expected_skill_files):
             raise StageError("self-test package changed skill files and resources")
         expected_manual_invocation_skills = {
+            "00-workspace-mapper",
+            "patpat-architect",
             "patpat-arena",
+            "patpat-automation",
+            "patpat-change",
+            "patpat-debug",
             "patpat-engineer",
             "patpat-eval",
+            "patpat-formal-verify",
+            "patpat-game-builder",
+            "patpat-impact",
             "patpat-interrogate",
+            "patpat-learn",
+            "patpat-perf",
+            "patpat-plan",
+            "patpat-repository-diagram",
+            "patpat-review",
+            "patpat-run",
             "patpat-setup",
+            "patpat-ship",
+            "patpat-skill",
+            "patpat-statechart",
             "patpat-swarm",
             "patpat-unslop",
             "patpat-verifier",
+            "patpat-verify",
         }
         source_manual_invocation_skills = set()
         for skill in sorted((package_source / "skills").iterdir()):

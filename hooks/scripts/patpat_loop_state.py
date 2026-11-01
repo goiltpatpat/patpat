@@ -23,7 +23,7 @@ MAX_STDIN_BYTES = 256 * 1024
 ACTIVATION_ID = re.compile(r"^[0-9a-f]{64}$")
 STATE_FILENAME = re.compile(r"^[0-9a-f]{64}\.json$")
 DIRECT_ACTIVATION = re.compile(
-    r"^\s*(?:/|\$)patpat(?:-loop)?(?:$|\s+(?!(?:do\s+not|don't|dont|never|not|without)\b)\S)",
+    r"^\s*(?:/|\$)(?:patpat:)?patpat(?:-loop)?(?:$|\s+(?!(?:do\s+not|don't|dont|never|not|without)\b)\S)",
     re.IGNORECASE,
 )
 USE_ACTIVATION = re.compile(
@@ -32,7 +32,7 @@ USE_ACTIVATION = re.compile(
     re.IGNORECASE,
 )
 DISABLE = re.compile(
-    r"^\s*(?:disable\s+(?:/|\$)?patpat(?:-loop)?|opt\s+out(?:\s+of)?\s+patpat(?:-loop)?)\s*[.!?]?\s*$",
+    r"^\s*(?:disable\s+(?:/|\$)?(?:patpat:)?patpat(?:-loop)?|opt\s+out(?:\s+of)?\s+patpat(?:-loop)?)\s*[.!?]?\s*$",
     re.IGNORECASE,
 )
 STICKY_CONTEXT = (
@@ -575,6 +575,8 @@ def run_self_test() -> None:
         "/patpat-loop fix this",
         "$patpat verify this",
         "$patpat-loop land this",
+        "/patpat:patpat fix this",
+        "/patpat:patpat-loop verify this",
         "Use patpat to inspect this repository",
         "use /patpat-loop for this engineering task",
     )
@@ -594,13 +596,16 @@ def run_self_test() -> None:
         "use patpat to not activate this mode",
         "use patpat for documentation without activation",
         "use $patpat-setup on this host",
+        "/patpat:patpat-setup on this host",
+        "/patpat:patpat-inspect how does routing work",
         "do not use patpat to modify this repository",
     )
     for prompt in inactive:
         if classify_prompt(prompt) != "inactive":
             raise AssertionError(f"non-affirmative prompt activated Patpat: {prompt!r}")
-    if classify_prompt("disable /patpat") != "disable":
-        raise AssertionError("disable command was not preserved")
+    for prompt in ("disable /patpat", "disable /patpat:patpat"):
+        if classify_prompt(prompt) != "disable":
+            raise AssertionError(f"disable command was not preserved: {prompt!r}")
 
     with tempfile.TemporaryDirectory(prefix="patpat-hook-") as directory:
         plugin_data = str(Path(directory) / "plugin-data")

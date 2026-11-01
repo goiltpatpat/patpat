@@ -1,6 +1,7 @@
 ---
 name: patpat-perf
 description: Diagnose a resource regression or drive sustained numeric optimization against a measurable target. Use for latency, CPU, memory, throughput, startup, or other performance implementation when comparable before-and-after measurement is practical.
+disable-model-invocation: true
 metadata:
   patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Codebase","requires_state":["workspace-root-open"],"produces_state":["performance-target-measured"],"verification_cmd":"git status --short"}'
 ---

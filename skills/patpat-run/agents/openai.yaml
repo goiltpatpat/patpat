@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Run"
+  short_description: "Drive resumable multi-phase work through a state machine"
+policy:
+  allow_implicit_invocation: false

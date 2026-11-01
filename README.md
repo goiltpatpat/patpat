@@ -87,7 +87,7 @@ REVIEW -> LEARN? -> propose and wait for approval -> approved edit -> VERIFY -> 
 
 ## Choose a skill
 
-`/patpat` routes the task for you. Call a skill directly when the task is already that operation:
+`/patpat` routes the task for you. Call a skill directly when the task is already that operation. Only `patpat-inspect` loads from a plain-language request on every host; on Claude Code and Cursor the Patpat entry (`patpat`, `patpat-loop`) also does. Call the others by name, for example `/patpat:patpat-debug` on Claude Code, `/patpat-debug` on Cursor, or `$patpat-debug` on Codex:
 
 | Task | Skill |
 | --- | --- |
@@ -234,4 +234,4 @@ Report vulnerabilities privately through the [security policy](https://github.co
 
 ## License
 
-MIT. [`skills/patpat-statechart`](skills/patpat-statechart/THIRD_PARTY_NOTICES.md) and [`skills/patpat-repository-diagram`](skills/patpat-repository-diagram/references/THIRD_PARTY_NOTICES.md) include third-party code under MIT; their notices travel with each skill.
+MIT.

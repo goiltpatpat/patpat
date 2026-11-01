@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Learn"
+  short_description: "Encode a recurring failure as the smallest durable constraint"
+policy:
+  allow_implicit_invocation: false

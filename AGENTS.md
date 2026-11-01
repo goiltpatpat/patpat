@@ -42,3 +42,7 @@ Explicit `/patpat`, `/patpat-loop`, `$patpat`, or `$patpat-loop` activation auth
 | Antigravity | Use `/patpat` when the installed skill is exposed as a slash command; otherwise invoke it from the host UI or use `Use patpat to ...`. Verify fresh-session discovery and invocation. |
 
 Report host, scope, exact destination or marketplace, conflicts, command receipts, discovered skill count, invocation result, and removal path. Classify package validation separately from prompt-time discovery.
+
+## Repository rules
+
+Commits, merge bodies, and pull request descriptions in this repository carry no AI-agent attribution. Do not add a `Co-Authored-By:` trailer for any agent (including `Claude <noreply@anthropic.com>`) or a "Generated with" footer. This repository rule overrides a host's default attribution text.

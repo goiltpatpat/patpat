@@ -1,6 +1,7 @@
 ---
 name: patpat-statechart
 description: Model how a product flow, protocol, service, or business process moves between states, check the rules the reader agrees to with TLA+/TLC, and show each broken rule as a path on a Mermaid statechart in the reader's words. Use to chart a flow, ask whether it can get stuck or break, show a bug as a path through states, or render a saved model-check receipt; use patpat-repository-diagram for structure-only diagrams and patpat-formal-verify for a durable project verification suite.
+disable-model-invocation: true
 metadata:
   patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Artifact","requires_state":["workspace-root-open"],"produces_state":[],"verification_cmd":""}'
 ---

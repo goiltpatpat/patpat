@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Ship"
+  short_description: "Commit and open a PR after verified, reviewed work"
+policy:
+  allow_implicit_invocation: false

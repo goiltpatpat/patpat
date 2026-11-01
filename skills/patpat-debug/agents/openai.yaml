@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Debug"
+  short_description: "Fix a reproducible defect from root-cause evidence"
+policy:
+  allow_implicit_invocation: false

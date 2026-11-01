@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Repository Diagram"
+  short_description: "Turn an idea, plan, or codebase into an interactive diagram"
+policy:
+  allow_implicit_invocation: false

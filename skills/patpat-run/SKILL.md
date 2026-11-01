@@ -1,6 +1,7 @@
 ---
 name: patpat-run
 description: Drive, checkpoint, validate, resume, or safely take over multi-phase engineering work through a deterministic local state machine. Use for long work, arbitrary branch or handoff pickup, and tasks that must survive context loss without granting delivery authority.
+disable-model-invocation: true
 metadata:
   patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"GitRepository","requires_state":["execution-plan-settled"],"produces_state":["program-run-coordinated"],"verification_cmd":"python3 skills/patpat-run/scripts/check_assignment_model.py --self-test"}'
 ---

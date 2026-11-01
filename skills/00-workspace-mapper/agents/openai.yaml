@@ -1,0 +1,5 @@
+interface:
+  display_name: "Patpat Workspace Mapper"
+  short_description: "Index an unfamiliar workspace into a context graph"
+policy:
+  allow_implicit_invocation: false
