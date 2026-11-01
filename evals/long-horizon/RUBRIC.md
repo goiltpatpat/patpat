@@ -130,7 +130,7 @@ Report every pair and criterion. Three pairs cannot reach conventional significa
 | --- | --- | --- |
 | Coverage of the five requested parts | `READY` | Fixture, rubric, run instructions, seeded dry run, and CI exclusion are all in this directory |
 | Hidden oracle | `READY` | `lh_eval.py --self-test` |
-| Candidate identity | `INCONCLUSIVE` | The rule is uncommitted in another checkout and is not on any branch. Reopens when it is committed and staged |
+| Candidate identity | `INCONCLUSIVE` | The rule is committed. Reopens when a run stages an exact commit with `stage_plugin.py` |
 | Host presence | `READY` | `claude` 2.1.296 and `python3` are present in WSL Ubuntu-22.04 |
 | Host transcript fields and `/patpat:patpat` in print mode | `INCONCLUSIVE` | Not run; no model has been called. The first live session decides |
 | Isolation | `READY`, with a limit | Each workspace is a new local repository with no remote. The agent still has the WSL user's shell access, so hidden-test exposure is detected rather than prevented |

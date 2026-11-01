@@ -21,24 +21,24 @@
       "label": "Current assignment generation fence",
       "symbol": "require_current_assignment()",
       "path": "skills/patpat-run/scripts/program_state.py",
-      "start_line": 591,
-      "end_line": 617
+      "start_line": 593,
+      "end_line": 619
     },
     {
       "id": "assign-unit",
       "label": "Assignment issuance",
       "symbol": "assign_unit()",
       "path": "skills/patpat-run/scripts/program_state.py",
-      "start_line": 1615,
-      "end_line": 1668
+      "start_line": 1748,
+      "end_line": 1801
     },
     {
       "id": "guarded-set-head",
       "label": "Guarded state write entry",
       "symbol": "set_head()",
       "path": "skills/patpat-run/scripts/program_state.py",
-      "start_line": 1671,
-      "end_line": 1722
+      "start_line": 1804,
+      "end_line": 1853
     }
   ],
   "cases": [

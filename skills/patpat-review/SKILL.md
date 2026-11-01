@@ -16,7 +16,7 @@ Read [repository truth](../patpat-loop/principles/repository-truth.md), [proof o
 
 Remain read-only. Inspect the objective, proof contract, exact diff or artifact, raw verification receipts, and affected contracts. When an independent reviewer is available and authorized, give it the evidence without the implementer's intended conclusion. When extra read-only reviewers are available and authorized, give each the same intent, diff, and integrity rubric from a distinct independent-angle. Judge each finding on its evidence and impact, not the number of reviewers who reported it. Bucket the synthesized verdict Act on / Consider / Noted / Dismissed. Do not auto-apply.
 
-Run the playbook's solution-integrity audit before general quality review. Reject evidence laundering, unexplained assertion weakening, hardcoded fixture answers, and proof that bypasses the claimed authoritative surface. Bind evidence to the exact candidate revision or reproducible working-tree snapshot; require a committed head only for commit- or delivery-bound claims.
+Run the playbook's solution-integrity audit before general quality review. Reject evidence laundering, unexplained assertion weakening, hardcoded fixture answers, and proof that bypasses the claimed authoritative surface. Bind evidence to the exact candidate revision or reproducible working-tree snapshot; for push-, PR-, or delivery-bound claims, require the committed head or the durable gate in [delivery proof](../patpat-run/references/delivery-proof.md).
 
 ## Findings and reporting
 

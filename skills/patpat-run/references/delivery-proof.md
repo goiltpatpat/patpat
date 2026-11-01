@@ -149,6 +149,10 @@ The design is wrong if any of these can be produced. Each has a deterministic ca
 5. A whole program is admitted when no unit both depends on and contains every other unit.
 6. A complete slice is refused because an unrelated sibling is pending, or admitted while any transitive dependency is incomplete.
 
+## Receipt files
+
+`verify_review.py` and `verify_delivery.py` default to `.patpat/review-receipt.json` and `.patpat/delivery-receipt.json` in the worktree. An untracked file there dirties the checkout, so `commit`, `ship`, and `merge` refuse. Pass `--receipt` with a path outside the repository, or list the path in `.git/info/exclude`. Both receipts name a `head_sha`, so write them after the commit they describe. A proof-first review stays valid through its run receipt when the proven tree equals that head's tree; `verify_review.py` then needs a receipt naming the committed head, not a second review of identical bytes.
+
 ## Limits
 
 - **Base value.** `--base-head` is supplied by the caller from a fresh fetch; `pr_watch` does not observe the base commit. Any ancestor of the head passes, including a stale base or the head itself, and it is not tied to the receipt's `base_ref`.

@@ -197,6 +197,15 @@ def invoke_renderer(receipt_dir: Path, view_path: Path, output: Path) -> int:
 
 
 class TestStatechartReceipts(unittest.TestCase):
+    def test_pilot_view_ranges_start_at_their_named_symbols(self) -> None:
+        view = json.loads((ROOT / "skills/patpat-statechart/examples/assignment-generation-statechart.view.json").read_text(encoding="utf-8"))
+        functions = [ref for ref in view["implementation_mapping"] if ref["symbol"].endswith("()")]
+        self.assertEqual(len(functions), 3)
+        for ref in functions:
+            lines = (ROOT / ref["path"]).read_text(encoding="utf-8").splitlines()
+            name = ref["symbol"].removesuffix("()")
+            self.assertTrue(lines[ref["start_line"] - 1].startswith(f"def {name}("), ref["symbol"])
+
     def test_render_binds_view_renderer_and_each_mermaid_edge(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)

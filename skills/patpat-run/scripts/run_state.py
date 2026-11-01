@@ -1383,6 +1383,22 @@ def run_delivery_self_test() -> None:
         head = commit_all("proof first")
         expect_gate("proof-first", "ship", True)
         expect_gate("proof-first", "commit", False, "already holds")
+        local_receipt = root / ".patpat" / "review-receipt.json"
+        local_receipt.parent.mkdir()
+        local_receipt.write_text("{}\n", encoding="utf-8")
+        expect_gate("proof-first", "ship", False)
+        info_exclude = Path(git_text(root, "rev-parse", "--git-path", "info/exclude"))
+        info_exclude = info_exclude if info_exclude.is_absolute() else root / info_exclude
+        original_exclude = info_exclude.read_text(encoding="utf-8") if info_exclude.exists() else None
+        info_exclude.parent.mkdir(parents=True, exist_ok=True)
+        info_exclude.write_text(".patpat/\n", encoding="utf-8")
+        expect_gate("proof-first", "ship", True)
+        if original_exclude is None:
+            info_exclude.unlink()
+        else:
+            info_exclude.write_text(original_exclude, encoding="utf-8")
+        local_receipt.unlink()
+        local_receipt.parent.rmdir()
         transition(root, "proof-first", "REPORT")
         if validation_errors(root, "proof-first"):
             raise AssertionError("a carried proof failed validation at REPORT")
