@@ -543,7 +543,7 @@ def validate_arguments(args: argparse.Namespace) -> None:
         raise ObserverError("maximum observation age must be between 1 and 3600 seconds")
     if not args.required_check and not args.allow_no_required_checks:
         raise ObserverError(
-            "at least one required check is required; use --allow-no-required-checks only when repository policy proves CI is not required"
+            "at least one required check is required; --allow-no-required-checks records a verified no-check policy, and the verdict still stays blocked"
         )
     if args.required_check and args.allow_no_required_checks:
         raise ObserverError("--allow-no-required-checks cannot be combined with --required-check")

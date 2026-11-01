@@ -91,7 +91,7 @@ REVIEW -> LEARN? -> propose and wait for approval -> approved edit -> VERIFY -> 
 REVIEW -> REPORT when no lesson needs encoding
 LEARN approval pending -> hold; approval declined -> REPORT without editing
 REPORT -> patpat-ship only with delivery intent and fresh verify + review (external; run remains terminal)
-LAND? -> MERGE a green reviewed PR only with explicit land or merge
+LAND? -> MERGE a reviewed PR that passes its provider gate only with explicit land or merge
 ```
 
 A proof contract names Claim, Surface, Action, Expect, and Cleanup. Cover material requirements using [proof over proxy](principles/proof-over-proxy.md). Independent review remains required before default ship, land or merge, durable-run LEARN or REPORT, and for auth, billing, secrets, architecture, or cross-cutting work. Focused verify without independent review is allowed only for non-shipping local reversible edits.
@@ -105,7 +105,7 @@ Enter `LEARN?` only for a recurring failure worth encoding.
 - Ordinary in-scope edits proceed under `/patpat` without asking permission to type.
 - Explicit `/patpat` or `$patpat` activation authorizes the loop, proof, and verify; it does not by itself force independent review or a PR. [Default delivery](playbooks/default-delivery.md) runs only when delivery intent exists. Higher-priority repository rules and `don't commit` / `local only` still win.
 - Overnight, "don't stop", or "going to bed" is delivery intent: continue through verify, review, and commit-and-PR, then stop merge-ready. Never deploy by implication.
-- Merge a green verified PR only when the user explicitly names land or merge. Treat ambiguous `ship it` as commit-and-PR, not merge.
+- Merge a verified PR that passes its provider gate only when the user explicitly names land or merge. Treat ambiguous `ship it` as commit-and-PR, not merge.
 - Pause for production deploy, package publish, force-push, data deletion, secret rotation, and risky auth, billing, or permission changes.
 - Workers never ship. The parent ships.
 

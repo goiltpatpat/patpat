@@ -55,6 +55,6 @@ A null GitHub review decision remains review-required unless the same response p
 
 ## Keep merge authority separate
 
-Opening a pull request is the default delivery boundary. `Finish`, `keep going`, `overnight`, or a PR readiness handoff do not authorize merge. Only explicit `land` or `merge` language permits Patpat to merge a green reviewed pull request. Production deployment and package publication remain separate approval gates.
+Opening a pull request is the default delivery boundary. `Finish`, `keep going`, `overnight`, or a PR readiness handoff do not authorize merge. Only explicit `land` or `merge` language permits Patpat to merge a reviewed pull request that passes the repository's provider gate. The gate follows each repository's policy; a repository verified to have no provider CI needs exact-head proof, disclosed before the merge. Production deployment and package publication remain separate approval gates.
 
 Next: [Run durable work](./06-durable-runs.md).

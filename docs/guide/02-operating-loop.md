@@ -13,7 +13,7 @@ REVIEW -> LEARN? -> propose and wait for approval -> approved edit -> VERIFY -> 
 LEARN approval pending -> hold; approval declined -> REPORT without editing
 REVIEW -> REPORT when no lesson needs encoding
 REPORT -> patpat-ship only with delivery intent and fresh verify + review
-LAND? -> MERGE a green reviewed PR only with explicit land or merge
+LAND? -> MERGE a reviewed PR that passes its provider gate only with explicit land or merge
 ```
 
 `REPORT` is terminal for a durable run. Shipping is a separate, conditional workflow; it does not reopen the completed run.
@@ -64,6 +64,6 @@ The contract makes proxy substitution visible when the workflow follows it. `pat
 
 Explicit Patpat activation authorizes the loop, proof, and verify. Default commit-and-PR requires delivery intent. It does not permit merge, deploy, package publication, secret rotation, or risky auth, billing, and permission changes by implication.
 
-Say `local only` to keep the work unshipped. Say `pause safely` to preserve resumable state without opening a pull request. Say `land` or `merge` only when you intend to authorize a green reviewed pull request to merge.
+Say `local only` to keep the work unshipped. Say `pause safely` to preserve resumable state without opening a pull request. Say `land` or `merge` only when you intend to authorize a reviewed pull request that passes its provider gate to merge.
 
 Next: [Understand and design](./03-understand-and-design.md).

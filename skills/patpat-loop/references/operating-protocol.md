@@ -96,7 +96,7 @@ Without delivery intent, local reversible mutating work uses proof, focused veri
 
 With delivery intent, verify, independent review, and default delivery remain required. Auth, billing, secrets, architecture, or cross-cutting work always requires independent review even when delivery intent is absent.
 
-Overnight, going to bed, or don't stop continues until the PR is merge-ready; it does not authorize merge. Merge only when the user explicitly names land or merge, no later instruction withdrew it, and the head is green with verify and review receipts for that exact head. Patpat may merge only a fully gated pull request; never auto-merge; never merge through the GitHub connector; release and tag still require explicit authorization. Treat ambiguous `ship it` as commit-and-PR. Do not land a real CI failure. Retry a flake once.
+Overnight, going to bed, or don't stop continues until the PR is merge-ready; it does not authorize merge. Merge only when the user explicitly names land or merge, no later instruction withdrew it, and the head passes its provider gate, as [authorized delivery](../playbooks/authorized-delivery.md) defines, with verify and review receipts for that exact head. Patpat may merge only a fully gated pull request; never auto-merge; never merge through the GitHub connector; release and tag still require explicit authorization. Treat ambiguous `ship it` as commit-and-PR. Do not land a real CI failure. Retry a flake once.
 
 Always pause for force-push to shared branches, production deploy, package publish, data deletion, secret rotation, and risky auth, billing, or permission changes. Explain blast radius, safer alternative, rollback, and verification before continuing.
 
@@ -112,7 +112,7 @@ Engineering and repository work progresses through four strict gates:
 1. **Pre-edit**: Define a 5-field proof contract (`Claim`, `Surface`, `Action`, `Expect`, `Cleanup`) before editing code.
 2. **Verify**: For engineering behavior, observe execution on the authoritative surface, read its exit code, and bind the evidence to the exact current snapshot or identical proven tree. For a non-code repository artifact, run applicable objective checks and inspect the artifact; report subjective or unavailable evidence separately. Do not treat technical checks as creative approval.
 3. **Ship**: Entered when delivery intent exists: commit and open or update one ready PR after fresh verification and independent review pass. The proof must cover the committed head, as [delivery proof](../../patpat-run/references/delivery-proof.md) defines.
-4. **Merge**: Land only upon explicit user `land` or `merge` language with green provider checks.
+4. **Merge**: Land only upon explicit user `land` or `merge` language with a passing provider gate. A repository verified to have no provider CI needs exact-head proof and disclosure instead, as [authorized delivery](../playbooks/authorized-delivery.md) defines.
 
 Enforcement boundaries:
 - The durable engineering graph requires a content-bound `file:` receipt for its verification gate, including when a run covers non-code artifacts. `run_state.py` binds that file to the snapshot and candidate tree; it neither runs the check nor reads an exit code, so the recorded verdict remains the actor's claim. The receipt cannot prove subjective quality; report missing human or other evidence separately.

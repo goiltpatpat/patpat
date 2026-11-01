@@ -118,6 +118,7 @@ The candidate is rebuilt from `HEAD` in a private index and object directory, so
 | Hook or amend changed the committed tree | `ship` fails as stale | Prove the new head |
 | Same-tree amend or rebase of a proven commit | `ship` fails as stale | Prove the new head; a tree-equal reword on the proof's own base still passes |
 | Partial or empty staging | `commit` fails | Stage exactly the proven content |
+| Repository has no required check | `merge` stays blocked, since `pr_watch.py` cannot reach `ready` | Stop and report it, as [authorized delivery](../../patpat-loop/playbooks/authorized-delivery.md) defines. The user can add a required check and start a new scoped run, or merge personally |
 | Unrelated dirty files during proof | Once in-scope paths are staged, `commit` fails; `ship` fails | Commit the in-scope paths, then start a new run in a clean linked worktree at that commit |
 | Repository holds a gitlink | `commit` fails | Commit first, then prove that head |
 | Base moved | `merge` fails | Update onto the base and prove the new head |
