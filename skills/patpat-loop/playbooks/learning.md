@@ -9,9 +9,10 @@ Read [encode lessons](../principles/encode-lessons.md), [repository truth](../pr
 5. Update the existing authoritative location when possible.
 6. Obtain explicit authority before changing shared or user-global instructions.
 7. Reproduce the original failure condition and prove the new mechanism catches it.
-8. Record remaining exposure without storing secrets or transient task history.
+8. Verify against negative transfer: prove the new constraint does not add friction, false positives, or performance regressions to unrelated repository tasks.
+9. Record remaining exposure without storing secrets or transient task history.
 
-When the same failure mechanism appears in two independently observed cases, treat it as a candidate mistake class, not an automatic rule. Record each proposed correction as `failure class | rule | enforcing or detecting mechanism | proof against a prior case`. Prefer a structural guard; demonstrate that it catches the original failure and preserves a valid case. If prose is the narrowest useful constraint, state why a stronger mechanism does not fit and preserve the approval gate.
+When the same failure mechanism appears in two independently observed cases, treat it as a candidate mistake class, not an automatic rule. Reject single-session overfitting; retrospective adaptations must demonstrate positive transfer across subsequent tasks. Record each proposed correction as `failure class | rule | enforcing or detecting mechanism | proof against a prior case`. Prefer a structural guard; demonstrate that it catches the original failure and preserves a valid case. If prose is the narrowest useful constraint, state why a stronger mechanism does not fit and preserve the approval gate.
 
 ## Reflect pass
 

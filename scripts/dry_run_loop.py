@@ -129,8 +129,8 @@ GAMEPLAY_TARGET_MUTATION = re.compile(
     re.IGNORECASE,
 )
 NON_DIAGRAM_CODE_CHANGE = re.compile(
-    r"\b(?:fix|debug|implement|build|develop|add|change|update|edit|remove|refactor|rewrite|repair|modify|extend|adjust)\b.{0,80}\b(?:bug|issue|error|auth(?:entication|orization)?|code|feature|endpoint|api|file|function|method|class|module|service|database|schema|tests?|readme(?:\.md)?|docs?)\b"
-    r"|(?:แก้|เพิ่ม|เปลี่ยน|อัปเดต|ปรับปรุง|ลบ|ปรับ|พัฒนา|สร้าง).{0,60}(?:บั๊ก|ข้อผิดพลาด|ระบบยืนยันตัวตน|auth|API|โค้ด|ฟีเจอร์|ไฟล์|ฟังก์ชัน|คลาส|โมดูล|บริการ|ฐานข้อมูล|สคีมา|เทสต์|README|เอกสาร)",
+    r"\b(?:fix|debug|implement|build|develop|add|change|update|edit|remove|refactor|rewrite|repair|modify|extend|adjust)\b.{0,80}\b(?:bug|issue|error|auth(?:entication|orization)?|code|feature|endpoint|api|file|function|method|class|module|service|database|schema|tests?|readme(?:\.md)?|docs?|webhook|handler|component|pipeline)\b"
+    r"|(?:แก้|เพิ่ม|เปลี่ยน|อัปเดต|ปรับปรุง|ลบ|ปรับ|พัฒนา|สร้าง).{0,60}(?:บั๊ก|ข้อผิดพลาด|ระบบยืนยันตัวตน|auth|API|โค้ด|ฟีเจอร์|ไฟล์|ฟังก์ชัน|คลาส|โมดูล|บริการ|ฐานข้อมูล|สคีมา|เทสต์|README|เอกสาร|เว็บฮุก|คอมโพเนนต์)",
     re.IGNORECASE,
 )
 GAMEPLAY_PRESENTATION_REQUEST = re.compile(
@@ -416,6 +416,8 @@ def route(prompt: str) -> str:
         return "swarm"
     if "autopilot" in text or "this queue" in text:
         return "autopilot"
+    if "do not change" in text or "read-only" in text:
+        return "inspect"
     if (
         "how does" in text
         or "explain" in text
@@ -429,14 +431,13 @@ def route(prompt: str) -> str:
             and re.search(r"\b(?:what(?:['’]s|\s+(?:is|does))|define)\b", text)
             is not None
         )
-        or "do not change" in text
-        or "read-only" in text
         or "which skill owns" in text
         or "where should this live" in text
         or "where should" in text
         or "อธิบาย" in text
     ):
-        return "inspect"
+        if not has_compound_non_diagram_work(text):
+            return "inspect"
     if "pause safely" in text or "go offline" in text:
         return "pause"
     if (
@@ -466,7 +467,14 @@ def route(prompt: str) -> str:
         return "interrogate"
     if "unslop" in text or "cut ai tells" in text:
         return "unslop"
-    if "timeout" in text or "bug" in text or "repro" in text or "fix" in text:
+    if (
+        "timeout" in text
+        or "bug" in text
+        or "repro" in text
+        or "fix" in text
+        or "บั๊ก" in text
+        or "ข้อผิดพลาด" in text
+    ):
         return "debug"
     if explicit_merge_intent(prompt) or "open the pr" in text:
         return "ship"
