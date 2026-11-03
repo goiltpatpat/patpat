@@ -5,7 +5,7 @@ Read [repository truth](../principles/repository-truth.md), [proof over proxy](.
 ## Review steps
 
 1. Freeze the objective, proof contract, exact diff or artifact, and raw verification receipts.
-2. Use a separate read-only reviewer for high-risk work when delegation is available and authorized; omit the intended conclusion.
+2. Use a separate read-only reviewer for high-risk work when delegation is available and authorized; omit the intended conclusion. Enforce double-blind review: provide only the original user objective, candidate diff, and raw verification receipts; strip the implementer's internal chain-of-thought, rationalizations, and intended conclusion to prevent cognitive anchoring.
 3. Trace changed contracts, callers, side effects, and safety boundaries.
 4. Execute the solution-integrity audit.
 5. Reconcile material requirements with the proof contract, then try to falsify the implementation and each proof claim. Passing declared claims does not cover an omitted requirement.

@@ -23,7 +23,14 @@ SEMVER_PATTERN = re.compile(
     r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
 )
 LINK_PATTERN = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
-ALLOWED_FRONTMATTER = {"name", "description", "disable-model-invocation", "metadata"}
+ALLOWED_FRONTMATTER = {
+    "name",
+    "description",
+    "disable-model-invocation",
+    "metadata",
+    "icon",
+    "color",
+}
 AGENT_SKILL_FRONTMATTER_FIELDS = {
     "name",
     "description",
@@ -31,6 +38,8 @@ AGENT_SKILL_FRONTMATTER_FIELDS = {
     "compatibility",
     "metadata",
     "allowed-tools",
+    "icon",
+    "color",
 }
 MODE_SKILLS = {"patpat", "patpat-loop"}
 PUBLISHED_SOURCE = "https://github.com/goiltpatpat/patpat"

@@ -1,6 +1,8 @@
 ---
 name: patpat
 description: Explicit alias for Patpat Loop. Use only when the user invokes /patpat, $patpat, /patpat-loop, or $patpat-loop, or directly asks to activate Patpat mode.
+icon: shield
+color: red
 metadata:
   patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Task","requires_state":["workspace-root-open"],"produces_state":["patpat-mode-activated"],"verification_cmd":"git status --short"}'
 ---
