@@ -36,7 +36,7 @@ PACKAGE_ENTRIES = (
     "scripts",
     "skills",
 )
-IGNORED_NAMES = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
+IGNORED_NAMES = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "node_modules"}
 IGNORED_PACKAGE_PATHS = {"docs/diagrams"}
 
 
