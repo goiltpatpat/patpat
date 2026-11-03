@@ -6,3 +6,4 @@ The context window is a finite, scarce, high-value working memory space. Protect
 2. Summarize, filter, and index information at the source using compact tools and scripts before reporting findings.
 3. Subagents and background tasks must return concise syntheses, key diffs, and verification receipts, not voluminous raw execution transcripts.
 4. Keep context clean so that critical constraints, instructions, and error signals remain prominent and uncorrupted.
+5. Prevent conversational multi-agent sprawl: ban open-ended agent-to-agent chatter. Communication must remain strictly hierarchical, bounded by deterministic task inputs and compact structured outputs.

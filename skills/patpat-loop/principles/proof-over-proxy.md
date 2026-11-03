@@ -20,6 +20,8 @@ Layer verification hierarchically (the Onion Model):
 4. Adversarial Audit Gate: Skeptical independent review scoped strictly to high-risk boundaries (auth, security, invariants, data loss).
 Never burn review tokens on a candidate whose lower-tier deterministic gates have not all passed.
 
+Reject synthetic proxy illusions: in-memory mocks, stubs, and synthetic unit fixtures frequently decouple from production runtime realities. A test passing against mocked dependencies proves only that the subject agrees with the mock, not that it will survive live execution. Core behavioral claims, contract boundaries, and security invariants must be verified against their true authoritative surface (real CLI execution, deterministic exit codes, live process states, filesystem mutations, or end-to-end integration paths). Never accept mock verification as proof of an external contract or production invariant.
+
 Classify the oracle as repository, runtime, independent reference, or lockstep. Claims of runtime equivalence require an independent reference or lockstep comparison; a build, local implementation, or same-context reviewer cannot prove equivalence.
 
 Bind durable evidence to the exact revision or snapshot it checked, the relevant inputs and environment, and the oracle used. A material change to any binding makes the evidence stale; recollect it instead of carrying a green result forward.
