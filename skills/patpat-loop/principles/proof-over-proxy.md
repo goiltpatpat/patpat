@@ -13,6 +13,13 @@ Translate every material user requirement, including preservation and safety con
 
 For tests and evaluators, call the subject through the interface its users or the authoritative verifier uses and assert a literal observed result or material side effect. A check that would still pass if the subject or imported implementation returned `undefined` or `None`, or that only proves a function was called, a constant was copied, or a fixture agrees with itself, is not behavioral proof. For void or side-effect-only behavior, assert the changed state or emitted effect; for async behavior, await the authoritative result; for nondeterministic behavior, assert a bounded invariant or independently derived effect rather than an exact unstable value. Replace proxy checks with a concrete input and expected output/effect. The opposite failure also counts: a test that fails when only internals change and every observable result stays the same is pinned to the implementation, so rewrite it against the contract or delete it. If a behavioral claim has no observable contract, mark the evidence `INCONCLUSIVE`; classify a claim as static only when the requirement itself is static from the outset.
 
+Layer verification hierarchically (the Onion Model):
+1. Static & Type Gate: Compiler, linter, typecheck, and AST shape (0 tokens, sub-second).
+2. Empirical Execution Gate: Deterministic behavioral test execution on real targets (0 tokens).
+3. Mutation Resilience Gate: Scratch fault injection (e.g. inverted conditions, dummy returns) to confirm tests fail when subject logic breaks (0 tokens). A test suite that remains green against a corrupted subject mutant is proxy theater.
+4. Adversarial Audit Gate: Skeptical independent review scoped strictly to high-risk boundaries (auth, security, invariants, data loss).
+Never burn review tokens on a candidate whose lower-tier deterministic gates have not all passed.
+
 Classify the oracle as repository, runtime, independent reference, or lockstep. Claims of runtime equivalence require an independent reference or lockstep comparison; a build, local implementation, or same-context reviewer cannot prove equivalence.
 
 Bind durable evidence to the exact revision or snapshot it checked, the relevant inputs and environment, and the oracle used. A material change to any binding makes the evidence stale; recollect it instead of carrying a green result forward.

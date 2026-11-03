@@ -1,6 +1,8 @@
 ---
 name: patpat-loop
 description: Run the explicit Patpat evidence-driven work loop for the user's task. Use only when the user invokes /patpat, /patpat-loop, $patpat, or $patpat-loop, or directly asks to activate Patpat mode.
+icon: shield
+color: red
 metadata:
   patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Task","requires_state":["workspace-root-open"],"produces_state":["orchestrated-objective-resolved"],"verification_cmd":"git status --short"}'
 ---
