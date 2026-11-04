@@ -214,6 +214,7 @@ READ_ONLY_BOUNDARY_BLOCK = """## Mutation boundary
 Remain read-only with respect to repository implementation and external delivery. Limit incidental verifier artifacts to the declared proof contract, clean them up, and hand any authorized mutation back to `patpat-loop`."""
 FIXTURE_ARTIFACT_NAME = "patpat-codex-fixture-attestation"
 LEGACY_FIXTURE_ARTIFACT_NAME = "patpat-codex-attestation"
+MAX_SKILL_MARKDOWN_BYTES = 32 * 1024
 PINNED_BOUNDARY_SENTENCES = (
     (
         Path("skills/patpat-loop/principles/earned-parallelism.md"),
@@ -458,6 +459,29 @@ PINNED_BOUNDARY_SENTENCES = (
             "never present it as a reproduced product defect.",
         ),
         "formal counterexample handoff contract",
+    ),
+    (
+        Path("skills/patpat-loop/playbooks/behavior-preserving-refactor.md"),
+        (
+            "record the baseline executed test or assertion count before editing.",
+            "after renames or moves, spot-check strings, config, and prose references that symbol tools miss.",
+            "confirm the executed test count did not silently drop, and inspect the final diff to verify the new structure lowers reader load.",
+        ),
+        "behavior-preserving refactor test-count and reference contract",
+    ),
+    (
+        Path("skills/patpat-loop/principles/proof-over-proxy.md"),
+        (
+            "The opposite failure also counts: a test that fails when only internals change and every observable result stays the same is pinned to the implementation, so rewrite it against the contract or delete it.",
+        ),
+        "behavior-not-implementation test contract",
+    ),
+    (
+        Path("skills/patpat-loop/references/general-task-judgment.md"),
+        (
+            "When extracting, summarizing, or transforming dense source material, preserve distinct source requirements and decisions rather than silently condensing or deduplicating them, and flag any omitted items explicitly.",
+        ),
+        "dense-source anti-condensation contract",
     ),
 )
 UNADMITTED_COMPONENT_PATHS = {
@@ -1104,6 +1128,15 @@ def validate_hooks(root: Path, parsed: dict[str, dict[str, object]], errors: lis
         errors.append(f"{script}: sticky hook must fail closed without PLUGIN_DATA")
 
 
+def skill_markdown_byte_length(path: Path) -> int:
+    """Return UTF-8 byte length with LF-normalized line endings for cross-OS determinism."""
+    try:
+        normalized = path.read_text(encoding="utf-8").replace("\r\n", "\n")
+    except OSError:
+        return 0
+    return len(normalized.encode("utf-8"))
+
+
 def validate_agent_plugin_package(root: Path) -> list[str]:
     """Validate the minimal portable Agent Plugins package produced by Patpat."""
     errors: list[str] = []
@@ -1239,6 +1272,11 @@ def validate_agent_plugin_package(root: Path) -> list[str]:
 
     validate_ontology_graph(ontology_records, errors)
     for path in sorted(markdown_files):
+        size_bytes = skill_markdown_byte_length(path)
+        if size_bytes > MAX_SKILL_MARKDOWN_BYTES:
+            errors.append(
+                f"{path}: skill markdown exceeds the {MAX_SKILL_MARKDOWN_BYTES}-byte truncation ceiling ({size_bytes} LF-normalized UTF-8 bytes); trim or split into references/"
+            )
         validate_links(path, root, errors)
     return errors
 
@@ -1560,6 +1598,12 @@ def validate_root(root: Path) -> list[str]:
             markdown_files.extend(folder.rglob("*.md"))
     markdown_files = sorted(path for path in set(markdown_files) if path.is_file() and "node_modules" not in path.parts)
     for path in markdown_files:
+        if skills_root in path.parents:
+            size_bytes = skill_markdown_byte_length(path)
+            if size_bytes > MAX_SKILL_MARKDOWN_BYTES:
+                errors.append(
+                    f"{path}: skill markdown exceeds the {MAX_SKILL_MARKDOWN_BYTES}-byte truncation ceiling ({size_bytes} LF-normalized UTF-8 bytes); trim or split into references/"
+                )
         validate_links(path, root, errors)
 
     reference_root = root / "skills" / "patpat-loop"
@@ -2355,6 +2399,41 @@ def run_self_test(root: Path) -> list[str]:
             encoding="utf-8",
         )
 
+    def strip_refactor_test_count_contract(fixture: Path) -> None:
+        playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "behavior-preserving-refactor.md"
+        text = playbook.read_text(encoding="utf-8")
+        contract = "record the baseline executed test or assertion count before editing."
+        playbook.write_text(
+            text.replace(contract, f"<!--{contract}-->", 1),
+            encoding="utf-8",
+        )
+
+    def strip_behavior_not_implementation_contract(fixture: Path) -> None:
+        principle = fixture / "skills" / "patpat-loop" / "principles" / "proof-over-proxy.md"
+        text = principle.read_text(encoding="utf-8")
+        contract = "The opposite failure also counts: a test that fails when only internals change and every observable result stays the same is pinned to the implementation, so rewrite it against the contract or delete it."
+        principle.write_text(
+            text.replace(contract, f"<!--{contract}-->", 1),
+            encoding="utf-8",
+        )
+
+    def strip_dense_source_anti_condensation_contract(fixture: Path) -> None:
+        reference = fixture / "skills" / "patpat-loop" / "references" / "general-task-judgment.md"
+        text = reference.read_text(encoding="utf-8")
+        contract = "When extracting, summarizing, or transforming dense source material, preserve distinct source requirements and decisions rather than silently condensing or deduplicating them, and flag any omitted items explicitly."
+        reference.write_text(
+            text.replace(contract, f"<!--{contract}-->", 1),
+            encoding="utf-8",
+        )
+
+    def exceed_skill_markdown_ceiling(fixture: Path) -> None:
+        playbook = fixture / "skills" / "patpat-loop" / "playbooks" / "prototype.md"
+        text = playbook.read_text(encoding="utf-8")
+        playbook.write_text(
+            text + ("\n" + ("x" * (MAX_SKILL_MARKDOWN_BYTES + 128)) + "\n"),
+            encoding="utf-8",
+        )
+
     def remove_agents_guide(fixture: Path) -> None:
         (fixture / "AGENTS.md").unlink()
 
@@ -2855,6 +2934,10 @@ def run_self_test(root: Path) -> list[str]:
             ("preflight candidate identity drift", strip_preflight_candidate_identity, "missing evidence-feasibility preflight contract"),
             ("preflight no-retry drift", strip_preflight_no_retry, "missing evidence-feasibility preflight contract"),
             ("preflight repeat-report drift", strip_preflight_repeat_report_guard, "missing evidence-feasibility preflight contract"),
+            ("refactor test-count contract drift", strip_refactor_test_count_contract, "missing behavior-preserving refactor test-count and reference contract"),
+            ("behavior-not-implementation contract drift", strip_behavior_not_implementation_contract, "missing behavior-not-implementation test contract"),
+            ("dense-source anti-condensation contract drift", strip_dense_source_anti_condensation_contract, "missing dense-source anti-condensation contract"),
+            ("oversized skill markdown ceiling", exceed_skill_markdown_ceiling, "skill markdown exceeds the 32768-byte truncation ceiling"),
             ("missing agent install contract", remove_agents_guide, "missing agent install contract"),
             ("Codex defaultPrompt drift", drop_codex_default_prompt, "defaultPrompt must include $patpat"),
             ("missing published source", drop_published_source, "homepage and repository must point at the published source"),
@@ -2928,6 +3011,7 @@ def run_self_test(root: Path) -> list[str]:
             ("Agent Plugins nonstandard ontology field", add_nonstandard_ontology_field, "frontmatter is not Agent Skills compatible"),
             ("Agent Plugins missing workspace mapper verifier", remove_workspace_mapper_verifier, "missing workspace mapper verifier"),
             ("Agent Plugins workspace mapper verifier command drift", drift_workspace_mapper_verifier_command, "verification_cmd must invoke its bundled verifier"),
+            ("Agent Plugins oversized skill markdown ceiling", exceed_skill_markdown_ceiling, "skill markdown exceeds the 32768-byte truncation ceiling"),
         ]
     )
 
