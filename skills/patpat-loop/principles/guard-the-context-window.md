@@ -7,3 +7,4 @@ The context window is a finite, scarce, high-value working memory space. Protect
 3. Subagents and background tasks must return concise syntheses, key diffs, and verification receipts, not voluminous raw execution transcripts.
 4. Keep context clean so that critical constraints, instructions, and error signals remain prominent and uncorrupted.
 5. Prevent conversational multi-agent sprawl: ban open-ended agent-to-agent chatter. Communication must remain strictly hierarchical, bounded by deterministic task inputs and compact structured outputs.
+6. Treat active context as runtime training data. Prompts, skills, and observations effectively train the agent at inference time. Every token shapes the active policy distribution; eliminate ambiguous prose, contradictory rules, and irrelevant debris so the model's behavioral distribution remains bounded by verified invariants.
