@@ -32,7 +32,7 @@ Read only what is needed to act safely. For non-trivial work in a repo that has 
 
 Use UNDERSTAND -> JUDGE -> CHOOSE SMALLEST RELIABLE PATH -> ACT -> PROVE. In UNDERSTAND / FRAME, digest the brief in your own words (Core Objective, Non-negotiables, Acceptance Criteria). For non-trivial work, locate the earliest unresolved decision in understanding the requirement, design or contract, implementation, verification, review, delivery, or post-delivery evidence. Resolve it before dependent action: an implementation request with an undefined contract first earns design. Use existing routes; do not require every task to visit every phase or create phase documents. Clear bounded local work keeps its lightweight start.
 
-Inspect, execute, or measure before asking. Ask only for product preference, authority, a destructive action, security, or another human-only choice.
+Inspect, execute, or measure before asking. When a technical fork depends on observable runtime, layout, or API behavior, settle it with a bounded spike per [prototype](../playbooks/prototype.md) instead of asking the user or debating abstractly. Ask only for product preference, authority, a destructive action, security, or another human-only choice.
 
 For explain, design, and review, choose the smallest useful representation per [earned representation](earned-representation.md); never visualize by default; do not add ceremony to trivial mutation.
 
@@ -104,7 +104,7 @@ Read-only work never ships. Workers never ship. The parent ships.
 
 ## Parallelism
 
-Default to one owner. Workers return compact findings and evidence, not transcripts. Writable fan-out requires a separate Git worktree or host-enforced sandbox per owner, each with its own Git index and process boundary, plus a named integrator and verifier. Disjoint paths in one shared worktree are not isolation. If those controls are missing, run serially and say so. Read-only fan-out may share a worktree when it cannot mutate repository or external state. Worker output is a candidate. The parent verifies. Parallel success does not merge by itself.
+Default to one owner. Workers return compact findings and evidence, not transcripts. When dispatching a follow-up round, retry, or next unit to a worker, pass a consolidated brief (objective, later directives, and prior evidence or branch state) rather than relying on chained interrupt-resumes that can drop earlier constraints; reuse a live worker only when it holds expensive process or environment state. Writable fan-out requires a separate Git worktree or host-enforced sandbox per owner, each with its own Git index and process boundary, plus a named integrator and verifier. Disjoint paths in one shared worktree are not isolation. If those controls are missing, run serially and say so. Read-only fan-out may share a worktree when it cannot mutate repository or external state. Worker output is a candidate. The parent verifies. Parallel success does not merge by itself.
 
 ## Four gates and mechanical enforcement
 
