@@ -480,6 +480,14 @@ class TestValidateOntologyEnforcement(unittest.TestCase):
                 "git commit",
                 "delivery verification_cmd must invoke its bundled verifier",
             ),
+            (
+                "skills/patpat-learn/SKILL.md",
+                "LOCAL_MUTATION",
+                "mutating",
+                ["durable-constraint-recorded"],
+                "git status --short",
+                "learn verification_cmd must invoke its bundled correction ledger verifier",
+            ),
         ]
         for path_str, mutation_level, policy, produces, bad_cmd, expected_error in skill_checks:
             with self.subTest(skill=path_str):
@@ -511,6 +519,7 @@ class TestValidateOntologyEnforcement(unittest.TestCase):
             self.assertTrue(any("missing plan verifier" in err for err in errors))
             self.assertTrue(any("missing review verifier" in err for err in errors))
             self.assertTrue(any("missing delivery verifier" in err for err in errors))
+            self.assertTrue(any("missing correction ledger verifier" in err for err in errors))
             self.assertTrue(any("missing workspace mapper verifier" in err for err in errors))
 
     def test_actual_repo_skills_pass_ontology_validation(self) -> None:

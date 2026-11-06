@@ -174,6 +174,10 @@ DELIVERY_VERIFIER = Path("skills/patpat-ship/scripts/verify_delivery.py")
 DELIVERY_VERIFY_COMMAND = (
     "python3 <loaded-skill-directory>/scripts/verify_delivery.py --root <workspace-root>"
 )
+LEARN_VERIFIER = Path("skills/patpat-learn/scripts/verify_corrections.py")
+LEARN_VERIFY_COMMAND = (
+    "python3 <loaded-skill-directory>/scripts/verify_corrections.py --root <workspace-root>"
+)
 FORMAL_VERIFY_COMMAND = (
     "python3 skills/patpat-run/scripts/check_assignment_model.py --pure-python"
 )
@@ -659,6 +663,7 @@ def validate_skill_ontology(
             "delivery-pr-ready",
             "formal-model-verified",
             "workspace-map-current",
+            "durable-constraint-recorded",
         }
         for state in ontology.get("produces_state", []):
             if state in disallowed_generic_states and command in generic_commands:
@@ -673,6 +678,8 @@ def validate_skill_ontology(
             errors.append(f"{path}: review verification_cmd must invoke its bundled verifier")
         elif path.parent.name == "patpat-ship" and command != DELIVERY_VERIFY_COMMAND:
             errors.append(f"{path}: delivery verification_cmd must invoke its bundled verifier")
+        elif path.parent.name == "patpat-learn" and command != LEARN_VERIFY_COMMAND:
+            errors.append(f"{path}: learn verification_cmd must invoke its bundled correction ledger verifier")
         elif path.parent.name == "patpat-formal-verify" and command != FORMAL_VERIFY_COMMAND:
             errors.append(f"{path}: formal verify verification_cmd must invoke --pure-python model checking")
     return ontology
@@ -706,6 +713,7 @@ def validate_workspace_mapper_resource(root: Path, errors: list[str]) -> None:
         (PLAN_VERIFIER, "plan"),
         (REVIEW_VERIFIER, "review"),
         (DELIVERY_VERIFIER, "delivery"),
+        (LEARN_VERIFIER, "correction ledger"),
     ):
         verifier = root / verifier_path
         if not verifier.is_file() or verifier.is_symlink():

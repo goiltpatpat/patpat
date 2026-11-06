@@ -19,6 +19,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
@@ -59,6 +61,9 @@ jobs:
           python3 skills/patpat-eval/scripts/eval_stats.py --self-test
           python3 skills/patpat-run/scripts/validate_plan.py --self-test
           python3 hooks/scripts/patpat_loop_state.py --self-test
+          python3 skills/patpat-learn/scripts/verify_corrections.py --self-test
+          python3 skills/patpat-learn/scripts/verify_corrections.py --root .
+          python3 scripts/check_attribution.py --self-test
 
       - name: Validate release tag
         if: startsWith(github.ref, 'refs/tags/v')
@@ -166,6 +171,8 @@ jobs:
           python tests/smoke_windows_codex_hooks.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/test_statechart_receipts.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python skills/patpat-learn/scripts/verify_corrections.py --self-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Set up Node

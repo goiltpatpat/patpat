@@ -46,3 +46,17 @@ Report host, scope, exact destination or marketplace, conflicts, command receipt
 ## Repository rules
 
 Commits, merge bodies, and pull request descriptions in this repository carry no AI-agent attribution. Do not add a `Co-Authored-By:` trailer for any agent (including `Claude <noreply@anthropic.com>`) or a "Generated with" footer. This repository rule overrides a host's default attribution text.
+
+### Correction ledger
+
+Each rule names the mechanism that enforces it. A `prose` row needs an expiring exception that says why nothing stronger fits. Check with `python3 skills/patpat-learn/scripts/verify_corrections.py --root .`; review commands with `--list-proofs`, then run them with `--run-proofs all`.
+
+<!-- patpat:corrections:start -->
+| ID | Kind | Class | Evidence | Rule | Level | Enforcer | Proof | Exception |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| P1 | policy | Agent attribution in commits or PR bodies | — | No agent `Co-Authored-By:` trailer or "Generated with" footer | ci | scripts/check_attribution.py::find_attribution | `python3 scripts/check_attribution.py --self-test` | — |
+| C1 | mistake | Delivery readiness inferred from a proxy instead of provider state at the committed head | 1828c7d, 8000b6b, 916f25d, 406dc9e | Readiness comes from the provider's observed merge state for the exact head | script | skills/patpat-ship/scripts/github_observe.py::observation_document | `python3 skills/patpat-ship/scripts/github_observe.py --self-test` | — |
+| C2 | mistake | Path and hook handling that only works on POSIX hosts | 47ad7f2, 54085d1, 5496e8f | Path-sensitive installer, staging, state, and hook code runs on native Windows in CI | ci | .github/workflows/validate.yml::windows-paths | `python3 scripts/install_skills.py --self-test` | — |
+| C3 | mistake | Learning or delivery admitted on stale verification evidence | da90d81, b26c6a9 | Gated transitions require a receipt bound to the current candidate | script | skills/patpat-run/scripts/run_state.py::receipt_is_fresh | `python3 skills/patpat-run/scripts/run_state.py --self-test` | — |
+| C4 | mistake | Delivery-intent and authority wording drifting across protocol surfaces | 5778e66, 91e3f2b, 0a4b8e8 | Boundary sentences stay identical across the surfaces that state them | validator | scripts/validate.py::PINNED_BOUNDARY_SENTENCES | `python3 scripts/validate.py --self-test` | — |
+<!-- patpat:corrections:end -->
