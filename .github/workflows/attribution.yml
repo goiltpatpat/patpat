@@ -1,0 +1,45 @@
+name: Attribution
+
+# Enforces the AGENTS.md repository rule: no AI-agent attribution in commits or PR descriptions.
+# Separate from Validate so a PR description edit re-checks without rerunning the full suite.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  attribution:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.11"
+
+      - name: Reject agent attribution
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          if [ -n "${BASE_REF}" ]; then
+            python3 scripts/check_attribution.py --range "origin/${BASE_REF}..HEAD" --body-env PR_BODY
+          elif [ -z "${BEFORE}" ] || [ "${BEFORE}" = "0000000000000000000000000000000000000000" ]; then
+            python3 scripts/check_attribution.py --range "${AFTER}^!"
+          else
+            python3 scripts/check_attribution.py --range "${BEFORE}..${AFTER}"
+          fi

@@ -59,3 +59,5 @@ _Avoid_: LLM-as-judge score (without calibration)
 **`reader-confirmed` / `agent-derived`**: whether a checked property was stated by the user or an existing contract, or written by the agent. A formal check of an `agent-derived` property proves conformance to an unconfirmed spec.
 
 **Bug ledger**: the numbered record of bugs a formal check found and reproduced against real code, each with the reader's sentence, the broken rule, and its fix reference. A bug map draws the ledger on the current statechart.
+
+**Correction ledger**: the table in a repository's agent instruction file (such as `AGENTS.md` or `CLAUDE.md`) that pairs each recurring mistake class or policy with the check that enforces it, the commits that prove it recurred, and a proof command. `verify_corrections.py` fails when an enforcer disappears, evidence does not resolve, or a prose exception expires. Distinct from the bug ledger, which records formal-check findings.
