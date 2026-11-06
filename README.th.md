@@ -9,7 +9,7 @@
 
 **เพิ่มการพิสูจน์อีกนิด ลดการคาดเดาลงอีกเยอะ (A little more proof. A lot less guesswork.)**
 
-Patpat คือระบบปฏิบัติการบนฐานหลักฐานเชิงประจักษ์ (Evidence-driven operating layer) สำหรับ AI agent เพื่อมอบวิจารณญาณแบบวิศวกรอาวุโส (Senior Engineer) ที่รอบคอบให้กับ Agent: เข้าใจปัญหาที่แท้จริง เลือกความลึกของงานให้เหมาะสม ทำการเปลี่ยนแปลงเฉพาะจุดที่จำเป็น พิสูจน์ผลลัพธ์บนพื้นผิวที่สำคัญจริงๆ และรายงานสิ่งที่ยังไม่ได้รับการพิสูจน์อย่างตรงไปตรงมา ครอบคลุมทั้งงานโค้ด งานใน repository งานส่งมอบประเภทเอกสารและการวิเคราะห์ ตลอดจนงานผสมผสาน ทำงานได้บน Codex, Claude Code, Grok CLI, Antigravity, Cursor และโฮสต์ที่รองรับ Agent Skills อื่นๆ
+Patpat คือชุด skill บนฐานหลักฐานเชิงประจักษ์ (evidence-driven skills) ที่เสริมความเฉียบคมให้ agent ที่คุณใช้อยู่แล้ว Patpat ไม่ได้ครอบ ไม่ได้แทนที่ และไม่ได้เป็น runtime ของ agent และไม่ยึดกระบวนการทำงานไปจากคุณ: โฮสต์ยังคงเป็น runtime คุณยังคงเป็นผู้ควบคุม และแต่ละ skill มีจุดเริ่มเป็นไฟล์ Markdown ธรรมดาที่อ่านและปรับแต่งได้ บางตัวมี script ขนาดเล็กที่ทำงานแบบ deterministic มาด้วย บนโฮสต์ที่ [capability map](docs/guide/capability-map.md#sticky-mode-hook-status) บันทึกว่ามี hook ของเซสชัน (ตรวจสอบแล้วบางส่วนบน Codex และยังไม่ได้ตรวจสอบบน Claude Code) hook ที่เปิดใช้หรือไม่ก็ได้นี้จะคงโหมด Patpat ไว้ในเทิร์นถัดไปจนกว่าคุณจะพิมพ์ `disable patpat` หรือสถานะเซสชันหมดอายุหลัง 30 วัน โดย hook นี้เพิ่มแค่บริบท ไม่ได้ให้สิทธิ์ใดๆ Patpat มอบวิจารณญาณแบบวิศวกรอาวุโส (Senior Engineer) ที่รอบคอบให้กับ Agent: เข้าใจปัญหาที่แท้จริง เลือกความลึกของงานให้เหมาะสม ทำการเปลี่ยนแปลงเฉพาะจุดที่จำเป็น พิสูจน์ผลลัพธ์บนพื้นผิวที่สำคัญจริงๆ และรายงานสิ่งที่ยังไม่ได้รับการพิสูจน์อย่างตรงไปตรงมา ครอบคลุมทั้งงานโค้ด งานใน repository งานส่งมอบประเภทเอกสารและการวิเคราะห์ ตลอดจนงานผสมผสาน ทำงานได้บน Codex, Claude Code, Grok CLI, Antigravity, Cursor และโฮสต์ที่รองรับ Agent Skills อื่นๆ
 
 มาสคอตเป็นมิตร แต่คำถามค่อนข้างจริงจังและเจาะลึก
 
@@ -17,7 +17,7 @@ Patpat คือระบบปฏิบัติการบนฐานหล�
 - **ทำให้หลักฐานเป็นส่วนหนึ่งของงาน:** ตัดสินว่าหลักฐานใดที่จะแสดงถึงความสำเร็จก่อนลงมือทำ ทดสอบบนพื้นผิวหลัก (authoritative surface) และแยกแยะสิ่งที่พิสูจน์แล้วออกจากข้อสมมุติฐาน
 - **ให้มนุษย์เป็นผู้ควบคุมเสมอ:** ปรับระดับกระบวนการทำงานให้เหมาะสมกับความเสี่ยง และไม่เปลี่ยนความสามารถทางเทคนิค (capability) ให้กลายเป็นการอนุญาต (permission) โดยพลการ
 
-[คู่มือ (Guide)](docs/guide/README.md) · [การติดตั้งและอัปเดต](docs/guide/installing.md) · [แผนที่ความสามารถ (Capability map)](docs/guide/capability-map.md) · [Releases](https://github.com/goiltpatpat/patpat/releases) · [ความปลอดภัย](https://github.com/goiltpatpat/patpat/security/policy)
+[คู่มือ (Guide)](docs/guide/README.md) · [การติดตั้งและอัปเดต](docs/guide/installing.md) · [แผนที่ความสามารถ (Capability map)](docs/guide/capability-map.md) · [อภิธานศัพท์ (Glossary)](docs/guide/glossary.md) · [Releases](https://github.com/goiltpatpat/patpat/releases) · [ความปลอดภัย](https://github.com/goiltpatpat/patpat/security/policy)
 
 <br clear="all">
 
@@ -212,7 +212,7 @@ Patpat ไม่เปลี่ยนความสามารถทางเ�
 | --- | --- |
 | มีการเขียนข้อมูลลงที่ใดบ้าง? | ใน working tree ของคุณ สำหรับงานที่ร้องขอเท่านั้น สถานะการรันต่อเนื่องจะอยู่ใต้ Git metadata (`.git/patpat/` หรือ Git directory ของ worktree นั้นๆ) โหมดของเซสชันจะอยู่ใต้โฟลเดอร์ข้อมูล plugin ของโฮสต์ ส่วน `.patpat/context-graph.json` จะถูกสร้างขึ้นเฉพาะเมื่อคุณร้องขอแผนผัง workspace เท่านั้น |
 | มีข้อมูลอะไรออกจากเครื่องบ้าง? | ไม่มีการส่ง telemetry ใดๆ การส่งมอบจะใช้คำสั่ง `git push` และเรียก GitHub ผ่าน CLI `gh` ของคุณ การรัน statechart ดั้งเดิมครั้งแรกจะดาวน์โหลด Java และ TLC ผ่าน mise ส่วนลิงก์ต้นทางของแผนภาพจะสอบถามไปยัง public GitHub API เฉพาะเมื่อคุณเลือกใช้งานเท่านั้น |
-| มีอะไรที่คงอยู่ข้ามเซสชันบ้าง? | Hook ของโฮสต์จะกู้คืนโหมด Patpat หลังจาก resume เฉพาะจุดที่ [capability map](docs/guide/capability-map.md#sticky-mode-hook-status) บันทึกไว้ ส่วนที่อื่นๆ จะต้องเรียก Patpat ใหม่อีกครั้ง |
+| มีอะไรที่คงอยู่ข้ามเซสชันบ้าง? | บนโฮสต์ที่ [capability map](docs/guide/capability-map.md#sticky-mode-hook-status) บันทึกว่ามี hook โหมด Patpat จะคงอยู่ในเทิร์นถัดไปของเซสชันนั้นและหลัง resume จนกว่าคุณจะพิมพ์ `disable patpat` หรือสถานะเซสชันหมดอายุหลัง 30 วัน ส่วนโฮสต์อื่นต้องเรียก Patpat ใหม่อีกครั้ง |
 | ผลลัพธ์ได้รับการพิสูจน์อย่างไร? | บนพื้นผิวหลัก (authoritative surface): ผ่านแอปพลิเคชันจริง artifact จริง หรือชุดทดสอบจริง ไม่ใช่การสรุปความ และจำเป็นต้องมีการรีวิวอิสระก่อนการส่งมอบและสำหรับงานที่มีความเสี่ยงสูง |
 
 ## สิ่งที่ต้องใช้ (Requirements)
