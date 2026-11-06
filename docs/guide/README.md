@@ -1,6 +1,6 @@
 # The Patpat Guide
 
-Patpat is an evidence-driven work loop. Give it the outcome, constraints, and evidence that would count as success. Its engineering workflows cover repository work; general-task guidance adapts the approach to other deliverables while retaining the relevant safety boundaries. Host discovery and behavior must be verified separately.
+Patpat gives your agent an evidence-driven work loop. Give it the outcome, constraints, and evidence that would count as success. Its engineering workflows cover repository work; general-task guidance adapts the approach to other deliverables while retaining the relevant safety boundaries. Host discovery and behavior must be verified separately.
 
 Read these pages in order once. Return to a page when its decision becomes relevant.
 
@@ -14,7 +14,7 @@ Read these pages in order once. Return to a page when its decision becomes relev
 8. [Extend and evaluate](./08-extend-and-evaluate.md). Add project rules, verifiers, and skills without bloating the core.
 9. [Recipes and failure modes](./09-recipes-and-failure-modes.md). Copy useful prompts and avoid common trust failures.
 
-The [installation reference](./installing.md), [extension reference](./extending.md), and [capability map](./capability-map.md) hold details that should not be repeated across the tutorial.
+The [installation reference](./installing.md), [extension reference](./extending.md), [capability map](./capability-map.md), and [glossary](./glossary.md) hold details that should not be repeated across the tutorial.
 
 ## If you remember one thing
 

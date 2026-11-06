@@ -9,7 +9,7 @@
 
 **A little more proof. A lot less guesswork.**
 
-Patpat is an evidence-driven operating layer for AI agents. It gives an agent the judgment of a careful senior engineer: understand the real problem, choose the right depth of work, make a focused change, prove the result on the surface that matters, and say plainly what is still unverified. It covers code and repository work, other deliverables such as documents and analyses, and mixed work, and it runs on Codex, Claude Code, Grok CLI, Antigravity, Cursor, and other Agent Skills hosts.
+Patpat is a set of evidence-driven skills that sharpens the agent you already use. It does not wrap, replace, or run your agent, and it does not take over your process: the host stays the runtime, you stay in control, and each skill is a plain Markdown entry point you can read and adapt, some with small deterministic scripts. On hosts whose session hook the [capability map](docs/guide/capability-map.md#sticky-mode-hook-status) records (partially verified on Codex, unverified on Claude Code), an optional hook keeps Patpat on for later turns until you type `disable patpat` or the session state expires after 30 days; it adds context and grants no authority. It gives an agent the judgment of a careful senior engineer: understand the real problem, choose the right depth of work, make a focused change, prove the result on the surface that matters, and say plainly what is still unverified. It covers code and repository work, other deliverables such as documents and analyses, and mixed work, and it runs on Codex, Claude Code, Grok CLI, Antigravity, Cursor, and other Agent Skills hosts.
 
 The mascot is friendly. The questions are quite persistent.
 
@@ -17,7 +17,7 @@ The mascot is friendly. The questions are quite persistent.
 - **Make evidence part of the work.** Decide what would demonstrate success before acting, exercise the authoritative surface, and separate verified from assumed.
 - **Keep people in control.** Scale the workflow to the risk, and never turn a capability into permission.
 
-[Guide](docs/guide/README.md) · [Install and update](docs/guide/installing.md) · [Capability map](docs/guide/capability-map.md) · [Releases](https://github.com/goiltpatpat/patpat/releases) · [Security](https://github.com/goiltpatpat/patpat/security/policy)
+[Guide](docs/guide/README.md) · [Install and update](docs/guide/installing.md) · [Capability map](docs/guide/capability-map.md) · [Glossary](docs/guide/glossary.md) · [Releases](https://github.com/goiltpatpat/patpat/releases) · [Security](https://github.com/goiltpatpat/patpat/security/policy)
 
 <br clear="all">
 
@@ -212,7 +212,7 @@ Patpat does not turn capability into authority, and it does not claim more than 
 | --- | --- |
 | What writes does it make? | Your working tree, only for the requested task. Durable-run state under Git metadata (`.git/patpat/`, or the worktree's Git directory). Session mode under the host's plugin data folder. `.patpat/context-graph.json` only when you ask for a workspace map. |
 | What leaves the machine? | No telemetry. Delivery pushes with `git` and calls GitHub through your `gh` CLI. The first native statechart run downloads Java and TLC through mise. Diagram source links query the public GitHub API only when you opt in. |
-| What persists across sessions? | Host hooks restore Patpat mode after resume only where the [capability map](docs/guide/capability-map.md#sticky-mode-hook-status) records it; elsewhere, invoke Patpat again. |
+| What persists across sessions? | Where the [capability map](docs/guide/capability-map.md#sticky-mode-hook-status) records a host hook, Patpat mode stays on for later turns in that session and after resume until you type `disable patpat` or the session state expires after 30 days; elsewhere, invoke Patpat again. |
 | How is a result proven? | On its authoritative surface: the real app, artifact, or test, not a summary. Independent review is required before delivery and for high-risk work. |
 
 ## Requirements

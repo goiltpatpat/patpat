@@ -2,6 +2,8 @@
 
 Extend Patpat only when a recurring task or observed failure mode changes agent decisions.
 
+A hypothetical improvement ("it would be better if...") does not clear this bar. State the observed failure or recurring task as what was asked, what the agent did, and what should have happened, then turn it into a regression case that fails on the current skills before the change and passes after it; for stochastic behavior, use the predeclared repeat count in [`patpat-eval`](../../skills/patpat-eval/SKILL.md). If the behavior already composes from existing skills, tighten those instead of adding a new one.
+
 ## Choose the smallest extension
 
 1. Tighten an existing principle when one invariant was missing.

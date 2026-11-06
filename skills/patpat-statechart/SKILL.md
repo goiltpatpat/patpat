@@ -77,6 +77,8 @@ Then report:
 - when the flow came from a diagram, each bug path as an ordered list of diagram state and transition IDs, so it can return to the diagram as a story view, plus the model states the diagram does not have, in the reader's words;
 - the command that rebuilds the files, with a new `--out` folder.
 
+When a project keeps a bug ledger (see [`patpat-formal-verify`](../patpat-formal-verify/SKILL.md#maintain-the-check)) and the reader asks where the flow has broken over time, draw a bug map: the current chart with each ledger number on the state where that bug broke, matched by the recorded model or diagram ID rather than the label, and a numbered legend of reader sentences, each with its replay evidence and fix reference. The numbers are authored history, not checker output. Title the map so it cannot be read as current results, and report the current run's broken rules, if any, separately from fixed ledger entries. A ledger state that no longer exists in the current chart is listed in the legend as `state removed` instead of being placed on a guessed state, and a row whose ID is `none` appears in the legend only, marked `no chart state`. When the current model is too large to chart, shrink it with a VIEW or bounds, or report the legend alone and say why.
+
 Origin, Patpat changes, and the license notice for the bundled command are in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## Proof closure
