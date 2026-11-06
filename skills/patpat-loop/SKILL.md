@@ -122,7 +122,7 @@ Changed:
 - <observable change and files>
 
 Why:
-- <evidence-backed reason>
+- <evidence-backed reason, with its claim label: confirmed, inferred, or unknown>
 
 Verified:
 - <verified | partially verified | implemented but not verified | not implemented>: <command or observation>

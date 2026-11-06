@@ -221,6 +221,47 @@ LEGACY_FIXTURE_ARTIFACT_NAME = "patpat-codex-attestation"
 MAX_SKILL_MARKDOWN_BYTES = 32 * 1024
 PINNED_BOUNDARY_SENTENCES = (
     (
+        Path("skills/patpat-loop/references/operating-protocol.md"),
+        (
+            "A prediction, an untested cause, or a recalled fact is never `confirmed`.",
+            "use no other claim labels in prose.",
+        ),
+        "claim-label evidence contract",
+    ),
+    (
+        Path("skills/patpat-loop/principles/proof-over-proxy.md"),
+        (
+            "Derive expected values from the requirement or an independent reference, never by running the changed subject and copying its output; a baseline captured before a behavior-preserving change is that reference.",
+            'Pair every "no call happened" assertion with a case where the call does happen.',
+        ),
+        "test-behavior contract",
+    ),
+    (
+        Path("skills/patpat-loop/references/operating-protocol.md"),
+        ("Retrigger an infrastructure flake at most once, only within existing delivery authority for that pull request, and never by pushing an empty commit or rerunning a job that deploys, publishes, or writes externally. A repeated failure earns no further retrigger; inspect its job logs and reclassify.",),
+        "CI flake classification contract",
+    ),
+    (
+        Path("skills/patpat-loop/playbooks/authorized-delivery.md"),
+        ("Retrigger an infrastructure flake at most once, only within existing delivery authority for that pull request, and never by pushing an empty commit or rerunning a job that deploys, publishes, or writes externally. A repeated failure earns no further retrigger; inspect its job logs and reclassify.",),
+        "CI flake classification contract",
+    ),
+    (
+        Path("skills/patpat-loop/playbooks/default-delivery.md"),
+        ("Retrigger an infrastructure flake at most once, only within existing delivery authority for that pull request, and never by pushing an empty commit or rerunning a job that deploys, publishes, or writes externally. A repeated failure earns no further retrigger; inspect its job logs and reclassify.",),
+        "CI flake classification contract",
+    ),
+    (
+        Path("skills/patpat-ship/SKILL.md"),
+        ("Retrigger an infrastructure flake at most once, only within existing delivery authority for that pull request, and never by pushing an empty commit or rerunning a job that deploys, publishes, or writes externally. A repeated failure earns no further retrigger; inspect its job logs and reclassify.",),
+        "CI flake classification contract",
+    ),
+    (
+        Path("skills/patpat-loop/playbooks/pr-handoff.md"),
+        ("Retrigger an infrastructure flake at most once, only within existing delivery authority for that pull request, and never by pushing an empty commit or rerunning a job that deploys, publishes, or writes externally. A repeated failure earns no further retrigger; inspect its job logs and reclassify.",),
+        "CI flake classification contract",
+    ),
+    (
         Path("skills/patpat-loop/principles/earned-parallelism.md"),
         (
             "The current writable program has passed one plan-specific pilot unit at worker limit 1; earlier representative evidence does not replace this pilot.",
@@ -508,6 +549,25 @@ EXPECTED_HOOK_FILES = {
 def operational_markdown(text: str) -> str:
     without_comments = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
     return re.sub(r"```.*?```|~~~.*?~~~", "", without_comments, flags=re.DOTALL)
+
+
+CLAIM_LABELS = frozenset({"confirmed", "inferred", "unknown", "stale", "unproven"})
+CLAIM_LABEL_LIST = re.compile(r"`[a-z]+`(?:(?:,\s*|,?\s+(?:or|and)\s+)`[a-z]+`)+")
+# Known gaps, accepted while absent from the tree: capitalized "Label", "marked"/"tagged",
+# single labels, slash pairs, bracketed labels, fenced examples, and "labeled X or not".
+CLAIM_LABEL_PAIR = re.compile(r"\blabel(?:ed|led|s)?\s+`?([a-z]+)`?\s+or\s+`?([a-z]+)`?")
+
+
+def claim_label_drift(text: str) -> list[str]:
+    """Return non-canonical labels in backticked label lists or "labeled X or Y" pairs that name `confirmed` or `inferred`."""
+    drift: list[str] = []
+    operational = operational_markdown(text)
+    lists = [re.findall(r"`([a-z]+)`", match.group(0)) for match in CLAIM_LABEL_LIST.finditer(operational)]
+    lists += [list(match.groups()) for match in CLAIM_LABEL_PAIR.finditer(operational)]
+    for labels in lists:
+        if {"confirmed", "inferred"} & set(labels):
+            drift.extend(label for label in labels if label not in CLAIM_LABELS)
+    return drift
 
 
 def unquote_frontmatter_scalar(value: str) -> str:
@@ -1670,6 +1730,13 @@ def validate_root(root: Path) -> list[str]:
                 f"{workflow}: ci-fixture artifact must not use {LEGACY_FIXTURE_ARTIFACT_NAME}"
             )
 
+    for markdown in sorted((root / "skills").rglob("*.md")):
+        if "node_modules" in markdown.parts:
+            continue
+        drift = claim_label_drift(markdown.read_text(encoding="utf-8"))
+        if drift:
+            errors.append(f"{markdown}: non-canonical claim labels {sorted(set(drift))}")
+
     for relative, needles, label in PINNED_BOUNDARY_SENTENCES:
         pinned = root / relative
         if not pinned.is_file():
@@ -2133,6 +2200,53 @@ def run_self_test(root: Path) -> list[str]:
         skill.write_text(
             text.replace("Present the proposal and wait for approval.", "Apply the proposal immediately.", 1),
             encoding="utf-8",
+        )
+
+    def replace_once(fixture: Path, relative: str, old: str, new: str) -> None:
+        target = fixture / relative
+        text = target.read_text(encoding="utf-8")
+        if old not in text:
+            raise AssertionError(f"{relative}: self-test anchor missing: {old}")
+        target.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+    def strip_claim_label_contract(fixture: Path) -> None:
+        replace_once(
+            fixture,
+            "skills/patpat-loop/references/operating-protocol.md",
+            "A prediction, an untested cause, or a recalled fact is never `confirmed`.",
+            "A strong guess may be `confirmed`.",
+        )
+
+    def drift_claim_label_vocabulary(fixture: Path) -> None:
+        replace_once(
+            fixture,
+            "skills/patpat-inspect/references/why-report.md",
+            "labeled `inferred` or `unknown`",
+            "labeled `inferred` or `hypothesis`",
+        )
+
+    def drift_unquoted_claim_label(fixture: Path) -> None:
+        replace_once(
+            fixture,
+            "skills/patpat-loop/playbooks/rationale-forensics.md",
+            "or is labeled `inferred` or `unknown`.",
+            "or is labeled inferred or hypothesis.",
+        )
+
+    def strip_test_behavior_contract(fixture: Path) -> None:
+        replace_once(
+            fixture,
+            "skills/patpat-loop/principles/proof-over-proxy.md",
+            "Derive expected values from the requirement or an independent reference, never by running the changed subject and copying its output; a baseline captured before a behavior-preserving change is that reference.",
+            "Snapshot the subject's output as the expected value.",
+        )
+
+    def weaken_flake_rule(fixture: Path) -> None:
+        replace_once(
+            fixture,
+            "skills/patpat-ship/SKILL.md",
+            "Retrigger an infrastructure flake at most once, only within existing delivery authority for that pull request, and never by pushing an empty commit or rerunning a job that deploys, publishes, or writes externally. A repeated failure earns no further retrigger; inspect its job logs and reclassify.",
+            "Retry a flake once.",
         )
 
     def strip_provider_gate(fixture: Path) -> None:
@@ -2913,6 +3027,11 @@ def run_self_test(root: Path) -> list[str]:
             ("learn boundary drift", strip_learn_boundary, "missing learn boundary contract"),
             ("regression-first fail-before drift", strip_regression_fail_before, "missing regression-first fail-before contract"),
             ("authorized-delivery provider-gate drift", strip_provider_gate, "missing authorized-delivery provider-gate contract"),
+            ("claim-label contract drift", strip_claim_label_contract, "missing claim-label evidence contract"),
+            ("claim-label vocabulary drift", drift_claim_label_vocabulary, "non-canonical claim labels ['hypothesis']"),
+            ("unquoted claim-label drift", drift_unquoted_claim_label, "non-canonical claim labels ['hypothesis']"),
+            ("test-behavior contract drift", strip_test_behavior_contract, "missing test-behavior contract"),
+            ("CI flake rule weakened", weaken_flake_rule, "missing CI flake classification contract"),
             ("session-takeover live-verify drift", strip_session_takeover_live_verify, "missing session-takeover live-verify contract"),
             ("project-verifier isolation drift", strip_project_verifier_isolation, "missing project-verifier isolation contract"),
             ("project-verifier readiness drift", strip_project_verifier_readiness, "missing project-verifier readiness and recovery contract"),
