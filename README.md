@@ -80,7 +80,7 @@ REVIEW -> LEARN? -> propose and wait for approval -> approved edit -> VERIFY -> 
 - **The right depth, chosen for you.** A typo gets a quick check. Auth, billing, migrations, and cross-cutting work get design and independent review first. Patpat reads the risk signals; there are no modes to pick.
 - **Proof before edits.** The agent names the claim, the surface that proves it, the action, the expected observation, and the cleanup before it changes anything. A build supports a claim; it does not prove user-visible behavior. Green is a signal, not an alibi.
 - **Failures change the plan.** Failed evidence is classified as an implementation defect, a verifier defect, or an environment blocker, and the run returns to the earliest invalid step. Three identical failures stop the run and name the evidence needed to continue.
-- **Honest reports.** Every claim is labeled `verified`, `partially verified`, `implemented but not verified`, or `not implemented`.
+- **Honest reports.** Every material claim is labeled `confirmed`, `inferred`, or `unknown`, and every outcome is `verified`, `partially verified`, `implemented but not verified`, or `not implemented`.
 - **Beyond code.** For documents, analyses, and other deliverables, Patpat applies the same judgment through [general task guidance](skills/patpat-loop/references/general-task-judgment.md) without Git ceremony.
 
 **Your words control delivery.** Activation authorizes the loop, proof, and verification. Commit-and-PR needs delivery intent; overnight or "don't stop" means verify, review, open a PR, and stop merge-ready. Merge needs the words land or merge. `local only` keeps work local, and `disable /patpat` turns Patpat off.

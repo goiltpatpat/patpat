@@ -25,6 +25,8 @@ _Avoid_: log, summary, the agent's own account
 **`verified`**: the claimed behavior was observed on its authoritative surface. Reports also use `partially verified`, `implemented but not verified`, and `not implemented`.
 _Avoid_: done, works, should work
 
+**Claim label**: the evidence a single claim rests on, written next to it: `confirmed` (observed this session, with the citation), `inferred` (reasoned from cited evidence), or `unknown` (not established, with what would settle it). Session takeover adds `stale` for inherited claims, and the impact ladder uses `unproven`. A prediction is never `confirmed`. `validate.py` rejects other labels in label lists inside skill files.
+
 **`INCONCLUSIVE`**: required evidence is missing or cannot be inspected. It is not a failure and not a pass. It is final for that check in the current run, reopened only by new inspectable evidence or a material change to scope, host, connection, contract, or candidate.
 _Avoid_: probably fine, flaky
 
