@@ -8,3 +8,5 @@ The context window is a finite, scarce, high-value working memory space. Protect
 4. Keep context clean so that critical constraints, instructions, and error signals remain prominent and uncorrupted.
 5. Prevent conversational multi-agent sprawl: ban open-ended agent-to-agent chatter. Communication must remain strictly hierarchical, bounded by deterministic task inputs and compact structured outputs.
 6. Treat active context as runtime training data. Prompts, skills, and observations effectively train the agent at inference time. Every token shapes the active policy distribution; eliminate ambiguous prose, contradictory rules, and irrelevant debris so the model's behavioral distribution remains bounded by verified invariants.
+7. Compress discarded debugging dead-ends: replace verbose multi-step exploratory failures or dead ends with a single causal breadcrumb stating the tested premise and reason for rejection.
+8. Recency ordering for task constraints: place active file paths, exact error signatures, and strict constraints at the end of prompt briefs to mitigate attention degradation across long context windows.

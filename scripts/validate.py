@@ -11,6 +11,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import unicodedata
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
@@ -578,6 +579,28 @@ def unquote_frontmatter_scalar(value: str) -> str:
     return value
 
 
+def check_yaml_frontmatter_hazards(key: str, raw_value: str, line: str) -> None:
+    if "\t" in line:
+        raise ValueError(f"YAML forbids tabs for indentation in frontmatter: {line!r}")
+    val = raw_value.strip()
+    is_quoted = (
+        len(val) >= 2
+        and (
+            (val[0] == val[-1] == "'")
+            or (val[0] == val[-1] == "\"")
+        )
+    )
+    if not is_quoted and val:
+        if val.startswith(("'", "\"")) or val.endswith(("'", "\"")):
+            raise ValueError(f"unclosed quotes in frontmatter scalar for {key}: {val!r}")
+        if ": " in val:
+            raise ValueError(f"unquoted colon-space in frontmatter scalar for {key}: {val!r}")
+        if val[0] in {"@", "`", "%", "*", "|", ">", "?", "!", "&"}:
+            raise ValueError(f"unquoted scalar starts with reserved YAML indicator for {key}: {val!r}")
+        if val.startswith("- "):
+            raise ValueError(f"unquoted scalar starts with sequence indicator for {key}: {val!r}")
+
+
 def parse_frontmatter(path: Path) -> tuple[dict[str, object], str]:
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
@@ -602,6 +625,7 @@ def parse_frontmatter(path: Path) -> tuple[dict[str, object], str]:
             normalized_key = key.strip()
             if normalized_key in active_mapping:
                 raise ValueError(f"duplicate metadata key: {normalized_key}")
+            check_yaml_frontmatter_hazards(normalized_key, raw_value, line)
             active_mapping[normalized_key] = unquote_frontmatter_scalar(raw_value.strip())
             continue
         key, separator, value = line.partition(":")
@@ -616,6 +640,7 @@ def parse_frontmatter(path: Path) -> tuple[dict[str, object], str]:
             data[normalized_key] = metadata
             active_mapping = metadata
         elif raw_value:
+            check_yaml_frontmatter_hazards(normalized_key, raw_value, line)
             data[normalized_key] = unquote_frontmatter_scalar(raw_value)
             active_mapping = None
         else:
@@ -901,11 +926,53 @@ def validate_agent_plugin_manifest(
                     errors.append(f"{path}: extensions.{namespace} must be an object")
 
 
+def github_heading_slug(text: str) -> str:
+    cleaned = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    cleaned = re.sub(r"[*_`]", "", cleaned)
+    chars = []
+    for char in cleaned.lower():
+        if char.isalnum() or unicodedata.category(char).startswith("M") or char in "-_ ":
+            chars.append(char)
+    slug = "".join(chars)
+    return re.sub(r"\s+", "-", slug.strip())
+
+
+def extract_heading_slugs(path: Path) -> set[str]:
+    slugs: set[str] = set()
+    counts: dict[str, int] = {}
+    in_code_block = False
+    for line in path.read_text(encoding="utf-8").splitlines():
+        trimmed = line.strip()
+        if trimmed.startswith("```") or trimmed.startswith("~~~"):
+            in_code_block = not in_code_block
+            continue
+        if in_code_block:
+            continue
+        match = re.match(r"^#{1,6}\s+(.+)$", trimmed)
+        if match:
+            raw_title = match.group(1).strip()
+            base_slug = github_heading_slug(raw_title)
+            if not base_slug:
+                continue
+            count = counts.get(base_slug, 0)
+            counts[base_slug] = count + 1
+            final_slug = base_slug if count == 0 else f"{base_slug}-{count}"
+            slugs.add(final_slug)
+    return slugs
+
+
 def validate_links(path: Path, root: Path, errors: list[str]) -> None:
     text = path.read_text(encoding="utf-8")
     for raw_target in LINK_PATTERN.findall(text):
-        target = raw_target.split("#", 1)[0]
-        if not target or "://" in target or target.startswith("mailto:"):
+        target, _, fragment = raw_target.partition("#")
+        if not target and not fragment:
+            continue
+        if target and ("://" in target or target.startswith("mailto:")):
+            continue
+        if not target and fragment:
+            slugs = extract_heading_slugs(path)
+            if fragment not in slugs:
+                errors.append(f"{path}: broken heading anchor: {raw_target}")
             continue
         resolved = (path.parent / target).resolve()
         try:
@@ -915,6 +982,11 @@ def validate_links(path: Path, root: Path, errors: list[str]) -> None:
             continue
         if not resolved.exists():
             errors.append(f"{path}: broken reference: {raw_target}")
+            continue
+        if fragment and resolved.suffix.lower() == ".md":
+            slugs = extract_heading_slugs(resolved)
+            if fragment not in slugs:
+                errors.append(f"{path}: broken heading anchor: {raw_target}")
 
 
 def linked_markdown(path: Path, root: Path) -> list[Path]:
@@ -978,6 +1050,7 @@ def parse_agent_frontmatter(path: Path) -> tuple[dict[str, object], str]:
             normalized_key = key.strip()
             if normalized_key in active_mapping:
                 raise ValueError(f"duplicate metadata key: {normalized_key}")
+            check_yaml_frontmatter_hazards(normalized_key, raw_value, line)
             active_mapping[normalized_key] = unquote_frontmatter_scalar(raw_value.strip())
             continue
         key, separator, value = line.partition(":")
@@ -1002,6 +1075,7 @@ def parse_agent_frontmatter(path: Path) -> tuple[dict[str, object], str]:
             active_list = None
             active_mapping = None
         else:
+            check_yaml_frontmatter_hazards(key, value, line)
             data[key] = unquote_frontmatter_scalar(value)
             active_list = None
             active_mapping = None
@@ -3161,6 +3235,27 @@ def run_self_test(root: Path) -> list[str]:
                 skill.write_text(text.replace(old, new, 1), encoding="utf-8")
 
             cases.append((f"{skill_name} closure drift {index}", drift_closure, "canonical proof closure directive"))
+
+    def break_yaml_colon_space(fixture: Path) -> None:
+        skill = fixture / "skills" / "patpat-inspect" / "SKILL.md"
+        t = skill.read_text(encoding="utf-8")
+        skill.write_text(t.replace("description: Explain repository", "description: Explain: repository", 1), encoding="utf-8")
+
+    cases.append(("unquoted colon-space in frontmatter", break_yaml_colon_space, "unquoted colon-space in frontmatter scalar"))
+
+    def break_yaml_reserved_char(fixture: Path) -> None:
+        skill = fixture / "skills" / "patpat-inspect" / "SKILL.md"
+        t = skill.read_text(encoding="utf-8")
+        skill.write_text(t.replace("description: Explain repository", "description: @Explain repository", 1), encoding="utf-8")
+
+    cases.append(("reserved YAML indicator in frontmatter", break_yaml_reserved_char, "unquoted scalar starts with reserved YAML indicator"))
+
+    def break_heading_anchor(fixture: Path) -> None:
+        skill = fixture / "skills" / "patpat-inspect" / "SKILL.md"
+        t = skill.read_text(encoding="utf-8")
+        skill.write_text(t.replace("#skill-state-and-mutation-gate", "#nonexistent-anchor-marker", 1), encoding="utf-8")
+
+    cases.append(("broken heading anchor in markdown link", break_heading_anchor, "broken heading anchor"))
 
     failures: list[str] = []
     with tempfile.TemporaryDirectory(prefix="patpat-validator-copy-test-") as temp_directory:

@@ -218,9 +218,24 @@ def inspect_stream(raw: str, workspace: str, plugin: str, host_version: str, rec
         problems.append("no final result event")
     elif result.get("is_error") or result.get("subtype") != "success":
         problems.append(f"session ended with {result.get('subtype')!r}")
+    if result and result.get("permission_denials"):
+        problems.append(f"permission denials: {result.get('permission_denials')}")
     for token in (*LEAK_TOKENS, *((receipts,) if receipts else ())):
         if token in raw:
             problems.append(f"transcript mentions {token!r}: hidden material may have been exposed")
+    pending_tool_calls: set[str] = set()
+    for event in events:
+        msg = event.get("message")
+        if isinstance(msg, dict):
+            for block in msg.get("content") or []:
+                if isinstance(block, dict):
+                    btype = block.get("type")
+                    if btype == "tool_use" and block.get("id"):
+                        pending_tool_calls.add(str(block["id"]))
+                    elif btype == "tool_result" and block.get("tool_use_id"):
+                        pending_tool_calls.discard(str(block["tool_use_id"]))
+    if pending_tool_calls:
+        problems.append(f"unpaired tool calls without results: {sorted(pending_tool_calls)}")
     full_suite_runs = 0
     for name, tool_input in tool_uses(events):
         if name == "Bash":
@@ -723,6 +738,21 @@ def self_test_stream_checks() -> None:
         workspace, plugin, version,
     )
     expect(suite["full_suite_runs"] == 1, f"full-suite count wrong: {suite}")
+    dangling = inspect_stream(
+        synthetic_stream(workspace, plugin, version, extra=[
+            {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Read", "input": {}}]}}
+        ]),
+        workspace, plugin, version,
+    )
+    expect(any("unpaired tool calls" in p for p in dangling["problems"]), "unpaired tool call missed")
+    denied = inspect_stream(
+        synthetic_stream(workspace, plugin, version).replace(
+            '"usage": {}',
+            '"usage": {}, "permission_denials": ["Write /etc/hosts"]',
+        ),
+        workspace, plugin, version,
+    )
+    expect(any("permission denials" in p for p in denied["problems"]), "permission denial missed")
     expect(delivery_problems("A", 5, 1), "rule in baseline missed")
     expect(delivery_problems("B", 5, 2), "undelivered rule missed")
     expect(not delivery_problems("B", 3, 3) and not delivery_problems("A", 3, 0), "delivered arms flagged")
