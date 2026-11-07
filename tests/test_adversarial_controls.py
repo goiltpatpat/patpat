@@ -213,6 +213,16 @@ class TestAdversarialControls(unittest.TestCase):
     def test_remote_capability_is_not_remote_authority(self):
         test_remote_capability_is_not_remote_authority()
 
+    def test_structural_code_slop_exception_swallowing(self):
+        from scripts.dry_run_loop import interrogate_audit, unslop_lint
+        bad = unslop_lint("try:\n    step()\nexcept Exception: pass")
+        assert bad["clean"] is False and "silent-exception-swallowing" in bad["violations"]
+        good = unslop_lint("try:\n    step()\nexcept ValueError as err:\n    raise RuntimeError(err)")
+        assert good["clean"] is True
+        diff_res = interrogate_audit(diff="--- a/m.py\n+++ b/m.py\n+ except BaseException: pass\n")
+        assert diff_res["verdict"] == "findings-surfaced"
+        assert any(f["angle"] == "anti-slop" for f in diff_res["findings"])
+
 if __name__ == "__main__":
     test_scenario_1_stale_verification()
     test_scenario_2_verification_theater()

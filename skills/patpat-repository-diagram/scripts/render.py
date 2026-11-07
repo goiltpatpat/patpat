@@ -4808,6 +4808,32 @@ def _browser_check(
                 continue
             browser_path = resolved
             break
+        if browser_path is None and os.name == "nt":
+            win_roots = (
+                os.environ.get("PROGRAMFILES"),
+                os.environ.get("PROGRAMFILES(X86)"),
+                os.environ.get("LOCALAPPDATA"),
+            )
+            win_candidates = (
+                ("Google", "Chrome", "Application", "chrome.exe"),
+                ("Microsoft", "Edge", "Application", "msedge.exe"),
+                ("Chromium", "Application", "chrome.exe"),
+            )
+            for raw_root in win_roots:
+                if not raw_root or browser_path is not None:
+                    continue
+                base_dir = Path(raw_root)
+                for rel_parts in win_candidates:
+                    cand = base_dir.joinpath(*rel_parts)
+                    if cand.is_symlink():
+                        continue
+                    try:
+                        resolved = cand.resolve()
+                    except OSError:
+                        continue
+                    if resolved.is_file():
+                        browser_path = resolved
+                        break
         if browser_path is None:
             raise DiagramError("no supported Chromium browser found; browser render was not performed")
     if not browser_path.is_file():
@@ -6846,6 +6872,14 @@ def self_test() -> None:
 
 
 def main() -> int:
+    os.environ.setdefault("PYTHONUTF8", "1")
+    for _stream in (sys.stdout, sys.stderr):
+        _reconf = getattr(_stream, "reconfigure", None)
+        if callable(_reconf):
+            try:
+                _reconf(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json-errors", action="store_true", help="write stable structured diagnostics to stderr")
     sub = parser.add_subparsers(dest="command", required=True)

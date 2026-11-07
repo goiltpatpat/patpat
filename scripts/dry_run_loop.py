@@ -885,6 +885,14 @@ def discover_defects_from_diff(diff: str) -> list[dict[str, str]]:
                 "detail": "Discovered un-synchronized global mutable state introduced in added lines",
             })
 
+        # 4. Anti-slop / maintainability angle: silent broad exception swallowing
+        if re.search(r"^\s*except\s+(?:Exception|BaseException)\s*:\s*pass\b", line):
+            findings.append({
+                "angle": "anti-slop",
+                "severity": "medium",
+                "detail": "Discovered silent broad exception swallowing (except Exception: pass) in added lines",
+            })
+
     return findings
 
 
@@ -946,6 +954,8 @@ def unslop_lint(text: str) -> dict[str, object]:
         violations.append("em-dash-overuse")
     if re.search(r"#.*(?:crucial|delv|highlight|robust implementation)", text, re.IGNORECASE):
         violations.append("narrative-code-comment")
+    if re.search(r"(?:^|\n)\s*except\s+(?:Exception|BaseException)\s*:\s*pass\b", text):
+        violations.append("silent-exception-swallowing")
     return {
         "clean": len(violations) == 0,
         "violations": violations,
@@ -1403,6 +1413,10 @@ def run_self_test() -> None:
     assert sloppy_text["clean"] is False
     assert "em-dash-overuse" in sloppy_text["violations"]
     assert "superficial-participial-clause" in sloppy_text["violations"]
+    swallowed = unslop_lint("try:\n    run()\nexcept Exception: pass")
+    assert swallowed["clean"] is False and "silent-exception-swallowing" in swallowed["violations"]
+    swallowed_diff = interrogate_audit(diff="--- a/x.py\n+++ b/x.py\n+ except Exception: pass")
+    assert any(f["angle"] == "anti-slop" for f in swallowed_diff["findings"])
 
     print("Patpat loop dry-run self-test passed.")
 

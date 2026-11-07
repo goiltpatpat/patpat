@@ -60,7 +60,7 @@ Read the linked file when the trigger fires. Cite a principle only when it chang
 
 ## Route the work
 
-Before executing a specialist workflow, resolve its `metadata.patpat.ontology` against current evidence. Check required states, use only a unique eligible producer inside the user's authorized scope, preserve the mutation and approval gates, and verify any produced state. The [operating protocol](references/operating-protocol.md#skill-state-and-mutation-gate) defines the gate. Metadata is routing evidence, not authority.
+Before executing a specialist workflow, resolve its `metadata.patpat.ontology` against current evidence. Check required states, use only a unique eligible producer inside the user's authorized scope, preserve the mutation and approval gates, and verify any produced state. The [operating protocol](references/operating-protocol.md#skill-state-and-mutation-gate) defines the gate; for Shape 0 and Shape 1 local work without delivery intent, this inline gate summary and the Principle Index above satisfy the start check without loading the full operating protocol. Metadata is routing evidence, not authority.
 
 Orchestrate through composition rather than duplication: `patpat-loop` coordinates workflow transitions and delegates to specialized skills (`patpat-architect`, `patpat-change`, `patpat-engineer`, `patpat-verify`, `patpat-review`, `patpat-unslop`, `patpat-ship`) rather than absorbing their logic into a monolithic God Skill. Specialist skills configured with `disable-model-invocation: true` are shielded from ambient host auto-triggering but remain composable within an active Patpat session.
 
@@ -85,7 +85,7 @@ Read the matched workflow and relevant references. Read [the execution graph](re
 
 ```text
 FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY
-In FRAME, perform In-Your-Own-Words Digestion before acting: articulate (1) Core Objective, (2) Non-negotiables, and (3) Acceptance Criteria in plain, concise terms to establish explicit alignment.
+In FRAME, perform In-Your-Own-Words Digestion before acting: articulate (1) Core Objective, (2) Non-negotiables, and (3) Acceptance Criteria in plain, concise terms to establish explicit alignment (for Shape 0 and Shape 1 tasks, fold these directly into Claim and Expect of the PROOF CONTRACT to avoid duplicate pre-edit ceremony).
 VERIFY -> REPORT when the edit is local, reversible, and not shipping
 VERIFY -> REVIEW before default ship, land or merge, durable-run LEARN or REPORT, and for auth, billing, secrets, architecture, or cross-cutting work
 REVIEW -> changes required -> INSPECT / PROOF CONTRACT / ACT -> VERIFY
@@ -96,7 +96,7 @@ REPORT -> patpat-ship only with delivery intent and fresh verify + review (exter
 LAND? -> MERGE a reviewed PR that passes its provider gate only with explicit land or merge
 ```
 
-A proof contract names Claim, Surface, Action, Expect, and Cleanup. Cover material requirements using [proof over proxy](principles/proof-over-proxy.md). Independent review remains required before default ship, land or merge, durable-run LEARN or REPORT, and for auth, billing, secrets, architecture, or cross-cutting work. Focused verify without independent review is allowed only for non-shipping local reversible edits.
+A proof contract names Claim, Surface, Action, Expect, and Cleanup. Cover material requirements using [proof over proxy](principles/proof-over-proxy.md). Focused verify without independent review is allowed only for non-shipping local reversible edits; all other gates above require independent review.
 
 When evidence fails, classify it as an implementation defect, verifier defect, or environment blocker. Return to the earliest invalid state and follow the [bounded retry and Diagnostic Delta contract](references/execution-graph.md#bounded-retry-and-diagnostic-delta). After three consecutive failures from the same unresolved blocker, stop and name the evidence required to continue. In durable runs, the blocker key, failure class, and graph node define the streak; a changed snapshot alone does not clear it.
 

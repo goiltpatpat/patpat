@@ -1154,6 +1154,14 @@ def _self_test() -> int:
 
 
 def main() -> int:
+    os.environ.setdefault("PYTHONUTF8", "1")
+    for _stream in (sys.stdout, sys.stderr):
+        _reconf = getattr(_stream, "reconfigure", None)
+        if callable(_reconf):
+            try:
+                _reconf(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, help="exact Git repository root to inspect")
     parser.add_argument("--out-dir", type=Path, help="new or existing directory outside the repository")
