@@ -3,7 +3,7 @@ name: patpat-verify
 description: Prove an implementation or repository claim against its authoritative artifact or user surface. Use after code changes, during acceptance checks, or whenever tests and builds are insufficient evidence of real behavior.
 disable-model-invocation: true
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Codebase","requires_state":["bounded-change-staged"],"produces_state":["acceptance-verified"],"verification_cmd":"git diff --check"}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Codebase","requires_state":["workspace-root-open"],"produces_state":["acceptance-verified"],"verification_cmd":"git diff --check"}'
 ---
 
 # Patpat Verify
@@ -47,7 +47,7 @@ For every test or evaluator used as evidence, apply the behavioral oracle from [
 
 Match verification depth to the claim and risk:
 
-- **Behavioral claims**: Vary material inputs, relevant error branches, or state transitions when safe and practical. Call the subject through the authoritative interface and assert the literal observed result or material effect. A mock interaction, call count, truthiness check, copied constant, or clean compilation does not prove the behavior by itself.
+- **Behavioral claims**: Vary material inputs, relevant error branches, or state transitions when safe and practical. Call the subject through the authoritative interface and assert the literal observed result or material effect. A mock interaction, call count, truthiness check, copied constant, or clean compilation does not prove the behavior by itself. When a new test is the primary behavioral proof for changed logic, confirm mutation resilience with a one-line scratch fault check (verify the test fails if the changed condition is inverted or early-returned, then revert the scratch fault immediately).
 - **Static claims**: Use deterministic structure, schema, type, or content checks when that is the authoritative surface. Do not manufacture runtime theater for a non-runtime claim.
 - **Proxy evidence**: Fixtures and mocks may isolate a contract, but they do not replace the real system when the claim concerns that system. Reject narrative summaries, hardcoded fixture answers, and clean compilation as sole behavioral proof.
 - **Fresh binding**: Bind evidence to the exact candidate revision or a reproducible working-tree snapshot, plus material inputs, environment, and oracle. Require the committed head for push-, PR-, or delivery-bound claims: run the check at that head, or use the durable gate from [delivery proof](../patpat-run/references/delivery-proof.md), which accepts a receipt only when the proven tree equals that head's tree and the checkout is clean. Report such a receipt as reused. When a check depends on commit identity, such as Git history or a derived version, it must run at the head. Reject stale, cached, or transferred logs.

@@ -51,7 +51,7 @@ Each entity is an object with workspace-relative `path` and `evidence_path` valu
 
 To discover candidate entrypoints, top-level services, and structural interfaces without reading entire files, run:
 `python3 <skill-dir>/scripts/extract_symbols.py --root <workspace-root> --budget 1200`
-This uses Python standard library `ast` and pattern recognition to extract top classes, functions, and interfaces ranked by reference in-degree centrality, bounded within a ~1,200 token budget. Use these ranked findings to locate high-signal entrypoints and services for `.patpat/context-graph.json`.
+This uses Python standard library `ast` and pattern recognition to extract top classes, functions, and interfaces ranked by reference in-degree centrality, bounded within a ~1,200 token budget. Pass `--paths <rel-path...>` or `--changed` to slice only specific target files or modified Git files before opening large modules. Use these ranked findings to locate high-signal entrypoints and services for `.patpat/context-graph.json`.
 
 ## Verify and report
 

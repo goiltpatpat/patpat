@@ -14,7 +14,9 @@ import ast
 import json
 import os
 import re
+import subprocess
 import sys
+import tempfile
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -273,11 +275,128 @@ def extract_manifest_symbols(content: str, rel_path: str) -> list[ExtractedSymbo
     return symbols
 
 
-def scan_workspace(root: Path) -> list[ExtractedSymbol]:
-    """Walk the workspace and extract symbols while respecting security and ignore boundaries."""
-    all_symbols: list[ExtractedSymbol] = []
+def _validate_in_root_rel_parts(resolved_root: Path, rel_parts: tuple[str, ...]) -> Path | None:
+    if not rel_parts:
+        return None
+    cur = resolved_root
+    for part in rel_parts:
+        if not part or part in {".", ".."} or part in IGNORE_DIRS or part.startswith("."):
+            return None
+        cur = cur / part
+        if cur.is_symlink():
+            return None
+    try:
+        resolved_target = cur.resolve()
+        resolved_target.relative_to(resolved_root)
+    except (OSError, ValueError):
+        return None
+    return resolved_target
 
-    for dirpath, dirnames, filenames in os.walk(root):
+
+def _extract_file_symbols(resolved_root: Path, file_path: Path) -> list[ExtractedSymbol]:
+    if file_path.is_symlink():
+        return []
+    try:
+        raw_rel_parts = file_path.relative_to(resolved_root).parts
+    except ValueError:
+        try:
+            raw_rel_parts = file_path.resolve().relative_to(resolved_root).parts
+        except (OSError, ValueError):
+            return []
+    resolved_file = _validate_in_root_rel_parts(resolved_root, raw_rel_parts)
+    if resolved_file is None:
+        return []
+    try:
+        rel_parts = resolved_file.relative_to(resolved_root).parts
+        stat_res = resolved_file.stat()
+        if not resolved_file.is_file() or stat_res.st_size > MAX_FILE_BYTES:
+            return []
+    except (OSError, ValueError):
+        return []
+    rel_path = "/".join(rel_parts)
+    fname = resolved_file.name
+    ext = resolved_file.suffix.lower()
+    if ext not in {".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".rs", ".go"} and fname not in {
+        "package.json", "pyproject.toml", "Cargo.toml"
+    }:
+        return []
+    try:
+        content = resolved_file.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    if ext == ".py":
+        return extract_python_symbols(content, rel_path)
+    if ext in {".ts", ".tsx", ".js", ".jsx", ".mjs", ".rs", ".go"}:
+        return extract_regex_symbols(content, rel_path, ext)
+    if fname in {"package.json", "pyproject.toml", "Cargo.toml"}:
+        return extract_manifest_symbols(content, rel_path)
+    return []
+
+
+def discover_changed_paths(root: Path) -> list[str]:
+    """Return workspace-relative paths of Git-modified and untracked non-ignored files."""
+    paths: list[str] = []
+    seen: set[str] = set()
+    for args in (
+        ["git", "-C", str(root), "-c", "core.fsmonitor=false", "diff", "--name-only", "HEAD"],
+        ["git", "-C", str(root), "-c", "core.fsmonitor=false", "ls-files", "--others", "--exclude-standard"],
+    ):
+        try:
+            proc = subprocess.run(args, capture_output=True, text=True, timeout=15, check=False)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if proc.returncode != 0:
+            continue
+        for raw_line in proc.stdout.splitlines():
+            candidate = raw_line.strip()
+            if candidate and candidate not in seen:
+                seen.add(candidate)
+                paths.append(candidate)
+    return paths
+
+
+def scan_workspace(root: Path, target_paths: list[str] | None = None) -> list[ExtractedSymbol]:
+    """Walk the workspace (or slice target_paths) and extract symbols while respecting security boundaries."""
+    all_symbols: list[ExtractedSymbol] = []
+    resolved_root = root.resolve()
+
+    if target_paths is not None:
+        seen_files: set[Path] = set()
+        for raw in target_paths:
+            cleaned = raw.strip().replace("\\", "/")
+            if not cleaned or cleaned.startswith("/") or re.match(r"^[A-Za-z]:", cleaned):
+                continue
+            parts = tuple(part for part in cleaned.split("/") if part)
+            resolved_cand = _validate_in_root_rel_parts(resolved_root, parts)
+            if resolved_cand is None:
+                continue
+            if resolved_cand.is_file():
+                if resolved_cand not in seen_files:
+                    seen_files.add(resolved_cand)
+                    all_symbols.extend(_extract_file_symbols(resolved_root, resolved_cand))
+            elif resolved_cand.is_dir():
+                for dirpath, dirnames, filenames in os.walk(resolved_cand):
+                    dirnames[:] = [
+                        d for d in dirnames
+                        if d not in IGNORE_DIRS and not d.startswith(".") and not (Path(dirpath) / d).is_symlink()
+                    ]
+                    current_dir = Path(dirpath)
+                    for fname in filenames:
+                        if fname.startswith("."):
+                            continue
+                        cand_file = current_dir / fname
+                        if cand_file.is_symlink():
+                            continue
+                        try:
+                            resolved_file = cand_file.resolve()
+                        except OSError:
+                            continue
+                        if resolved_file not in seen_files:
+                            seen_files.add(resolved_file)
+                            all_symbols.extend(_extract_file_symbols(resolved_root, cand_file))
+        return all_symbols
+
+    for dirpath, dirnames, filenames in os.walk(resolved_root):
         # In-place filter out ignored directories
         dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS and not d.startswith(".")]
 
@@ -285,40 +404,7 @@ def scan_workspace(root: Path) -> list[ExtractedSymbol]:
         for fname in filenames:
             if fname.startswith("."):
                 continue
-
-            file_path = current_dir / fname
-            if file_path.is_symlink():
-                continue
-
-            try:
-                stat_res = file_path.stat()
-                if stat_res.st_size > MAX_FILE_BYTES:
-                    continue
-            except OSError:
-                continue
-
-            try:
-                rel_path = file_path.relative_to(root).as_posix()
-            except ValueError:
-                continue
-
-            ext = file_path.suffix.lower()
-            if ext not in {".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".rs", ".go"} and fname not in {
-                "package.json", "pyproject.toml", "Cargo.toml"
-            }:
-                continue
-
-            try:
-                content = file_path.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-
-            if ext == ".py":
-                all_symbols.extend(extract_python_symbols(content, rel_path))
-            elif ext in {".ts", ".tsx", ".js", ".jsx", ".mjs", ".rs", ".go"}:
-                all_symbols.extend(extract_regex_symbols(content, rel_path, ext))
-            elif fname in {"package.json", "pyproject.toml", "Cargo.toml"}:
-                all_symbols.extend(extract_manifest_symbols(content, rel_path))
+            all_symbols.extend(_extract_file_symbols(resolved_root, current_dir / fname))
 
     return all_symbols
 
@@ -567,7 +653,20 @@ type Config struct {}
     json_out = format_budgeted_index(ranked, token_budget=100, max_per_file=3, output_format="json")
     assert len(json_out) <= 100 * ESTIMATED_CHARS_PER_TOKEN + 50, f"JSON output length {len(json_out)} exceeded budget"
 
-    print("extract_symbols.py: self-test passed successfully (8/8 checks passed)")
+    # Test 9: Targeted --paths slicing, deduplication, and traversal/ignored/drive rejection
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_root = Path(tmp_dir)
+        (tmp_root / "pkg").mkdir()
+        (tmp_root / "pkg" / "target.py").write_text("def sliced_fn(x: int) -> int:\n    return x + 1\n", encoding="utf-8")
+        (tmp_root / "pkg" / "other.py").write_text("def ignored_fn() -> None:\n    pass\n", encoding="utf-8")
+        (tmp_root / ".venv").mkdir()
+        (tmp_root / ".venv" / "secret.py").write_text("def venv_fn() -> None:\n    pass\n", encoding="utf-8")
+        sliced = scan_workspace(tmp_root, target_paths=["pkg/target.py", "../escape.py", "C:/Windows/win.py", ".venv", ".venv/secret.py"])
+        assert len(sliced) == 1 and sliced[0].name == "sliced_fn" and sliced[0].file_path == "pkg/target.py"
+        deduped = scan_workspace(tmp_root, target_paths=["pkg", "pkg/target.py"])
+        assert [s.name for s in deduped].count("sliced_fn") == 1, f"Expected deduplicated symbol, got {deduped}"
+
+    print("extract_symbols.py: self-test passed successfully (9/9 checks passed)")
     return 0
 
 
@@ -577,7 +676,9 @@ def main() -> int:
     )
     parser.add_argument("--root", type=str, default=".", help="Workspace root path")
     parser.add_argument("--budget", type=int, default=DEFAULT_TOKEN_BUDGET, help="Token budget (default: 1200)")
-    parser.add_argument("--max-per-file", type=int, default=DEFAULT_MAX_PER_FILE, help="Max symbols per file in output (default: 3, 0=unlimited)")
+    parser.add_argument("--max-per-file", type=int, default=None, help="Max symbols per file in output (default: 3, or 15 when --paths/--changed is used; 0=unlimited)")
+    parser.add_argument("--paths", nargs="*", default=None, help="Optional workspace-relative file or directory paths to slice")
+    parser.add_argument("--changed", action="store_true", help="Slice only Git-modified and untracked files")
     parser.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output format")
     parser.add_argument("--self-test", action="store_true", help="Run self-tests and exit")
     args = parser.parse_args()
@@ -590,12 +691,24 @@ def main() -> int:
         print(f"Error: Workspace root not found or not a directory: {args.root}", file=sys.stderr)
         return 1
 
-    symbols = scan_workspace(root_path)
+    target_paths: list[str] | None = None
+    if args.paths is not None or args.changed:
+        target_paths = list(args.paths or [])
+        if args.changed:
+            for rel in discover_changed_paths(root_path):
+                if rel not in target_paths:
+                    target_paths.append(rel)
+
+    max_per_file = args.max_per_file
+    if max_per_file is None:
+        max_per_file = 15 if target_paths is not None else DEFAULT_MAX_PER_FILE
+
+    symbols = scan_workspace(root_path, target_paths=target_paths)
     ranked = rank_symbols(symbols)
     output = format_budgeted_index(
         ranked,
         token_budget=args.budget,
-        max_per_file=args.max_per_file,
+        max_per_file=max_per_file,
         output_format=args.format,
     )
     print(output)

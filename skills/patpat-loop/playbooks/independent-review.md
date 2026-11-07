@@ -18,7 +18,7 @@ Read [repository truth](../principles/repository-truth.md), [proof over proxy](.
 
 Audit the candidate diff and proof evidence against the checks material to its claims and risk:
 
-- **Assertion integrity**: Identify deleted, relaxed, commented, or conditionalized assertions and validation rules. Require an explicit contract reason and replacement proof; reject unexplained weakening that manufactures a pass.
+- **Assertion integrity**: Identify deleted, relaxed, commented, or conditionalized assertions and validation rules. Require an explicit contract reason and replacement proof; reject unexplained weakening that manufactures a pass, and confirm new behavioral tests would fail against a one-line inversion or dummy return of the changed subject logic.
 - **Genuine execution**: For behavioral claims, confirm proof exercises the real target path and material state or side effects when applicable. Fixtures and mocks may support the proof but must not replace its authoritative surface.
 - **Generalization**: Probe representative valid inputs, material boundaries, and relevant error paths. Reject hardcoded fixture answers; use code-path reasoning where exhaustive execution is impossible.
 - **Fresh binding**: Bind evidence to the exact candidate revision or a reproducible working-tree snapshot, plus the material inputs, environment, and oracle. For push-, PR-, or delivery-bound claims, require the committed head or the durable gate in [delivery proof](../../patpat-run/references/delivery-proof.md), which accepts a proof-first review when the proven tree equals that head's tree.
