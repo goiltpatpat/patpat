@@ -18,7 +18,7 @@ Lean simple. One read-only pass is the default. Treat the question as complex on
 1. Restate the question. If it is why-shaped, stop and use rationale-forensics. If it asks to fix or ship, stop; this playbook does not implement.
 2. Choose Explain or Critique. Critique still runs Explain first.
 3. Apply the complexity gate. Simple = one pass. Complex = 2-4 read-only explorers then one explainer, or serial fallback.
-4. Trace the live path: callers, callees, config, tests. Cite files and functions. Do not invent symbols.
+4. Trace the live path: callers, callees, config, tests. Cite files and functions. Do not invent symbols. For design-to-code drift detection, read the target design documents or READMEs, locate corresponding source files, and report only observable differences (missing features, incomplete models or fields, or unapproved architectural divergence); output "No drift detected" when implementation faithfully preserves the design.
 5. Label every material conclusion `confirmed`, `inferred`, or `unknown`.
 6. Put placement, ownership, and layering in **Where Things Live**, with an explicit owner and layer for each load-bearing symbol.
 7. If Critique was requested, attach verdicts after the explanation. No model-panel names in the report.

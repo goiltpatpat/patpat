@@ -435,6 +435,7 @@ def route(prompt: str) -> str:
         or "where should this live" in text
         or "where should" in text
         or "อธิบาย" in text
+        or "drift" in text
     ):
         if not has_compound_non_diagram_work(text):
             return "inspect"

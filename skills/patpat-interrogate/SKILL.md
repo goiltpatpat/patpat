@@ -10,7 +10,7 @@ metadata:
 
 Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
-Run adversarial multi-perspective review to stress-test designs, code changes, and unstated assumptions before delivery.
+Run adversarial multi-perspective review to stress-test designs, code changes, and unstated assumptions before delivery. Maintain a critique-first, anti-sycophancy posture: eliminate flattery and apologetic filler, state technical findings directly, and actively seek counter-arguments and failure modes before affirming any design.
 
 ## Process
 
