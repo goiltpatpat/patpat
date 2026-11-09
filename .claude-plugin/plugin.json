@@ -1,0 +1,20 @@
+{
+  "name": "patpat",
+  "version": "0.8.2",
+  "description": "Engineering skills for code that must survive contact with reality.",
+  "author": {
+    "name": "Patpat maintainers"
+  },
+  "homepage": "https://github.com/goiltpatpat/patpat",
+  "repository": "https://github.com/goiltpatpat/patpat",
+  "license": "MIT",
+  "keywords": [
+    "agentic-engineering",
+    "verification",
+    "debugging",
+    "architecture"
+  ],
+  "agents": [
+    "./adapters/claude/agents/patpat-reviewer.md"
+  ]
+}

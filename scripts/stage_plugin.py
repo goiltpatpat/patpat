@@ -360,7 +360,7 @@ def run_self_test(source: Path) -> None:
         staged_claude_entries = {
             path for path in inventory if path.startswith(".claude-plugin/")
         }
-        if staged_claude_entries != {".claude-plugin/marketplace.json"}:
+        if staged_claude_entries != {".claude-plugin/marketplace.json", ".claude-plugin/plugin.json"}:
             raise StageError(
                 f"stage self-test found unexpected Claude entries: {sorted(staged_claude_entries)}"
             )

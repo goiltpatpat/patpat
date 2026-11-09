@@ -62,7 +62,7 @@ Read the linked file when the trigger fires. Cite a principle only when it chang
 
 Before executing a specialist workflow, resolve its `metadata.patpat.ontology` against current evidence. Check required states, use only a unique eligible producer inside the user's authorized scope, preserve the mutation and approval gates, and verify any produced state. The [operating protocol](references/operating-protocol.md#skill-state-and-mutation-gate) defines the gate; for Shape 0 and Shape 1 local work without delivery intent, this inline gate summary and the Principle Index above satisfy the start check without loading the full operating protocol. Metadata is routing evidence, not authority.
 
-Orchestrate through composition rather than duplication: `patpat-loop` coordinates workflow transitions and delegates to specialized skills (`patpat-architect`, `patpat-change`, `patpat-engineer`, `patpat-verify`, `patpat-review`, `patpat-unslop`, `patpat-ship`) rather than absorbing their logic into a monolithic God Skill. Specialist skills configured with `disable-model-invocation: true` are shielded from ambient host auto-triggering but remain composable within an active Patpat session.
+Orchestrate through composition rather than duplication: `patpat-loop` coordinates workflow transitions and delegates to specialized skills (`patpat-architect`, `patpat-change`, `patpat-engineer`, `patpat-verify`, `patpat-review`, `patpat-unslop`, `patpat-ship`) rather than absorbing their logic into a monolithic God Skill. Specialist skills configured with `disable-model-invocation: true` are shielded from ambient host auto-triggering; compose them in an active Patpat session by reading the linked `SKILL.md`, since a host skill tool may refuse model invocation. On Claude Code, read the [Claude Code host map](references/host-claude-code.md) once per session.
 
 The user speaks plainly and invokes `/patpat` (or host equivalent). Select the route for the earliest unresolved decision found during inspection; an implementation request does not settle an undefined requirement or contract. Use the 8 existing primary routes:
 
@@ -81,7 +81,7 @@ Consult the [route catalog](references/route-catalog.md) for specialized workflo
 
 ## Run the graph
 
-Read the matched workflow and relevant references. Read [the execution graph](references/execution-graph.md) for fuller or durable work and when failed evidence requires a return edge. Reuse unchanged instructions already loaded in this session.
+Read the matched workflow and relevant references. Read [the execution graph](references/execution-graph.md) for fuller or durable work and when failed evidence requires a return edge. Reuse unchanged instructions already loaded in this session. For Shape 1 and Shape 2, copy the matched playbook's numbered steps verbatim into the host task list before task-specific items; a step you do not run stays listed as `skip: <reason>`.
 
 ```text
 FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY
@@ -97,6 +97,8 @@ LAND? -> MERGE a reviewed PR that passes its provider gate only with explicit la
 ```
 
 A proof contract names Claim, Surface, Action, Expect, and Cleanup. Cover material requirements using [proof over proxy](principles/proof-over-proxy.md). Focused verify without independent review is allowed only for non-shipping local reversible edits; all other gates above require independent review.
+
+A targeted pass does not show that earlier behavior survived. When work is design-gated, changes a shared contract, or reaches a caller set that is not small and understood, also run the broader existing suite before claiming `verified`; if that suite cannot run within a stated budget, name it and report `partially verified`. Classify any broader-suite failure with step 4 of [`patpat-verify`](../patpat-verify/SKILL.md#build-the-proof).
 
 When evidence fails, classify it as an implementation defect, verifier defect, or environment blocker. Return to the earliest invalid state and follow the [bounded retry and Diagnostic Delta contract](references/execution-graph.md#bounded-retry-and-diagnostic-delta). After three consecutive failures from the same unresolved blocker, stop and name the evidence required to continue. In durable runs, the blocker key, failure class, and graph node define the streak; a changed snapshot alone does not clear it.
 

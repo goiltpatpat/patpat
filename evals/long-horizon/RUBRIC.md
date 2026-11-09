@@ -6,7 +6,7 @@ This rubric follows the paired-comparison rules in [`behavioral-eval.md`](../../
 
 The results apply only to this fixture and this host. They do not support a general claim that Patpat improves quality, and they do not replace the "no measured-improvement claim" line in the README.
 
-1. **Rule effect (B vs A).** On this fixture, does the broader-suite rule in `patpat-verify` reduce regressions of earlier behavior?
+1. **Rule effect (B vs A).** On this fixture, does the broader-suite rule in the `patpat-loop` entry reduce regressions of earlier behavior?
 2. **Map effect (C vs B).** On this fixture, does a symbol map supplied at the start of each session reduce regressions beyond the rule alone?
 
 The run compares Patpat with and without one rule. It is not a with-and-without-Patpat benchmark. Claim 1 doesn't compare against a host with no Patpat because that difference would measure all of Patpat rather than the rule.
@@ -15,7 +15,7 @@ The run compares Patpat with and without one rule. It is not a with-and-without-
 
 | Arm | Plugin bytes | Prompt |
 | --- | --- | --- |
-| A, baseline | The candidate plugin with only the rule removed from the verify skill's step 4 | Frozen bytes |
+| A, baseline | The candidate plugin with only the rule paragraph removed from `skills/patpat-loop/SKILL.md` | Frozen bytes |
 | B, rule | The candidate plugin as staged | Same bytes as A |
 | C, rule plus map | The same plugin as B | Same bytes, with the output of `extract_symbols.py --budget 1200` added before the task |
 
@@ -29,7 +29,9 @@ Delivery mode for all arms is explicit invocation (`/patpat:patpat`). Results sa
 
 | Control | Frozen value |
 | --- | --- |
-| Host | Claude Code CLI in WSL Ubuntu-22.04; the exact version is recorded by `prepare` and must match every transcript |
+| Host | Claude Code CLI in WSL Ubuntu-22.04; `prepare` reads the exact version from `claude --version`, and it must match every transcript |
+| Operator | A person or a plain shell. An AI agent that can read `hidden/` or `reference/` must not operate the run |
+| Transcript | `--output-format stream-json --verbose --include-hook-events`, written only by `run-step` |
 | Model and effort | `claude-sonnet-5-5`, `--effort medium` |
 | Repeats | 3 per arm, not increased after seeing results |
 | Sessions | One fresh session per step with no session persistence. Only the repository carries memory between steps |
@@ -78,11 +80,16 @@ Reported but not gating: per-step recall, precision, score, and resolved; `mean_
 A trial is valid only if all of these hold. Otherwise its pairs are `INCONCLUSIVE`. Invalid trials are not rerun within the same run.
 
 - All five steps have a prompt, a command receipt bound to the prompt's digest, a transcript, and a score.
+- `lh_eval.py run-step` launched every session. The command receipt names exactly the frozen host command, `run.json` exists, the transcript's digest matches the one `run.json` recorded, and the host exited 0 within the time limit.
+- Each transcript is host-shaped. The init and result events share one session id, the result carries a turn count, a duration, and a nonzero cost, and the arm plugin's `UserPromptSubmit` hook response appears in that session.
+- No workspace snapshot carries a line that exists only in the reference answer or the hidden tests.
+- `check` rescores every step from its snapshot. The snapshot digest, the recorded hidden-test outcomes, and the recorded `fixed`, `broken`, and `required` must match the rescore, and the metrics come from the rescore, never from `score.json` or `trial.json`.
 - Prompt bytes match the frozen form for the arm.
-- Each transcript has an init event showing the frozen model, the recorded host version, the workspace as its cwd, and exactly the arm's plugin.
-- Each transcript ends in a successful result event. A session that hits a limit or an API error fails this check.
+- Each transcript has an init event showing the frozen model, the recorded host version, the workspace as its cwd, and exactly the arm's plugin. Host-bundled plugins, whose source ends in `@builtin`, are not counted.
+- Every transcript line is JSON, and every tool call with an id has a matching tool result.
+- Each transcript ends in a successful result event with no permission denials. A session that hits a limit or an API error fails this check.
 - No transcript mentions the eval directory, the hidden tests, this rubric, or the receipts folder.
-- Skill bytes reached the agent. The verify skill's step text appears in the transcript on at least 3 of 5 steps in every arm. The rule sentence appears on at least 3 of 5 steps in B and C, and on none in A.
+- Skill bytes reached the agent. The loop entry's proof-contract sentence appears in the transcript on at least 3 of 5 steps in every arm. The rule sentence appears on at least 3 of 5 steps in B and C, and on none in A.
 
 ## Decision rule
 
@@ -117,7 +124,7 @@ Report every pair and criterion. Three pairs cannot reach conventional significa
 
 - **Floor.** All three valid A trials have `broken_total` 0. Both comparisons are `INCONCLUSIVE`, and B and C are not run. The fixture then provoked no regressions on this model, so the rule had nothing to prevent. This stop also means a regression caused only by the rule would go unobserved.
 - **Rule not delivered.** B or C loaded the rule on fewer than 3 of 5 steps. The rule might not have reached the agent, so its effect cannot be attributed. Report this as a finding in its own right, because prose that isn't loaded can't change behavior.
-- **Candidate identity.** The rule is not in the staged plugin, or the arms differ in more than the verify skill. `prepare` refuses to continue.
+- **Candidate identity.** The rule is not in the staged plugin, or the arms differ in more than `skills/patpat-loop/SKILL.md`. `prepare` refuses to continue.
 - **Frozen input drift.** Any hashed input changed after `prepare`.
 - **Exposure.** A transcript shows contact with hidden material.
 - **Unreadable receipts.** The host's stream format doesn't show the required fields. The stream shape used in the self-test is an assumption, so the first live transcript confirms it or stops the run.

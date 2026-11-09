@@ -1582,6 +1582,24 @@ def validate_root(root: Path) -> list[str]:
             f"{claude_marketplace_path}: plugin entry must remain canonical, root-contained, "
             "and version-aligned"
         )
+    # Claude Code names a --plugin-dir plugin after its directory unless this manifest names it,
+    # which would turn /patpat:patpat into /<directory>:patpat.
+    claude_manifest_path = root / ".claude-plugin" / "plugin.json"
+    if not claude_manifest_path.is_file():
+        errors.append(f"{claude_manifest_path}: missing Claude plugin manifest")
+    else:
+        expected_claude_manifest = {
+            key: expected_claude_plugin[key]
+            for key in (
+                "name", "version", "description", "author", "homepage",
+                "repository", "license", "keywords", "agents",
+            )
+        }
+        if validate_json(claude_manifest_path, errors) != expected_claude_manifest:
+            errors.append(
+                f"{claude_manifest_path}: Claude plugin manifest must match the marketplace entry "
+                "and name the plugin patpat"
+            )
 
     manifest_descriptions = [
         parsed.get(host, {}).get("description")
@@ -2200,6 +2218,15 @@ def run_self_test(root: Path) -> list[str]:
 
     def remove_claude_marketplace(fixture: Path) -> None:
         (fixture / ".claude-plugin" / "marketplace.json").unlink()
+
+    def remove_claude_manifest(fixture: Path) -> None:
+        (fixture / ".claude-plugin" / "plugin.json").unlink()
+
+    def rename_claude_manifest(fixture: Path) -> None:
+        manifest = fixture / ".claude-plugin" / "plugin.json"
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data["name"] = "staged-dist"
+        manifest.write_text(json.dumps(data), encoding="utf-8")
 
     def remove_cursor_marketplace(fixture: Path) -> None:
         (fixture / ".cursor-plugin" / "marketplace.json").unlink()
@@ -3081,6 +3108,8 @@ def run_self_test(root: Path) -> list[str]:
             ("missing Antigravity smoke", remove_antigravity_smoke, "missing isolated Antigravity plugin smoke test"),
             ("missing Grok smoke", remove_grok_smoke, "missing isolated Grok plugin and hook smoke test"),
             ("missing Claude marketplace", remove_claude_marketplace, "missing Claude marketplace manifest"),
+            ("missing Claude plugin manifest", remove_claude_manifest, "missing Claude plugin manifest"),
+            ("renamed Claude plugin manifest", rename_claude_manifest, "name the plugin patpat"),
             ("missing Cursor marketplace", remove_cursor_marketplace, "missing Cursor repository marketplace"),
             ("missing stage script", remove_stage_script, "missing allowlisted plugin staging script"),
             ("missing Agent Plugins stage script", remove_agent_stage_script, "missing Agent Plugins package staging script"),

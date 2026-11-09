@@ -26,6 +26,8 @@ The highest-value extension is often a verifier that can drive the real applicat
 
 Each skill lives in its own folder and uses a `SKILL.md` with `name` and `description` frontmatter. Write imperative instructions. State inputs, stop conditions, proof, and outputs. Reference detailed material instead of repeating the operating protocol.
 
+Every sentence in an entry skill costs context on every activation. Before and after an edit, measure it with `python3 scripts/context_footprint.py --entry skills/<name>/SKILL.md --depth 0`; depth 1 adds every directly linked Markdown file, one hop only. An agent reads only the links its route needs, but can follow them further, so raise `--depth` to see deeper chains. Prefer an edit that keeps the entry footprint flat or smaller.
+
 ## Evaluate behavior, not prose
 
 Test whether the skill triggers on representative prompts, reads the required sources, follows its constraints, and produces the expected evidence. Use the user-authorized project and only an already-approved isolation surface when independent state is necessary; do not create a canary or disposable project solely for evaluation. If required isolation is unavailable, mark that criterion `INCONCLUSIVE` and continue only with safe, non-mutating checks. Review actual files and actions; do not score an agent from its self-report alone.
