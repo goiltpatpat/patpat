@@ -9,17 +9,27 @@ import importlib.util
 import re
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 
 ROOT = Path(__file__).resolve().parents[1]
 HOOK = ROOT / "hooks" / "scripts" / "patpat_loop_state.py"
 EXPLICIT_MERGE = re.compile(
-    r"(?:^|\s)(?:land|merge)(?:\s+(?:this|it|the\s+(?:pr|pull request|stack)|pr\s*#?\d+))?(?=$|[.!?])",
+    r"(?:^|\s)(?:land|merge)(?:\s+(?:this|it|the\s+(?:pr|pull request|stack)|pr\s*#?\d+))?"
+    r"(?=$|[.!?]|,?\s+(?:and|but)\s+(?:(?:don't|dont|do\s+not|never)\s+)?updat(?:e|ing)\b|,?\s+without\s+updat)",
     re.IGNORECASE,
 )
 MERGE_DENIAL = re.compile(
     r"(?:do\s+not|don't|dont|never|not|no|without|avoid(?:ing)?)\b"
     r"[^.!?;\n]*\b(?:land|merge)\b",
+    re.IGNORECASE,
+)
+STACK_UPDATE = re.compile(
+    r"\bupdat(?:e|ing)\s+(?:the\s+)?(?:stack\s+)?branch(?:es)?(?=$|[.!?,;]|\s+(?:as\s+needed|too|also)\b)",
+    re.IGNORECASE,
+)
+STACK_UPDATE_DENIAL = re.compile(
+    r"(?:do\s+not|don't|dont|never|not|no|without|avoid(?:ing)?)\b[^.!?;\n]*\bupdat(?:e|ing)\b",
     re.IGNORECASE,
 )
 LEGACY_BABYSIT_NEGATION = re.compile(
@@ -659,6 +669,93 @@ def ship_plan(
     return "commit-and-pr"
 
 
+class StackEntry(NamedTuple):
+    """One PR of a provider-discovered stack, observed at its current head."""
+
+    number: int
+    state: str = "open"  # "open", "queued", or "merged", as read back from the provider
+    base_is_trunk: bool = True
+    base_matches_parent_head: bool = True  # above the lowest: base branch and SHA equal the lower PR's head
+    contains_trunk: bool = True
+    contains_base: bool = True  # above the lowest: head contains the current head of the PR below
+    program_unit: bool = False  # program verdicts bind to an exact commit and never carry
+    commit_identity_proof: bool = False  # the proof reads git log or a Git-derived version
+    same_repository: bool = True
+    provider_gate_clean: bool = True  # required checks passed on this exact head
+    receipts_at_head: bool = True  # verify and review receipts name this head
+    tree_equal_to_proven: bool = False  # this head's tree equals the proven tree
+    proven_head_is_ancestor: bool = False
+    non_author_execution: bool = True  # CI on changed paths or an independent verifier ran this head
+
+
+class StackPlan(NamedTuple):
+    action: str
+    pull_request: int | None
+    run: tuple[int, ...] = ()
+
+
+def stack_receipts_may_carry(entry: StackEntry) -> bool:
+    """Program verdicts bind to an exact commit, and a commit-identity proof changes with every new commit."""
+    return not (entry.program_unit or entry.commit_identity_proof)
+
+
+def stack_receipts_cover(entry: StackEntry) -> bool:
+    """Receipts cover a head they name, or a head with the proven tree whose history contains the proven head."""
+    carried = entry.tree_equal_to_proven and entry.proven_head_is_ancestor and stack_receipts_may_carry(entry)
+    return entry.receipts_at_head or carried
+
+
+def stack_land_plan(
+    stack: tuple[StackEntry, ...],
+    *,
+    explicit_merge: bool,
+    update_authorized: bool = False,
+    retracted: bool = False,
+) -> StackPlan:
+    """Next action for landing a bottom-to-top stack.
+
+    Provider checks bind to the head, local receipts bind to content, and every landed PR needs an
+    execution proof its author did not produce.
+    """
+    if not explicit_merge or retracted:
+        queued = [entry.number for entry in stack if entry.state == "queued"]
+        return StackPlan("stop-report-queued", queued[0]) if queued else StackPlan("stop-merge-ready-only", None)
+    if any(entry.state == "merged" and not entry.base_is_trunk for entry in stack):
+        return StackPlan("stop-readback-not-on-trunk", None)
+    unmerged = [entry for entry in stack if entry.state != "merged"]
+    if not unmerged:
+        return StackPlan("complete", None)
+    if any(entry.state == "merged" for entry in stack[stack.index(unmerged[0]):]):
+        return StackPlan("stop-rediscover", None)
+    lowest = unmerged[0]
+    if lowest.state == "queued":
+        return StackPlan("wait-queued", lowest.number)
+    if not lowest.base_is_trunk:
+        return StackPlan("stop-needs-retarget", lowest.number)
+    if not lowest.contains_trunk:
+        if update_authorized and lowest.same_repository:
+            return StackPlan("merge-trunk-into-branch", lowest.number)
+        return StackPlan("stop-needs-update", lowest.number)
+    run: list[int] = []
+    for position, entry in enumerate(unmerged):
+        if position and not (entry.base_matches_parent_head and entry.contains_base):
+            break
+        if entry.state != "open" or not (
+            entry.provider_gate_clean and stack_receipts_cover(entry) and entry.non_author_execution
+        ):
+            break
+        run.append(entry.number)
+    if not run:
+        if not lowest.provider_gate_clean:
+            return StackPlan("ceiling-provider-gate", lowest.number)
+        if not stack_receipts_cover(lowest):
+            if lowest.proven_head_is_ancestor and stack_receipts_may_carry(lowest):
+                return StackPlan("ceiling-delta-review", lowest.number)
+            return StackPlan("ceiling-full-reprove", lowest.number)
+        return StackPlan("ceiling-non-author-execution", lowest.number)
+    return StackPlan("merge", lowest.number, tuple(run))
+
+
 def unit_checkpoint_plan(
     *,
     unit_verified: bool,
@@ -969,6 +1066,13 @@ def explicit_merge_intent(prompt: str) -> bool:
     return EXPLICIT_MERGE.search(prompt) is not None
 
 
+def stack_update_intent(prompt: str) -> bool:
+    """A land request that also names a non-force branch update for the stack."""
+    if not explicit_merge_intent(prompt) or STACK_UPDATE_DENIAL.search(prompt):
+        return False
+    return STACK_UPDATE.search(prompt) is not None
+
+
 def continuation_intent(prompt: str) -> bool:
     text = prompt.casefold()
     return any(phrase in text for phrase in ("overnight", "going to bed", "don't stop", "do not stop"))
@@ -1266,7 +1370,70 @@ def run_self_test() -> None:
     assert ship_plan(**{**base_ship, "action": "deploy"}) == "pause"
     assert ship_plan(**{**base_ship, "action": "force-push"}) == "pause"
 
+    chain = (StackEntry(1), StackEntry(2, base_is_trunk=False), StackEntry(3, base_is_trunk=False))
+    assert stack_land_plan(chain, explicit_merge=False).action == "stop-merge-ready-only"
+    assert stack_land_plan(chain, explicit_merge=True, retracted=True).action == "stop-merge-ready-only"
+    assert stack_land_plan(chain, explicit_merge=True) == StackPlan("merge", 1, (1, 2, 3))
+    # A proven PR above an unproven one, or above a broken chain link, is outside the run.
+    assert stack_land_plan((chain[0], chain[1]._replace(provider_gate_clean=False), chain[2]), explicit_merge=True) == StackPlan("merge", 1, (1,))
+    assert stack_land_plan((chain[0], chain[1]._replace(base_matches_parent_head=False), chain[2]), explicit_merge=True) == StackPlan("merge", 1, (1,))
+    assert stack_land_plan((chain[0], chain[1]._replace(contains_base=False), chain[2]), explicit_merge=True) == StackPlan("merge", 1, (1,))
+    # The parent link applies only above the lowest PR, whose base is trunk.
+    assert stack_land_plan((chain[0]._replace(base_matches_parent_head=False, contains_base=False),), explicit_merge=True) == StackPlan("merge", 1, (1,))
+    landed = chain[0]._replace(state="merged")
+    # GitHub retargets the next PR without rebasing it. Updating needs named update authority.
+    stale = chain[1]._replace(base_is_trunk=True, contains_trunk=False)
+    assert stack_land_plan((landed, stale, chain[2]), explicit_merge=True) == StackPlan("stop-needs-update", 2)
+    assert stack_land_plan((landed, stale, chain[2]), explicit_merge=True, update_authorized=True) == StackPlan("merge-trunk-into-branch", 2)
+    assert stack_land_plan((landed, chain[1], chain[2]), explicit_merge=True, update_authorized=True) == StackPlan("stop-needs-retarget", 2)
+    # After a merge update, provider checks always rerun on the new head.
+    new_head = chain[1]._replace(base_is_trunk=True, receipts_at_head=False, proven_head_is_ancestor=True)
+    assert stack_land_plan((landed, new_head._replace(tree_equal_to_proven=True, provider_gate_clean=False), chain[2]), explicit_merge=True) == StackPlan("ceiling-provider-gate", 2)
+    # Tree-equal with the proven head as ancestor: receipts carry by content.
+    # PR 3 has not absorbed PR 2's new head yet, so the run stops at PR 2.
+    pr3_behind = chain[2]._replace(contains_base=False)
+    assert stack_land_plan((landed, new_head._replace(tree_equal_to_proven=True), pr3_behind), explicit_merge=True) == StackPlan("merge", 2, (2,))
+    # A program unit never carries, even when the tree is equal and the proven head is an ancestor.
+    program = new_head._replace(tree_equal_to_proven=True, program_unit=True)
+    assert stack_land_plan((landed, program, pr3_behind), explicit_merge=True) == StackPlan("ceiling-full-reprove", 2)
+    # A proof that reads commit identity never carries across the merge commit.
+    identity = new_head._replace(tree_equal_to_proven=True, commit_identity_proof=True)
+    assert stack_land_plan((landed, identity, pr3_behind), explicit_merge=True) == StackPlan("ceiling-full-reprove", 2)
+    # Update authority covers only same-repository branches.
+    fork = stale._replace(same_repository=False)
+    assert stack_land_plan((landed, fork, chain[2]), explicit_merge=True, update_authorized=True) == StackPlan("stop-needs-update", 2)
+    # Trunk moved in between: the tree changed, so a delta review is due.
+    assert stack_land_plan((landed, new_head, chain[2]), explicit_merge=True) == StackPlan("ceiling-delta-review", 2)
+    # A rewrite drops the proven head from history: nothing carries, even with an equal tree.
+    rewritten = new_head._replace(proven_head_is_ancestor=False, tree_equal_to_proven=True)
+    assert stack_land_plan((landed, rewritten, chain[2]), explicit_merge=True) == StackPlan("ceiling-full-reprove", 2)
+    # A read-only review never replaces an execution proof its author did not produce.
+    assert stack_land_plan((landed, chain[1]._replace(base_is_trunk=True, non_author_execution=False), chain[2]), explicit_merge=True) == StackPlan("ceiling-non-author-execution", 2)
+    # Queued is not merged, and a retraction surfaces a PR already in the queue.
+    assert stack_land_plan((chain[0]._replace(state="queued"), chain[1]), explicit_merge=True) == StackPlan("wait-queued", 1)
+    assert stack_land_plan((chain[0]._replace(state="queued"), chain[1]), explicit_merge=True, retracted=True) == StackPlan("stop-report-queued", 1)
+    # Read-back: a merge into the parent branch is not a landing; a merge above an open PR is stale.
+    assert stack_land_plan((landed, chain[1]._replace(state="merged")), explicit_merge=True).action == "stop-readback-not-on-trunk"
+    assert stack_land_plan((chain[0], chain[1]._replace(state="merged", base_is_trunk=True)), explicit_merge=True).action == "stop-rediscover"
+    assert stack_land_plan((landed, chain[1]._replace(state="merged", base_is_trunk=True)), explicit_merge=True).action == "complete"
+
     assert explicit_merge_intent("/patpat merge this") is True
+    assert explicit_merge_intent("land the stack and update branches") is True
+    assert explicit_merge_intent("land the stack, but don't update branches") is True
+    assert explicit_merge_intent("explain how merge and rebase differ") is False
+    assert explicit_merge_intent("tell me whether to merge, but don't do it yet") is False
+    assert explicit_merge_intent("should I merge without squashing?") is False
+    assert explicit_merge_intent("land the stack without updating branches") is True
+    assert stack_update_intent("land the stack without updating branches") is False
+    assert stack_update_intent("land the stack and update branch protection rules") is False
+    assert stack_update_intent("land the stack and update branches as needed") is True
+    assert stack_update_intent("land the stack and update branches") is True
+    assert stack_update_intent("/patpat land the stack and update the stack branches.") is True
+    assert stack_update_intent("land the stack") is False
+    assert stack_update_intent("land the stack, but don't update branches") is False
+    assert stack_update_intent("update branches") is False
+    assert stack_update_intent("do not land the stack and update branches") is False
+    assert route("/patpat land the stack and update branches") == "ship"
     assert explicit_merge_intent("land the PR") is True
     assert explicit_merge_intent("work overnight") is False
     assert explicit_merge_intent("don't stop until merge-ready") is False
