@@ -992,13 +992,14 @@ def validate_links(path: Path, root: Path, errors: list[str]) -> None:
 def linked_markdown(path: Path, root: Path) -> list[Path]:
     targets: list[Path] = []
     text = path.read_text(encoding="utf-8")
+    resolved_root = root.resolve()
     for raw_target in LINK_PATTERN.findall(text):
         target = raw_target.split("#", 1)[0]
         if not target or "://" in target or target.startswith("mailto:"):
             continue
         resolved = (path.parent / target).resolve()
         try:
-            resolved.relative_to(root.resolve())
+            resolved.relative_to(resolved_root)
         except ValueError:
             continue
         if resolved.is_file() and resolved.suffix.lower() == ".md":
@@ -1006,7 +1007,16 @@ def linked_markdown(path: Path, root: Path) -> list[Path]:
     return targets
 
 
-def reachable_markdown(entrypoint: Path, root: Path, excluded: set[Path] | None = None) -> set[Path]:
+def reachable_markdown(
+    entrypoint: Path,
+    root: Path,
+    link_cache: dict[Path, list[Path]],
+    excluded: set[Path] | None = None,
+) -> set[Path]:
+    """Walk Markdown links, memoizing each resolved file's links in ``link_cache``.
+
+    Share one cache only across walks of the same ``root`` with no file writes in between.
+    """
     reached: set[Path] = set()
     pending = [entrypoint.resolve()]
     excluded = excluded or set()
@@ -1015,7 +1025,9 @@ def reachable_markdown(entrypoint: Path, root: Path, excluded: set[Path] | None 
         if path in reached or path in excluded or not path.is_file():
             continue
         reached.add(path)
-        pending.extend(linked_markdown(path, root))
+        if path not in link_cache:
+            link_cache[path] = linked_markdown(path, root)
+        pending.extend(link_cache[path])
     return reached
 
 
@@ -1839,7 +1851,8 @@ def validate_root(root: Path) -> list[str]:
             errors.append(f"{pinned}: missing {label}")
 
     entrypoint = reference_root / "SKILL.md"
-    reached = reachable_markdown(entrypoint, root) if entrypoint.is_file() else set()
+    link_cache: dict[Path, list[Path]] = {}
+    reached = reachable_markdown(entrypoint, root, link_cache) if entrypoint.is_file() else set()
     required_references = {(skill / "SKILL.md").resolve() for skill in skills}
     for folder_name in ("principles", "playbooks", "references"):
         required_references.update(
@@ -1858,7 +1871,7 @@ def validate_root(root: Path) -> list[str]:
         if not workflow.is_file():
             errors.append(f"{workflow}: missing mutating workflow")
             continue
-        closure = reachable_markdown(workflow, root, excluded)
+        closure = reachable_markdown(workflow, root, link_cache, excluded)
         missing = proof_targets - closure
         if missing:
             labels = ", ".join(sorted(path.parent.name for path in missing))
