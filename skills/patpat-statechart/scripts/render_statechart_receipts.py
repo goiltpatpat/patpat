@@ -564,7 +564,11 @@ def validate_replay_report(
     """Bind a saved Python replay report to the exact stale-generation TLC receipt and sources."""
     report_path = report_path.resolve(strict=True)
     report, report_bytes = read_json(report_path, "implementation replay report")
-    exact_keys(report, {"kind", "schema_version", "evidence_layers", "interpretation"}, "replay report")
+    allowed_keys = {"kind", "schema_version", "evidence_layers", "interpretation"}
+    if "verdict" in report:
+        require(isinstance(report["verdict"], str), "replay report verdict must be a string")
+        allowed_keys = allowed_keys | {"verdict"}
+    exact_keys(report, allowed_keys, "replay report")
     require(report["kind"] == "patpat-model-check-replay-receipt" and report["schema_version"] == 1,
             "unsupported implementation replay report kind or schema_version")
     layers = report["evidence_layers"]
@@ -598,7 +602,12 @@ def validate_replay_report(
             and model_evidence.get("model_sha256") == expected_model_digest
             and model_evidence.get("receipt_sha256") == sha256(receipt_bytes) == chart["receipt"]["sha256"],
             "replay report is not bound to the current model and stale-generation receipt")
-    require(model_evidence.get("mutant") == chart["mutant"]
+    me_mutant = (
+        {k: v for k, v in model_evidence.get("mutant", {}).items() if k != "config_relative"}
+        if isinstance(model_evidence.get("mutant"), dict)
+        else model_evidence.get("mutant")
+    )
+    require(me_mutant == chart["mutant"]
             and model_evidence.get("property") == chart["target_property"]
             and model_evidence.get("bounds") == expected_bounds
             and model_evidence.get("counterexample_count") == prop.get("counterexample_count")

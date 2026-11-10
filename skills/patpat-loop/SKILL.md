@@ -87,7 +87,7 @@ Read the matched workflow and relevant references. Read [the execution graph](re
 
 ```text
 FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY
-In FRAME, perform In-Your-Own-Words Digestion before acting: articulate (1) Core Objective, (2) Non-negotiables, and (3) Acceptance Criteria in plain, concise terms to establish explicit alignment (for Shape 0 and Shape 1 tasks, fold these directly into Claim and Expect of the PROOF CONTRACT to avoid duplicate pre-edit ceremony).
+In FRAME, perform Pre-flight Grounding before acting: articulate in plain terms (1) Core Objective & unstated professional invariants, (2) Rawest Ground Truth to inspect (bytes, ast, traces, or runtime output over summaries), (3) Authoritative Surface & verification tool, and (4) Falsifiable Acceptance Criteria & non-negotiables, leaving human product choices open (for Shape 0 and Shape 1 tasks, fold these directly into Claim and Expect of the PROOF CONTRACT to avoid duplicate pre-edit ceremony).
 VERIFY -> REPORT when the edit is local, reversible, and not shipping
 VERIFY -> REVIEW before default ship, land or merge, durable-run LEARN or REPORT, and for auth, billing, secrets, architecture, or cross-cutting work
 REVIEW -> changes required -> INSPECT / PROOF CONTRACT / ACT -> VERIFY

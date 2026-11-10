@@ -61,6 +61,7 @@ Review engineering documentation, PR text, and code diffs for artificial writing
 17. **Decorative comment dividers.** Remove ASCII banners, delimiter lines (`// ====================`), and sectional boxes. Use blank lines and modular file organization instead.
 18. **Orphaned TODOs.** Remove unanchored, vague `TODO` comments without an owner, issue link, or immediate actionable condition.
 19. **Preserve high-value invariants and cut structural code inflation.** Actively keep comments that document non-obvious *Why*, domain invariants, concurrency/reentrancy fences, upstream library bug workarounds (citing issue URLs or RFCs), or required legal notices. Strip structural code bloat: single-caller pass-through wrapper functions, silent broad exception swallowing (`except Exception: pass`), speculative fallback flags not required by the proof contract, and duplicate helpers that re-implement existing repository or standard-library primitives.
+20. **Anti-reward-hacking and verifier integrity.** Reject test-skipping annotations (`@pytest.mark.skip`, `@unittest.skip`, `test.skip(`, `it.skip(`, `[Fact(Skip=...)]`), warning or linter suppressions (`#pragma warning disable`, `// eslint-disable`, `# noqa`, `// @ts-ignore`), and arbitrary sleep delays (`time.sleep(`, `Task.Delay(`) introduced to force green builds. An agent must fix the underlying defect, not silence the oracle.
 
 ## Mutation boundary
 
