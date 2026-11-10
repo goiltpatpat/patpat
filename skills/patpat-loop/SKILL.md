@@ -31,6 +31,8 @@ Scale start from that classification:
 | 1, bounded | Clear localized behavior or defect with a small understood caller set and no high-risk boundary | Use the matched change or debug route, the 5-field proof contract, and targeted behavioral verification. |
 | 2, design-gated | Any ambiguity, architecture, schema, migration, public contract, auth, security, billing, secret, cross-cutting behavior, or unresolved multi-step dependency | Resolve the design boundary through `patpat-architect`; use fuller protocol and verification checkpoints before mutation. Use `patpat-run` when the work is durable, dependent, or resumable. |
 
+Observable Shape 2 triggers: adding, removing, swapping, or major-bumping a direct runtime dependency, SDK, or external service or model provider (a lockfile-only refresh is not one); changing auth, permission, secret, or billing paths; changing a persisted schema or public contract; and changing CI workflow, release, or deploy definitions. When one fires, the task is design-gated even if the request reads as a small fix.
+
 These are internal routing shapes, not user-selectable modes. File count is weak evidence after callers and contracts are inspected: one security-sensitive file is design-gated, while several independent prose-only files may remain fast-track. Any Tier 2 signal overrides lower-tier hints. A clear delivery or other external effect uses its existing specialist route and fuller authority gates; externality alone does not imply `patpat-architect`. Mutating work in every shape still defines the 5-field proof contract before editing and verifies on the authoritative surface.
 
 Inspect, execute, or measure before asking. Ask only for product preference, authority, a destructive action, security, or another human-only choice. Do not expose named user-selectable modes.
@@ -81,7 +83,7 @@ Consult the [route catalog](references/route-catalog.md) for specialized workflo
 
 ## Run the graph
 
-Read the matched workflow and relevant references. Read [the execution graph](references/execution-graph.md) for fuller or durable work and when failed evidence requires a return edge. Reuse unchanged instructions already loaded in this session. For Shape 1 and Shape 2, copy the matched playbook's numbered steps verbatim into the host task list before task-specific items; a step you do not run stays listed as `skip: <reason>`.
+Read the matched workflow and relevant references. Read [the execution graph](references/execution-graph.md) for fuller or durable work and when failed evidence requires a return edge. Reuse unchanged instructions already loaded in this session. Re-classify each new task; a route whose playbook has not been read this session needs that playbook read, not recalled. For Shape 1 and Shape 2, copy the matched playbook's numbered steps into the host task list, in order and count, before task-specific items; a host that caps step length may shorten each step's wording but must not merge or drop steps; a step you do not run stays listed as `skip: <reason>`.
 
 ```text
 FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY
@@ -111,6 +113,7 @@ Enter `LEARN?` only for a recurring failure worth encoding.
 - Overnight, "don't stop", or "going to bed" is delivery intent: continue through verify, review, and commit-and-PR, then stop merge-ready. Never deploy by implication.
 - Merge a verified PR that passes its provider gate only when the user explicitly names land or merge. Treat ambiguous `ship it` as commit-and-PR, not merge.
 - Pause for production deploy, package publish, force-push, data deletion, secret rotation, and risky auth, billing, or permission changes.
+- A non-production deploy that Patpat starts, such as a preview, staging, or shared test link, runs only when the user names it, after fresh verify and independent review, and with a stated rollback; a non-production deploy a provider runs automatically from an authorized push follows that push's delivery gates.
 - Workers never ship. The parent ships.
 
 ## Earn parallelism

@@ -40,7 +40,7 @@ Report the detected host, selected scope, exact destination or marketplace, pre-
 
 Patpat does not route models; the host and the user do. By default every worker and reviewer inherits the parent model. When the user names models, use them. When the host lets the parent choose a model for each worker, use this guidance:
 
-- Design-gated work (architecture, contracts, migrations, auth, security, statechart and formal models): the strongest reasoning model available.
+- Design-gated work (architecture, contracts, migrations, auth, security, dependency or provider swaps, CI and deploy definitions, statechart and formal models): the strongest reasoning model available.
 - A bounded, well-specified slice (a local fix, a test run): a faster model is acceptable when the parent verifies its result.
 - Independent review: a different model, ideally from another family, when available; otherwise a fresh context of the same model. Independence comes from the separate context and evidence, not the model name.
 
