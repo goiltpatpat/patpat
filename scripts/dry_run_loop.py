@@ -976,7 +976,7 @@ def discover_defects_from_diff(diff: str) -> list[dict[str, str]]:
             continue
 
         # Skip self-testing harness lines that define checks or test inputs
-        if stripped.startswith(('assert ', 'findings.append', 'if re.search', 'cheat_diff =', 'swallowed_diff =')):
+        if stripped.startswith(('cheat_diff =', 'swallowed_diff =')):
             continue
 
         # 2. Epistemic angle: mock-only assertion substituted for authoritative verification
