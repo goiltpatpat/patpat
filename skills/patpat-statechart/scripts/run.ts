@@ -197,7 +197,11 @@ const runToFiles = (
   });
 
 async function findTlc(cwd: string) {
-  const { TLA2TOOLS, JAVA } = process.env;
+  let { TLA2TOOLS, JAVA } = process.env;
+  if (!TLA2TOOLS) {
+    const defaultCache = path.join(os.homedir(), ".cache", "tla2tools.jar");
+    if (fs.existsSync(defaultCache)) TLA2TOOLS = defaultCache;
+  }
   if (TLA2TOOLS) return { jar: TLA2TOOLS, java: JAVA || "java" };
   const mise = (...args: string[]) =>
     runChild("mise", args, { cwd, env: { ...process.env, MISE_CEILING_PATHS: cwd } });

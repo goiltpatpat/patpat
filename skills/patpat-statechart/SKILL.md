@@ -16,6 +16,7 @@ A statechart answers one question for one reader: can this flow reach a state th
 
 - Use this skill for behavior over time: a checkout, login, deploy, agent workflow, media player, or an order process, and whether it can get stuck, double-charge, or hand over something it should not.
 - Use [`patpat-repository-diagram`](../patpat-repository-diagram/SKILL.md) for architecture, workflow, sequence, dataflow, and lifecycle views with no rules to check. The deciding question is whether a rule must be checked, not whether the subject has states.
+- Statechart is an ephemeral, interactive behavioral verification tool. Never deposit statechart execution outputs or HTML dashboards into `docs/diagrams/`; keep runs in scratch or `/tmp/` and report rules, bug paths, and Mermaid diagrams directly in chat.
 - Use [`patpat-formal-verify`](../patpat-formal-verify/SKILL.md) when later changes must rerun the check as a durable project suite. It hands its TLA+ results here.
 - Use [`references/receipt-rendering.md`](references/receipt-rendering.md) to chart a saved `patpat-model-check-receipt` without running TLC.
 

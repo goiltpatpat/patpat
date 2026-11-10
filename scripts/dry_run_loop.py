@@ -938,13 +938,20 @@ def design_boundary_from_source(
 def discover_defects_from_diff(diff: str) -> list[dict[str, str]]:
     """Inspect raw diff to discover concrete defects without pre-supplied metadata."""
     findings: list[dict[str, str]] = []
-    added_lines = [
-        line[1:] for line in diff.splitlines()
-        if line.startswith("+") and not line.startswith("+++")
-    ]
-    for line in added_lines:
+    current_file = ""
+
+    for raw_line in diff.splitlines():
+        if raw_line.startswith("+++ b/"):
+            current_file = raw_line[6:].strip()
+            continue
+        if not raw_line.startswith("+") or raw_line.startswith("+++"):
+            continue
+
+        line = raw_line[1:]
         stripped = line.strip()
-        # 1. Security angle: credentials, PATs, secret keys
+        is_doc = current_file.endswith((".md", ".markdown", ".txt", ".json", ".yaml", ".yml", ".toml"))
+
+        # 1. Security angle: credentials, PATs, secret keys (checked everywhere including docs)
         if re.search(r"ghp_[A-Za-z0-9_]{20,}", line):
             findings.append({
                 "angle": "security",
@@ -963,6 +970,14 @@ def discover_defects_from_diff(diff: str) -> list[dict[str, str]]:
                 "severity": "high",
                 "detail": "Discovered hardcoded Bearer authorization token in added diff line",
             })
+
+        # Skip code-level AST/heuristic checks for non-code documentation files
+        if is_doc:
+            continue
+
+        # Skip self-testing harness lines that define checks or test inputs
+        if stripped.startswith(('assert ', 'findings.append', 'if re.search', 'cheat_diff =', 'swallowed_diff =')):
+            continue
 
         # 2. Epistemic angle: mock-only assertion substituted for authoritative verification
         if (
@@ -991,6 +1006,30 @@ def discover_defects_from_diff(diff: str) -> list[dict[str, str]]:
                 "detail": "Discovered silent broad exception swallowing (except Exception: pass) in added lines",
             })
 
+        # 5. Anti-cheat / Reward-hacking angle: test skipping bypass
+        if re.search(r"(?:@pytest\.mark\.skip|@unittest\.skip|\btest\.skip\(|\bit\.skip\(|\[Fact\(Skip=)", line):
+            findings.append({
+                "angle": "anti-cheat",
+                "severity": "blocker",
+                "detail": "Discovered test skipping bypass used to artificially pass test suite",
+            })
+
+        # 6. Anti-cheat / Reward-hacking angle: warning & linter suppression
+        if re.search(r"(?:#pragma\s+warning\s+disable|//\s*eslint-disable|#\s*noqa\b|//\s*@ts-ignore|//\s*@ts-nocheck)", line):
+            findings.append({
+                "angle": "anti-cheat",
+                "severity": "high",
+                "detail": "Discovered warning/linter suppression directive hiding underlying issues",
+            })
+
+        # 7. Anti-cheat / Reward-hacking angle: arbitrary sleep injection in tests
+        if re.search(r"(?:time\.sleep\s*\(\s*[1-9]|Task\.Delay\s*\(\s*[1-9]|setTimeout\s*\([^,]+,\s*[1-9])", line):
+            findings.append({
+                "angle": "anti-cheat",
+                "severity": "medium",
+                "detail": "Discovered arbitrary sleep/delay injection masking potential race conditions",
+            })
+
     return findings
 
 
@@ -1001,6 +1040,7 @@ def interrogate_audit(
     concurrency_defect: str | None = None,
     epistemic_defect: str | None = None,
     anti_slop_defect: str | None = None,
+    anti_cheat_defect: str | None = None,
 ) -> dict[str, object]:
     """Simulate adversarial review across skeptical angles, discovering defects from diff."""
     findings: list[dict[str, str]] = []
@@ -1014,6 +1054,8 @@ def interrogate_audit(
         findings.append({"angle": "epistemic", "severity": "blocker", "detail": epistemic_defect})
     if anti_slop_defect:
         findings.append({"angle": "anti-slop", "severity": "medium", "detail": anti_slop_defect})
+    if anti_cheat_defect:
+        findings.append({"angle": "anti-cheat", "severity": "blocker", "detail": anti_cheat_defect})
 
     verdict = "no-findings" if not findings else "findings-surfaced"
     return {
@@ -1054,6 +1096,10 @@ def unslop_lint(text: str) -> dict[str, object]:
         violations.append("narrative-code-comment")
     if re.search(r"(?:^|\n)\s*except\s+(?:Exception|BaseException)\s*:\s*pass\b", text):
         violations.append("silent-exception-swallowing")
+    if re.search(r"(?:@pytest\.mark\.skip|@unittest\.skip|\btest\.skip\(|\bit\.skip\(|\[Fact\(Skip=)", text):
+        violations.append("test-skipping-bypass")
+    if re.search(r"(?:#pragma\s+warning\s+disable|//\s*eslint-disable|#\s*noqa\b|//\s*@ts-ignore|//\s*@ts-nocheck)", text):
+        violations.append("linter-warning-suppression")
     return {
         "clean": len(violations) == 0,
         "violations": violations,
@@ -1585,6 +1631,8 @@ def run_self_test() -> None:
     assert swallowed["clean"] is False and "silent-exception-swallowing" in swallowed["violations"]
     swallowed_diff = interrogate_audit(diff="--- a/x.py\n+++ b/x.py\n+ except Exception: pass")
     assert any(f["angle"] == "anti-slop" for f in swallowed_diff["findings"])
+    cheat_diff = interrogate_audit(diff="--- a/x.py\n+++ b/x.py\n+ @pytest.mark.skip(reason='flaky')")
+    assert any(f["angle"] == "anti-cheat" for f in cheat_diff["findings"])
 
     print("Patpat loop dry-run self-test passed.")
 
