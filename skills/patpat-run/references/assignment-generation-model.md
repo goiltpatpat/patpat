@@ -34,6 +34,20 @@ python3 skills/patpat-run/scripts/replay_assignment_counterexample.py \\
 
 This pilot accepts only the four-state `NoStaleWrites` trace for the current model/configuration digests. It replays the two assignments with `assign_unit()` and the stale write attempt with `set_head()`, then records the exception and before/after state hashes. `--out` requires a new file and refuses overwrite. The model mutant supplies the counterexample; the Python replay separately records that the current implementation rejects it. `set_head()` receives the generation but not the model worker identity, so this replay does not establish worker authentication. Pass `--replay-report <replay-receipt.json>` to `render_statechart_receipts.py` to bind that verified replay receipt to the `stale-generation` case while keeping `baseline` and `rejected-write` at `not-run / model-only`.
 
+### Draw the statechart
+
+Render the model graph or bug paths directly using Patpat Statechart with the declarative view module:
+
+```sh
+bun skills/patpat-statechart/scripts/statechart.ts \
+  skills/patpat-run/models/AssignmentGeneration.tla \
+  --config skills/patpat-run/models/AssignmentGeneration.mutant.cfg \
+  --view skills/patpat-run/models/AssignmentGeneration.view.mjs \
+  --out <new-output-directory>
+```
+
+The statechart engine runs TLC, enforces the 500-state visual budget to isolate shortest counterexample paths, and outputs `chart.mmd`, `report.md`, and raw TLC output in one step.
+
 ## Code mapping and limits
 
 | Model | Implementation |
