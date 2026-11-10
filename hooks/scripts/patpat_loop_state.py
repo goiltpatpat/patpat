@@ -37,9 +37,15 @@ DISABLE = re.compile(
 )
 STICKY_CONTEXT = (
     "Patpat Loop is active this session. Use the Patpat Loop skill for this turn; follow the operating protocol. "
+    "Re-classify each new task; read the matched playbook for any route not yet read this session instead of recalling it. "
+    "A task is design-gated when it adds, removes, swaps, or major-bumps a direct runtime dependency, SDK, or service provider, "
+    "or changes auth, permissions, secrets, billing, a persisted schema, a public contract, or CI, release, or deploy definitions: "
+    "read the operating protocol and resolve design through patpat-architect. "
+    "Auth, billing, secrets, architecture, or cross-cutting work needs independent review before reporting. "
     "Activation authorizes the loop, proof, and verification; default commit/PR needs delivery intent. "
     "Higher-priority repository rules or opt-out block delivery. Merge requires explicit \"land\" or \"merge\". "
-    "Do not deploy, force-push, or publish packages by implication."
+    "Do not deploy, force-push, or publish packages by implication. "
+    "A preview or staging deploy Patpat starts also needs a named request, fresh verify, independent review, and a stated rollback."
 )
 PLUGIN_DATA_ENV_KEYS = ("PLUGIN_DATA", "GROK_PLUGIN_DATA", "CLAUDE_PLUGIN_DATA")
 
@@ -644,7 +650,13 @@ def run_self_test() -> None:
             "Higher-priority repository rules or opt-out block delivery",
             'Merge requires explicit "land" or "merge"',
             "Do not deploy, force-push, or publish packages by implication",
+            "Re-classify each new task",
+            "major-bumps a direct runtime dependency, SDK, or service provider",
+            "cross-cutting work needs independent review before reporting",
+            "A preview or staging deploy Patpat starts also needs",
         )
+        if len(STICKY_CONTEXT) > 1200:
+            raise AssertionError("sticky context exceeds the 1200-character hook context limit")
         hook_output = continued.get("hookSpecificOutput")
         if not isinstance(hook_output, dict) or hook_output.get("hookEventName") != "UserPromptSubmit":
             raise AssertionError("sticky mode did not populate host-facing hook output")

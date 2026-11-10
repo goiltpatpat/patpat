@@ -220,7 +220,23 @@ Remain read-only with respect to repository implementation and external delivery
 FIXTURE_ARTIFACT_NAME = "patpat-codex-fixture-attestation"
 LEGACY_FIXTURE_ARTIFACT_NAME = "patpat-codex-attestation"
 MAX_SKILL_MARKDOWN_BYTES = 32 * 1024
+NON_PRODUCTION_DEPLOY_SENTENCE = (
+    "A non-production deploy that Patpat starts, such as a preview, staging, or shared test link, runs only when the user "
+    "names it, after fresh verify and independent review, and with a stated rollback; a non-production deploy a provider "
+    "runs automatically from an authorized push follows that push's delivery gates."
+)
+
 PINNED_BOUNDARY_SENTENCES = (
+    (
+        Path("skills/patpat-loop/references/operating-protocol.md"),
+        (NON_PRODUCTION_DEPLOY_SENTENCE,),
+        "non-production deploy contract",
+    ),
+    (
+        Path("skills/patpat-loop/SKILL.md"),
+        (NON_PRODUCTION_DEPLOY_SENTENCE,),
+        "non-production deploy contract",
+    ),
     (
         Path("skills/patpat-loop/references/operating-protocol.md"),
         (

@@ -10,7 +10,7 @@ Read this once per session when the host is Claude Code (CLI, desktop, IDE, or `
 
 ## Task list and questions
 
-- Put playbook steps in the host task list: `TodoWrite`, or the app's plan tool when the desktop app provides one. Do not keep a second list in prose.
+- Put playbook steps in the host task list: `TodoWrite`, or the app's plan tool when the desktop app provides one. Do not keep a second list in prose. The desktop plan tool caps step length, so shorten each step's wording there while keeping the playbook's order and step count.
 - Ask a human-only question with `AskUserQuestion`. `claude -p` has no interactive user. There, do not wait. Take the most reversible option, record it as an `inferred` assumption in the report, and stop before any action that needs human authority.
 - In plan mode, stay in FRAME, INSPECT, and PROOF CONTRACT. Mutate only after the user accepts the plan.
 

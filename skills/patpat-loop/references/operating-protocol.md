@@ -100,6 +100,10 @@ Overnight, going to bed, or don't stop continues until the PR is merge-ready; it
 
 Always pause for force-push to shared branches, production deploy, package publish, data deletion, secret rotation, and risky auth, billing, or permission changes. Explain blast radius, safer alternative, rollback, and verification before continuing.
 
+A non-production deploy that Patpat starts, such as a preview, staging, or shared test link, runs only when the user names it, after fresh verify and independent review, and with a stated rollback; a non-production deploy a provider runs automatically from an authorized push follows that push's delivery gates.
+
+When the workspace is not a Git repository, state before the first mutation that edits have no Git rollback. Then either ask before running `git init`, or copy each file to a scratch snapshot before editing it and name that snapshot in the proof contract's Cleanup; never snapshot secret files such as `.env`. A `git status` verification candidate does not apply, and Git delivery routes stay unavailable until a repository exists.
+
 Read-only work never ships. Workers never ship. The parent ships.
 
 ## Parallelism
