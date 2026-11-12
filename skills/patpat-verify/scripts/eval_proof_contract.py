@@ -1190,6 +1190,25 @@ falsification_vector:
         assert exit_code_fail == 1, "CLI run on failing contract must return 1"
         cases_run += 1
 
+        # 22. Contract-level timeout honored in CLI invocation without --timeout
+        contract_with_timeout = {
+            "claim": "contract-level timeout honored",
+            "surface": "python3",
+            "action": "python3 -c 'import time; time.sleep(2)'",
+            "timeout": 0.2,
+            "expect": {"exit_code": 0},
+            "cleanup": "true",
+        }
+        cli_timeout_file = tmp_path / "contract_timeout.json"
+        cli_timeout_receipt = tmp_path / "receipt_timeout.json"
+        cli_timeout_file.write_text(json.dumps(contract_with_timeout), encoding="utf-8")
+        exit_code_timeout = main(["--receipt", str(cli_timeout_receipt), "--quiet", str(cli_timeout_file)])
+        assert exit_code_timeout == 1, "Contract with timeout=0.2s sleeping 2s must fail via CLI"
+        r22 = json.loads(cli_timeout_receipt.read_text(encoding="utf-8"))
+        assert r22["action"]["timed_out"] is True, "Action must be marked timed out"
+        assert any("timed out" in err for err in r22["errors"])
+        cases_run += 1
+
     print(f"eval_proof_contract self-test passed: {cases_run} cases ok")
     return 0
 
@@ -1210,8 +1229,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--timeout",
         type=float,
-        default=30.0,
-        help="Timeout in seconds for action execution (default: 30.0)",
+        default=None,
+        help="Timeout in seconds for action execution (default: contract timeout or 30.0)",
     )
     parser.add_argument(
         "--receipt",
