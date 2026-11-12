@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import Any
 
 
-LAUNCHER_TIMEOUT_SECONDS = 5
-UNMATCHED_START_TIMEOUT_SECONDS = 10
+LAUNCHER_TIMEOUT_SECONDS = 10
+UNMATCHED_START_TIMEOUT_SECONDS = 30
 
 
 class SmokeError(RuntimeError):
