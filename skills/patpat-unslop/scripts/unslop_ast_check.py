@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""Deterministic AST linter enforcing patpat-unslop rules 19 and 20.
+"""Deterministic AST linter enforcing patpat-unslop rules 12/16, 19, and 20.
 
 Pure Python 3 standard library with zero external dependencies.
+
+Rule 12/16 (apologetic or conversational AI commentary):
+- Conversational or apologetic AI markers in # and // comments while preserving
+  legitimate engineering comments (e.g. upstream workarounds, temporary fixes).
 
 Rule 19 (structural code inflation):
 - Single-caller pass-through wrappers (trivial forwarding functions).
@@ -23,8 +27,13 @@ import os
 from pathlib import Path
 import re
 import sys
+import tempfile
 import tokenize
 from typing import Sequence
+
+PYTHON_EXTENSIONS = frozenset({".py"})
+JS_TS_EXTENSIONS = frozenset({".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"})
+SUPPORTED_EXTENSIONS = PYTHON_EXTENSIONS | JS_TS_EXTENSIONS
 
 
 @dataclass(frozen=True)
@@ -32,7 +41,7 @@ class Violation:
     file_path: str
     line: int
     col: int
-    rule: str  # "Rule 19" or "Rule 20"
+    rule: str  # "Rule 12/16", "Rule 19", or "Rule 20"
     category: str
     message: str
     end_line: int | None = None
@@ -52,7 +61,34 @@ class Violation:
         }
 
 
-# Rule 20 suppression comment patterns
+# Rule 12/16 conversational/apologetic AI comment marker patterns
+AI_SLOP_COMMENT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"\b(?:I\s+apologize|apologies\s+for)\b", re.IGNORECASE), "conversational apology"),
+    (re.compile(r"\b(?:sorry\s+for\s+the|I(?:'m|\s+am)\s+sorry)\b", re.IGNORECASE), "conversational apology"),
+    (re.compile(r"\bas\s+an\s+AI\b", re.IGNORECASE), "AI persona marker"),
+    (re.compile(r"\bAI[- ]generated\b", re.IGNORECASE), "AI-generated marker"),
+    (
+        re.compile(
+            r"\bgenerated\s+(?:by|with)\s+(?:claude|chatgpt|openai|gemini|grok|copilot|codex|patpat|llm)\b",
+            re.IGNORECASE,
+        ),
+        "AI attribution marker",
+    ),
+    (re.compile(r"^Patpat:(?:\s|$)", re.IGNORECASE), "Patpat conversational prefix"),
+    (re.compile(r"^Certainly[!.,](?:\s|$)", re.IGNORECASE), "sycophantic conversational opener"),
+    (re.compile(r"\bI(?:'d|\s+would)\s+be\s+happy\s+to\b", re.IGNORECASE), "sycophantic conversational phrase"),
+    (re.compile(r"\bYou(?:'re|\s+are)\s+absolutely\s+right\b", re.IGNORECASE), "sycophantic conversational phrase"),
+]
+
+
+# Rule 20 JS/TS // suppression patterns (matched against comment body after '//')
+JS_SUPPRESSION_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"^pragma\s+warning\s+disable\b", re.IGNORECASE), "pragma warning disable"),
+    (re.compile(r"^eslint-disable\b", re.IGNORECASE), "eslint-disable"),
+    (re.compile(r"^@ts-(?:ignore|nocheck)\b", re.IGNORECASE), "@ts-ignore/nocheck"),
+]
+
+# Rule 20 suppression comment patterns (matched against # comments via tokenize)
 SUPPRESSION_COMMENT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"^#+\s*noqa\b", re.IGNORECASE), "noqa"),
     (re.compile(r"^#+\s*type:\s*ignore\b", re.IGNORECASE), "type: ignore"),
@@ -398,69 +434,190 @@ def check_test_skipping(tree: ast.AST, file_path: str) -> list[Violation]:
     return violations
 
 
-def check_suppression_comments(source_bytes: bytes, file_path: str) -> list[Violation]:
-    """Rule 20: detect warning and linter suppression comments via standard tokenize."""
-    violations: list[Violation] = []
-    seen_lines: set[int] = set()
+def _collect_python_token_ranges(
+    source_bytes: bytes,
+) -> tuple[list[tuple[tuple[int, int], tuple[int, int]]], list[tuple[int, int, str]], int]:
+    """Tokenize Python bytes into (protected_ranges, comment_tokens, last_tokenized_line)."""
+    protected_ranges: list[tuple[tuple[int, int], tuple[int, int]]] = []
+    comment_tokens: list[tuple[int, int, str]] = []
+    last_tokenized_line = 0
+    try:
+        for tok in tokenize.tokenize(io.BytesIO(source_bytes).readline):
+            last_tokenized_line = max(last_tokenized_line, tok.end[0])
+            if tok.type in (tokenize.STRING, tokenize.COMMENT):
+                protected_ranges.append((tok.start, tok.end))
+            if tok.type == tokenize.COMMENT:
+                comment_tokens.append((tok.start[0], tok.start[1] + 1, tok.string))
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        return protected_ranges, comment_tokens, last_tokenized_line
+    return protected_ranges, comment_tokens, last_tokenized_line
 
-    lines = source_bytes.decode("utf-8", errors="replace").splitlines()
-    c_style_pattern = re.compile(
-        r"^\s*//\s*(?:eslint-disable|@ts-(?:ignore|nocheck)|pragma\s+warning\s+disable)",
+
+def extract_js_line_comments(source_text: str) -> list[tuple[int, int, str]]:
+    """Extract // line comments as (1-based line, 1-based col, body) skipping strings and /* ... */."""
+    comments: list[tuple[int, int, str]] = []
+    n = len(source_text)
+    i = 0
+    line = 1
+    col = 1
+    state = "NORMAL"
+    url_scheme_re = re.compile(
+        r"(?:^|[\s=\"'(\[,])(?:https?|ftp|file|wss?|ssh|git):$",
         re.IGNORECASE,
     )
-    for idx, line in enumerate(lines, start=1):
-        if c_style_pattern.search(line):
+
+    while i < n:
+        ch = source_text[i]
+        nxt = source_text[i + 1] if i + 1 < n else ""
+
+        if state == "NORMAL":
+            if ch == "/" and nxt == "/":
+                line_start = source_text.rfind("\n", 0, i) + 1
+                prefix = source_text[line_start:i]
+                if not url_scheme_re.search(prefix):
+                    end = source_text.find("\n", i + 2)
+                    if end == -1:
+                        end = n
+                    body = source_text[i + 2 : end].rstrip("\r").strip()
+                    comments.append((line, col, body))
+                    i = end
+                    continue
+            if ch == "/" and nxt == "*":
+                state = "BLOCK"
+                i += 2
+                col += 2
+                continue
+            if ch == "'":
+                state = "SINGLE"
+            elif ch == '"':
+                state = "DOUBLE"
+            elif ch == "`":
+                state = "TEMPLATE"
+        elif state == "BLOCK":
+            if ch == "*" and nxt == "/":
+                state = "NORMAL"
+                i += 2
+                col += 2
+                continue
+        elif state in ("SINGLE", "DOUBLE", "TEMPLATE"):
+            if ch == "\\":
+                if i + 1 < n and source_text[i + 1] == "\n":
+                    line += 1
+                    col = 1
+                    i += 2
+                    continue
+                i += 2
+                col += 2
+                continue
+            if (
+                (state == "SINGLE" and ch == "'")
+                or (state == "DOUBLE" and ch == '"')
+                or (state == "TEMPLATE" and ch == "`")
+            ):
+                state = "NORMAL"
+
+        if ch == "\n":
+            line += 1
+            col = 1
+        else:
+            col += 1
+        i += 1
+
+    return comments
+
+
+def _pos_in_ranges(
+    line_no: int, col0: int, ranges: Sequence[tuple[tuple[int, int], tuple[int, int]]]
+) -> bool:
+    pos = (line_no, col0)
+    for start, end in ranges:
+        if start <= pos < end:
+            return True
+    return False
+
+
+def _iter_comments(source_bytes: bytes, file_path: str) -> list[tuple[int, int, str, bool]]:
+    """Collect deduplicated (# and //) comments as (line, col_1, text, is_js)."""
+    source_text = source_bytes.decode("utf-8", errors="replace")
+    is_js_ts = Path(file_path).suffix.lower() in JS_TS_EXTENSIONS
+    protected_ranges: list[tuple[tuple[int, int], tuple[int, int]]] = []
+    seen_lines: set[int] = set()
+    comments: list[tuple[int, int, str, bool]] = []
+
+    if not is_js_ts:
+        protected_ranges, comment_tokens, last_tokenized_line = _collect_python_token_ranges(source_bytes)
+        for line_no, col_1, comment_text in comment_tokens:
+            if line_no not in seen_lines:
+                comments.append((line_no, col_1, comment_text, False))
+                seen_lines.add(line_no)
+        lines = source_text.splitlines()
+        if last_tokenized_line < len(lines):
+            for idx, line in enumerate(lines, start=1):
+                if idx <= last_tokenized_line or idx in seen_lines:
+                    continue
+                stripped = line.lstrip()
+                if stripped.startswith("#"):
+                    comments.append((idx, (len(line) - len(stripped)) + 1, stripped, False))
+                    seen_lines.add(idx)
+
+    for line_no, col_1, body in extract_js_line_comments(source_text):
+        if line_no in seen_lines:
+            continue
+        if not is_js_ts and _pos_in_ranges(line_no, col_1 - 1, protected_ranges):
+            continue
+        comments.append((line_no, col_1, body, True))
+        seen_lines.add(line_no)
+
+    return comments
+
+
+def check_suppression_comments(source_bytes: bytes, file_path: str) -> list[Violation]:
+    """Rule 20: detect warning and linter suppression comments in # and // comments."""
+    violations: list[Violation] = []
+    for line_no, col_1, text, is_js in _iter_comments(source_bytes, file_path):
+        patterns = JS_SUPPRESSION_PATTERNS if is_js else SUPPRESSION_COMMENT_PATTERNS
+        for pattern, label in patterns:
+            if pattern.search(text):
+                violations.append(
+                    Violation(
+                        file_path=file_path,
+                        line=line_no,
+                        col=col_1,
+                        rule="Rule 20",
+                        category="linter-suppression",
+                        message=f"linter/warning suppression '{label}' silences checker integrity",
+                        end_line=line_no,
+                    )
+                )
+                break
+    return violations
+
+
+def _match_ai_slop_comment(comment_body: str) -> str | None:
+    for pattern, label in AI_SLOP_COMMENT_PATTERNS:
+        if pattern.search(comment_body):
+            return label
+    return None
+
+
+def check_ai_slop_comments(source_bytes: bytes, file_path: str) -> list[Violation]:
+    """Rule 12/16: detect conversational or apologetic AI markers in # and // comments only."""
+    violations: list[Violation] = []
+    for line_no, col_1, text, is_js in _iter_comments(source_bytes, file_path):
+        body = text if is_js else text.lstrip("#").strip()
+        label = _match_ai_slop_comment(body)
+        if label is not None:
             violations.append(
                 Violation(
                     file_path=file_path,
-                    line=idx,
-                    col=1,
-                    rule="Rule 20",
-                    category="linter-suppression",
-                    message="linter/warning suppression silences checker integrity",
-                    end_line=idx,
+                    line=line_no,
+                    col=col_1,
+                    rule="Rule 12/16",
+                    category="ai-conversational-slop",
+                    message=f"conversational/AI marker ({label}) in comment violates code comment discipline",
+                    end_line=line_no,
                 )
             )
-            seen_lines.add(idx)
-
-    try:
-        tokens = tokenize.tokenize(io.BytesIO(source_bytes).readline)
-        for tok in tokens:
-            if tok.type == tokenize.COMMENT and tok.start[0] not in seen_lines:
-                comment_text = tok.string
-                for pattern, label in SUPPRESSION_COMMENT_PATTERNS:
-                    if pattern.search(comment_text):
-                        violations.append(
-                            Violation(
-                                file_path=file_path,
-                                line=tok.start[0],
-                                col=tok.start[1] + 1,
-                                rule="Rule 20",
-                                category="linter-suppression",
-                                message=f"linter/warning suppression '{label}' silences checker integrity",
-                                end_line=tok.end[0],
-                            )
-                        )
-                        seen_lines.add(tok.start[0])
-                        break
-    except (tokenize.TokenError, IndentationError, SyntaxError):
-        for idx, line in enumerate(lines, start=1):
-            if idx in seen_lines:
-                continue
-            for pattern, label in SUPPRESSION_COMMENT_PATTERNS:
-                if pattern.search(line.strip()):
-                    violations.append(
-                        Violation(
-                            file_path=file_path,
-                            line=idx,
-                            col=1,
-                            rule="Rule 20",
-                            category="linter-suppression",
-                            message=f"linter/warning suppression '{label}' silences checker integrity",
-                            end_line=idx,
-                        )
-                    )
-                    break
     return violations
 
 
@@ -474,7 +631,7 @@ def parse_unified_diff(diff_text: str) -> dict[str, set[int]]:
 
     for line in diff_text.splitlines():
         if line.startswith("+++ "):
-            raw_path = line[4:].strip()
+            raw_path = line[4:].strip().replace("\\", "/")
             if raw_path == "/dev/null":
                 current_file = None
                 continue
@@ -493,10 +650,27 @@ def parse_unified_diff(diff_text: str) -> dict[str, set[int]]:
                 current_new_line += 1
             elif line.startswith("-") and not line.startswith("---"):
                 pass
+            elif line.startswith("\\"):
+                pass
             else:
                 current_new_line += 1
 
     return added_lines
+
+
+def _finalize_violations(
+    violations: list[Violation],
+    allowed_lines: set[int] | None,
+) -> list[Violation]:
+    violations.sort(key=lambda v: (v.line, v.col, v.category))
+    if allowed_lines is not None:
+        filtered: list[Violation] = []
+        for v in violations:
+            span = set(range(v.line, (v.end_line or v.line) + 1))
+            if span.intersection(allowed_lines):
+                filtered.append(v)
+        return filtered
+    return violations
 
 
 def check_source_code(
@@ -505,10 +679,14 @@ def check_source_code(
     all_sources: Sequence[str] | None = None,
     allowed_lines: set[int] | None = None,
 ) -> list[Violation]:
-    """Check a Python source string against Rules 19 and 20."""
+    """Check a Python or JS/TS source string against Rules 12/16, 19, and 20."""
+    source_bytes = source.encode("utf-8")
     violations: list[Violation] = []
-    # Always check suppression comments
-    violations.extend(check_suppression_comments(source.encode("utf-8"), file_path))
+    violations.extend(check_suppression_comments(source_bytes, file_path))
+    violations.extend(check_ai_slop_comments(source_bytes, file_path))
+
+    if Path(file_path).suffix.lower() in JS_TS_EXTENSIONS:
+        return _finalize_violations(violations, allowed_lines)
 
     try:
         tree = ast.parse(source, filename=file_path)
@@ -525,7 +703,7 @@ def check_source_code(
                     end_line=err.lineno or 1,
                 )
             )
-        return violations
+        return _finalize_violations(violations, allowed_lines)
 
     all_trees = None
     if all_sources is not None:
@@ -540,32 +718,24 @@ def check_source_code(
     violations.extend(check_passthrough_wrappers(tree, file_path, all_trees))
     violations.extend(check_test_skipping(tree, file_path))
 
-    # Sort violations deterministically by line, col, category
-    violations.sort(key=lambda v: (v.line, v.col, v.category))
-
-    if allowed_lines is not None:
-        filtered: list[Violation] = []
-        for v in violations:
-            span = set(range(v.line, (v.end_line or v.line) + 1))
-            if span.intersection(allowed_lines):
-                filtered.append(v)
-        return filtered
-
-    return violations
+    return _finalize_violations(violations, allowed_lines)
 
 
-def collect_python_files(paths: Sequence[Path]) -> list[Path]:
-    """Recursively collect .py files from given paths, ignoring hidden/build folders."""
+def collect_target_files(
+    paths: Sequence[Path],
+    extensions: frozenset[str] = SUPPORTED_EXTENSIONS,
+) -> list[Path]:
+    """Recursively collect supported source files from given paths, ignoring hidden/build folders."""
     ignore_dirs = {".git", ".venv", "venv", "__pycache__", ".tox", ".eggs", "build", "dist", "node_modules"}
     results: list[Path] = []
     for path in paths:
-        if path.is_file() and path.suffix == ".py":
+        if path.is_file() and path.suffix.lower() in extensions:
             results.append(path)
         elif path.is_dir():
             for root, dirs, files in os.walk(path):
                 dirs[:] = [d for d in dirs if d not in ignore_dirs and not d.startswith(".")]
                 for f in sorted(files):
-                    if f.endswith(".py"):
+                    if Path(f).suffix.lower() in extensions:
                         results.append(Path(root) / f)
     return results
 
@@ -577,20 +747,19 @@ def check_diff_content(diff_text: str, root: Path | None = None) -> list[Violati
     violations: list[Violation] = []
 
     for rel_path, added_lines in sorted(added_lines_map.items()):
-        if not rel_path.endswith(".py"):
+        if Path(rel_path).suffix.lower() not in SUPPORTED_EXTENSIONS:
             continue
         file_path = base_root / rel_path
         if file_path.is_file():
             source = file_path.read_text(encoding="utf-8", errors="replace")
-            violations.extend(check_source_code(source, str(file_path), allowed_lines=added_lines))
+            violations.extend(check_source_code(source, file_path.as_posix(), allowed_lines=added_lines))
         else:
             # Synthetic reconstruction from patch added lines if file not on disk
             hunk_lines: list[str] = []
-            current_target = None
             is_in_file = False
             for line in diff_text.splitlines():
                 if line.startswith("+++ "):
-                    target = line[4:].strip()
+                    target = line[4:].strip().replace("\\", "/")
                     if target.startswith("b/"):
                         target = target[2:]
                     is_in_file = (target == rel_path)
@@ -607,39 +776,51 @@ def check_diff_content(diff_text: str, root: Path | None = None) -> list[Violati
     return violations
 
 
+def _read_utf8_stdin() -> str:
+    reconfigure = getattr(sys.stdin, "reconfigure", None)
+    if callable(reconfigure):
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            pass
+    return sys.stdin.read()
+
+
 def run_checks(
     paths: Sequence[Path], diff_file: str | None = None, root: Path | None = None
 ) -> list[Violation]:
     """Run all linter checks based on provided CLI inputs."""
     if diff_file is not None:
         if diff_file == "-":
-            diff_text = sys.stdin.read()
+            diff_text = _read_utf8_stdin()
         else:
             diff_text = Path(diff_file).read_text(encoding="utf-8", errors="replace")
         return check_diff_content(diff_text, root=root)
 
-    py_files = collect_python_files(paths)
-    if not py_files and not paths and not sys.stdin.isatty():
-        stdin_source = sys.stdin.read()
+    target_files = collect_target_files(paths)
+    if not target_files and not paths and not sys.stdin.isatty():
+        stdin_source = _read_utf8_stdin()
         return check_source_code(stdin_source, "<stdin>")
 
-    all_sources: list[str] = []
+    all_python_sources: list[str] = []
     file_contents: list[tuple[Path, str]] = []
-    for f in py_files:
+    for f in target_files:
         try:
             content = f.read_text(encoding="utf-8", errors="replace")
             file_contents.append((f, content))
-            all_sources.append(content)
+            if f.suffix.lower() in PYTHON_EXTENSIONS:
+                all_python_sources.append(content)
         except OSError as err:
             sys.stderr.write(f"Warning: could not read {f}: {err}\n")
 
     violations: list[Violation] = []
     for file_path, content in file_contents:
+        all_src = all_python_sources if file_path.suffix.lower() in PYTHON_EXTENSIONS else None
         violations.extend(
             check_source_code(
                 content,
-                str(file_path),
-                all_sources=all_sources,
+                file_path.as_posix(),
+                all_sources=all_src,
             )
         )
     return violations
@@ -914,6 +1095,146 @@ def run_self_test() -> int:
     v_clean = check_source_code(clean_code, "clean.py")
     assert_test(len(v_clean) == 0, "clean code produces zero violations")
 
+    # --- Rule 12/16: Conversational / apologetic AI comment markers ---
+    # 50. Apologetic # comment -> Must flag
+    code = "# I apologize for this quick patch\nx = 1\n"
+    v = check_source_code(code, "test.py")
+    assert_test(
+        len(v) == 1 and v[0].rule == "Rule 12/16" and v[0].category == "ai-conversational-slop",
+        "apologetic # comment flagged",
+    )
+
+    # 51. AI persona marker in # comment -> Must flag
+    code = "x = 1  # as an AI, I kept the fallback\n"
+    v = check_source_code(code, "test.py")
+    assert_test(
+        len(v) == 1 and v[0].rule == "Rule 12/16" and v[0].category == "ai-conversational-slop",
+        "AI persona # comment flagged",
+    )
+
+    # 52. Synthetic marker strings and agent attribution comments -> Must flag
+    for marker in (
+        "# AI-generated helper\nx = 1\n",
+        "# generated by claude\nx = 1\n",
+        "# Generated by chatgpt\nx = 1\n",
+        "# generated by openai\nx = 1\n",
+        "# generated by gemini\nx = 1\n",
+        "# generated by grok\nx = 1\n",
+        "# generated by copilot\nx = 1\n",
+        "# generated by codex\nx = 1\n",
+        "# generated by patpat\nx = 1\n",
+        "# generated by llm\nx = 1\n",
+        "# Patpat: fixed the bug\nx = 1\n",
+        "# sorry for the messy code\nx = 1\n",
+    ):
+        v_m = check_source_code(marker, "test.py")
+        assert_test(
+            len(v_m) == 1 and v_m[0].category == "ai-conversational-slop",
+            f"marker flagged: {marker.splitlines()[0]}",
+        )
+
+    # 53. // line comment markers (standalone and trailing) -> Must flag
+    v_c1 = check_source_code("// I apologize for the workaround\n", "test.js")
+    assert_test(
+        len(v_c1) == 1 and v_c1[0].rule == "Rule 12/16" and v_c1[0].category == "ai-conversational-slop",
+        "standalone // marker flagged",
+    )
+    v_c2 = check_source_code("const val = 1; // AI-generated stub\n", "test.ts")
+    assert_test(
+        len(v_c2) == 1 and v_c2[0].category == "ai-conversational-slop",
+        "trailing // marker flagged",
+    )
+
+    # 54. Negative cases: legitimate engineering comments -> MUST NOT flag
+    legit_comments = (
+        "# workaround for upstream issue #123\nx = 1\n",
+        "# temporary fix until v2\nx = 1\n",
+        "# Generated by scripts/stage_plugin.py\nx = 1\n",
+        "# Normalize /patpat:patpat paths across adapters\nx = 1\n",
+        "url = 'https://example.com'  # endpoint\n",
+        "quotient = total // count\n",
+    )
+    for sample in legit_comments:
+        v_legit = check_source_code(sample, "test.py")
+        assert_test(len(v_legit) == 0, f"legitimate code/comment not flagged: {sample.strip()}")
+
+    # 55. Negative case: AI marker text inside string literals / docstrings -> MUST NOT flag
+    string_sample = '"""\n# I apologize inside docstring\n// as an AI inside docstring\n"""\nmsg = "# Patpat: string"\n'
+    assert_test(len(check_source_code(string_sample, "test.py")) == 0, "markers inside strings not flagged")
+    assert_test(len(check_ai_slop_comments(b'const s = "// I apologize";\n', "test.js")) == 0, "quoted // string not flagged")
+
+    # 56. Diff mode (allowed_lines) filtering for # and // comments
+    diff_py = "# I apologize\nx = 1\n# sorry for the delay\n"
+    v_py_diff = check_source_code(diff_py, "test.py", allowed_lines={3})
+    assert_test(len(v_py_diff) == 1 and v_py_diff[0].line == 3, "allowed_lines filters # slop comments")
+    diff_js = "// I apologize\nconst x = 1;\n// sorry for the delay\n"
+    v_js_diff = check_source_code(diff_js, "test.js", allowed_lines={3})
+    assert_test(len(v_js_diff) == 1 and v_js_diff[0].line == 3, "allowed_lines filters // slop comments")
+
+    # 57. Inline foo();// marker, block comment exclusion, and JS suppression comments
+    v_inline = check_source_code("foo();// I apologize\n", "app.ts")
+    assert_test(
+        len(v_inline) == 1 and v_inline[0].category == "ai-conversational-slop" and v_inline[0].col == 7,
+        "inline foo();// slop marker flagged",
+    )
+    v_block = check_source_code("/* // I apologize */\n/* multi\n * // eslint-disable-next-line\n */\n", "app.ts")
+    assert_test(len(v_block) == 0, "block comment containing // markers not flagged")
+    v_js_supp = check_source_code("foo();// @ts-ignore\nclass Foo { #noqa = 1; }\n", "app.ts")
+    assert_test(
+        len(v_js_supp) == 1 and v_js_supp[0].category == "linter-suppression" and v_js_supp[0].line == 1,
+        "inline JS // @ts-ignore flagged without false positive on JS #privateField",
+    )
+
+    # 58. parse_unified_diff ignores '\ No newline at end of file' markers
+    no_nl_diff = (
+        "--- a/src/app.ts\n"
+        "+++ b/src/app.ts\n"
+        "@@ -1,2 +1,2 @@\n"
+        "-const a = 1;\n"
+        "\\ No newline at end of file\n"
+        "+const a = 2; // I apologize\n"
+        "\\ No newline at end of file\n"
+    )
+    no_nl_map = parse_unified_diff(no_nl_diff)
+    assert_test(no_nl_map.get("src/app.ts") == {1}, "no-newline marker does not shift diff line numbers")
+
+    # 59. check_diff_content and CLI path collection for .ts/.js files
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_root = Path(tmp_dir)
+        ts_file = tmp_root / "src" / "widget.ts"
+        ts_file.parent.mkdir(parents=True, exist_ok=True)
+        ts_file.write_text(
+            "// existing clean comment\nexport function run() { return 1; }\nfoo();// sorry for the hack\n// @ts-ignore\n",
+            encoding="utf-8",
+        )
+        ts_diff = (
+            "--- a/src/widget.ts\n"
+            "+++ b/src/widget.ts\n"
+            "@@ -1,2 +1,4 @@\n"
+            " // existing clean comment\n"
+            " export function run() { return 1; }\n"
+            "+foo();// sorry for the hack\n"
+            "+// @ts-ignore\n"
+        )
+        v_ts_diff = check_diff_content(ts_diff, root=tmp_root)
+        assert_test(
+            len(v_ts_diff) == 2
+            and {x.category for x in v_ts_diff} == {"ai-conversational-slop", "linter-suppression"}
+            and {x.line for x in v_ts_diff} == {3, 4},
+            "check_diff_content scans .ts files with allowed_lines filtering",
+        )
+        v_ts_synth = check_diff_content(no_nl_diff, root=tmp_root)
+        assert_test(
+            len(v_ts_synth) == 1 and v_ts_synth[0].category == "ai-conversational-slop",
+            "synthetic .ts diff content scanned cleanly without Python ast.parse",
+        )
+        js_file = tmp_root / "src" / "helper.mjs"
+        js_file.write_text("export const ok = 1;\n", encoding="utf-8")
+        collected = collect_target_files([tmp_root])
+        assert_test(ts_file in collected and js_file in collected, "collect_target_files includes .ts and .mjs")
+        cli_hits = run_checks([tmp_root])
+        assert_test(len(cli_hits) == 2, "run_checks scans JS/TS files collected from directory")
+
     print(f"unslop_ast_check self-test passed: {test_cases_run} test cases.")
     return 0
 
@@ -921,13 +1242,13 @@ def run_self_test() -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="unslop_ast_check.py",
-        description="Deterministic AST linter enforcing patpat-unslop rules 19 and 20.",
+        description="Deterministic AST and comment linter enforcing patpat-unslop rules 12/16, 19, and 20.",
     )
     parser.add_argument(
         "paths",
         nargs="*",
         type=Path,
-        help="Python source files or directories to check",
+        help="Source files or directories to check (.py, .js, .jsx, .ts, .tsx, .mjs, .cjs)",
     )
     parser.add_argument(
         "--diff",
@@ -978,7 +1299,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         for v in violations:
             print(v.format_diagnostic())
         if violations:
-            print(f"Found {len(violations)} violation(s) enforcing rules 19 and 20.", file=sys.stderr)
+            print(f"Found {len(violations)} violation(s) enforcing rules 12/16, 19, and 20.", file=sys.stderr)
         elif not args.quiet:
             print("Patpat unslop AST check passed: zero violations found.")
 
