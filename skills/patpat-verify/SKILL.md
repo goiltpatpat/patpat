@@ -63,6 +63,10 @@ Classify the outcome using exactly one label:
 
 If a check fails, classify the failure before retrying. Change the hypothesis, implementation, verifier, or environment; never loop the same attempt.
 
+## Proof contract runner
+
+Run [`scripts/eval_proof_contract.py`](scripts/eval_proof_contract.py) to execute 5-field proof contracts (`Claim`, `Surface`, `Action`, `Expect`, `Cleanup`) deterministically with guaranteed cleanup and emit `patpat-proof-receipt/v1` JSON containing 7 typed boolean `diagnostics`, `failing_diagnostics`, and `remediation_hint`.
+
 ## Mutation boundary
 
 Remain read-only with respect to repository implementation and external delivery. Limit incidental verifier artifacts to the declared proof contract, clean them up, and hand any authorized mutation back to `patpat-loop`.

@@ -9,8 +9,10 @@ evaluates optional falsification vectors, and generates structured JSON receipts
 from __future__ import annotations
 
 import argparse
+import contextlib
 import dataclasses
 from datetime import datetime, timezone
+import io
 import json
 import os
 from pathlib import Path
@@ -24,6 +26,38 @@ from typing import Any
 
 CANONICAL_FIELDS = ("claim", "surface", "action", "expect", "cleanup")
 OPTIONAL_FIELDS = ("falsification_vector", "timeout", "description")
+DIAGNOSTIC_KEYS = (
+    "contract_syntax_valid",
+    "surface_accessible",
+    "execution_completed",
+    "exit_code_matched",
+    "stdout_invariants_satisfied",
+    "stderr_invariants_satisfied",
+    "cleanup_succeeded",
+)
+DIAGNOSTIC_REMEDIATIONS: dict[str, str] = {
+    "contract_syntax_valid": (
+        "Provide all 5 canonical fields (claim, surface, action, expect, cleanup) "
+        "in valid JSON, YAML, or Markdown contract syntax."
+    ),
+    "surface_accessible": "Verify the target surface command exists on PATH and is executable in cwd.",
+    "execution_completed": "Increase contract timeout or resolve subprocess execution failure.",
+    "exit_code_matched": "Align implementation exit status or expect.exit_code with the authoritative surface.",
+    "stdout_invariants_satisfied": "Inspect stdout_contains and stdout_not_contains expectations against observed stdout.",
+    "stderr_invariants_satisfied": (
+        "Inspect stderr_empty, stderr_contains, and stderr_not_contains expectations against observed stderr."
+    ),
+    "cleanup_succeeded": "Fix cleanup command teardown so incidental artifacts exit with code 0.",
+}
+NOOP_CLEANUP_VALUES = frozenset({"none", "-", "—", "n/a", "null", "false", "true", ":"})
+
+
+def is_noop_cleanup(cmd: str | None) -> bool:
+    """Return True if a cleanup command string is absent or an explicit no-op sentinel."""
+    if cmd is None:
+        return True
+    stripped = cmd.strip().lower()
+    return not stripped or stripped in NOOP_CLEANUP_VALUES
 
 
 class ContractError(ValueError):
@@ -278,6 +312,97 @@ def parse_yaml_text(text: str) -> Any:
 # Expectation Normalizer
 # ---------------------------------------------------------------------------
 
+def _extract_inline_expect_values(text: str, key: str) -> list[str] | None:
+    """Extract inline single or bracket-list expectation values for a key on one line."""
+    m = re.search(rf"\b{re.escape(key)}[ \t]*[:=][ \t]*", text, re.IGNORECASE)
+    if not m:
+        return None
+    tail = text[m.end():]
+    if not tail or tail[0] in "\r\n,;":
+        return None
+
+    if tail.startswith("["):
+        depth = 0
+        in_quote: str | None = None
+        escaped = False
+        end_idx = -1
+        for idx, ch in enumerate(tail):
+            if in_quote == '"':
+                if escaped:
+                    escaped = False
+                elif ch == "\\":
+                    escaped = True
+                elif ch == '"':
+                    in_quote = None
+            elif in_quote == "'":
+                if ch == "'":
+                    in_quote = None
+            else:
+                if ch in ('"', "'"):
+                    in_quote = ch
+                elif ch == "[":
+                    depth += 1
+                elif ch == "]":
+                    depth -= 1
+                    if depth == 0:
+                        end_idx = idx
+                        break
+        if end_idx != -1:
+            bracket_str = tail[: end_idx + 1]
+            try:
+                parsed = json.loads(bracket_str)
+                if isinstance(parsed, list):
+                    return [str(item) for item in parsed if item is not None]
+            except (json.JSONDecodeError, ValueError):
+                pass
+            inner = tail[1:end_idx]
+            items: list[str] = []
+            for tok_m in re.finditer(
+                r'\s*(?:"((?:[^"\\]|\\.)*)"|\'([^\']*)\'|([^,\s][^,]*?))\s*(?:,|$)',
+                inner,
+            ):
+                if tok_m.group(1) is not None:
+                    val = tok_m.group(1).replace('\\"', '"').replace("\\\\", "\\")
+                    items.append(val)
+                elif tok_m.group(2) is not None:
+                    items.append(tok_m.group(2))
+                elif tok_m.group(3) is not None:
+                    token = tok_m.group(3).strip()
+                    if token and token != "-":
+                        items.append(token)
+            return items
+
+    if tail[0] in ('"', "'"):
+        quote = tail[0]
+        escaped = False
+        for idx in range(1, len(tail)):
+            ch = tail[idx]
+            if quote == '"':
+                if escaped:
+                    escaped = False
+                    continue
+                if ch == "\\":
+                    escaped = True
+                    continue
+            if ch == quote:
+                raw_quoted = tail[: idx + 1]
+                if quote == '"':
+                    try:
+                        val = json.loads(raw_quoted)
+                        if isinstance(val, str):
+                            return [val]
+                    except (json.JSONDecodeError, ValueError):
+                        pass
+                return [tail[1:idx]]
+
+    m_bare = re.match(r"([^\s,;]+)", tail)
+    if m_bare:
+        token = m_bare.group(1)
+        if token != "-":
+            return [token]
+    return None
+
+
 def parse_expectation_string(text: str) -> dict[str, Any]:
     """Parse string representation of expectation (e.g. key=val, key: val)."""
     text = text.strip()
@@ -300,10 +425,15 @@ def parse_expectation_string(text: str) -> dict[str, Any]:
     elif re.search(r"\bstderr\s+empty\b", text, re.IGNORECASE):
         result["stderr_empty"] = True
 
-    m_stdout = re.search(r"\bstdout_contains\s*[:=]\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s,;]+))", text, re.IGNORECASE)
-    if m_stdout:
-        val = next(g for g in m_stdout.groups() if g is not None)
-        result["stdout_contains"] = [val]
+    for expect_key in (
+        "stdout_contains",
+        "stdout_not_contains",
+        "stderr_contains",
+        "stderr_not_contains",
+    ):
+        extracted = _extract_inline_expect_values(text, expect_key)
+        if extracted is not None:
+            result[expect_key] = extracted
 
     return result
 
@@ -314,11 +444,18 @@ def normalize_expectation(raw: Any) -> Expectation:
         return Expectation(exit_code=0)
 
     if isinstance(raw, str):
-        raw_dict = parse_expectation_string(raw)
-        if not raw_dict and ":" in raw:
-            parsed_yaml = parse_yaml_text(raw)
-            if isinstance(parsed_yaml, dict):
+        raw_stripped = raw.strip()
+        raw_dict: Any = None
+        if "\n" in raw_stripped and ":" in raw_stripped and not raw_stripped.startswith("{"):
+            parsed_yaml = parse_yaml_text(raw_stripped)
+            if isinstance(parsed_yaml, (dict, list)) and parsed_yaml:
                 raw_dict = parsed_yaml
+        if not raw_dict:
+            raw_dict = parse_expectation_string(raw_stripped)
+            if not raw_dict and ":" in raw_stripped and not raw_stripped.startswith("{"):
+                parsed_yaml = parse_yaml_text(raw_stripped)
+                if isinstance(parsed_yaml, dict):
+                    raw_dict = parsed_yaml
         raw = raw_dict
 
     if isinstance(raw, list):
@@ -518,7 +655,7 @@ def parse_contract_data(text: str) -> dict[str, Any]:
     raise ContractError("Unable to parse proof contract: unsupported format or invalid syntax")
 
 
-def parse_contract(text: str, source_path: Path | None = None) -> ProofContract:
+def parse_contract(text: str) -> ProofContract:
     """Parse and validate a ProofContract from text."""
     raw = parse_contract_data(text)
     if not isinstance(raw, dict):
@@ -551,6 +688,8 @@ def parse_contract(text: str, source_path: Path | None = None) -> ProofContract:
 
     cleanup_raw = normalized.get("cleanup")
     cleanup = str(cleanup_raw).strip() if cleanup_raw is not None else ""
+    if not cleanup:
+        raise ContractError("cleanup field cannot be empty")
 
     # Parse expectation
     expect = normalize_expectation(normalized["expect"])
@@ -601,6 +740,8 @@ def execute_subprocess(command: str, timeout: float | None = None, cwd: Path | N
             shell=True,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
             cwd=str(cwd) if cwd else None,
         )
@@ -631,7 +772,7 @@ def execute_subprocess(command: str, timeout: float | None = None, cwd: Path | N
             timed_out=True,
             error=f"Command timed out after {timeout} seconds",
         )
-    except (OSError, subprocess.SubprocessError) as exc:
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
         duration_ms = (time.perf_counter() - start_time) * 1000.0
         return CommandResult(
             command=command,
@@ -727,6 +868,78 @@ def assert_expectations(res: CommandResult, expect: Expectation) -> tuple[list[d
     return assertions, errors
 
 
+def is_command_not_found(res: CommandResult) -> bool:
+    """Detect command-not-found outcomes across POSIX shells (127) and Windows cmd.exe."""
+    if res.exit_code == 127:
+        return True
+    if (
+        os.name == "nt"
+        and res.exit_code in (1, 9009)
+        and "not recognized as an internal or external command" in res.stderr.lower()
+    ):
+        return True
+    return False
+
+
+def build_diagnostics(
+    action_res: CommandResult | None,
+    assertions: list[dict[str, Any]],
+    contract: ProofContract,
+    cleanup_rec: dict[str, Any] | None,
+) -> dict[str, bool]:
+    """Compute the 7 typed boolean execution diagnostics for an evaluated contract."""
+    stdout_checks = [
+        a for a in assertions if a.get("check") in ("stdout_contains", "stdout_not_contains")
+    ]
+    stderr_checks = [
+        a
+        for a in assertions
+        if a.get("check") in ("stderr_empty", "stderr_contains", "stderr_not_contains")
+    ]
+    return {
+        "contract_syntax_valid": True,
+        "surface_accessible": (
+            action_res is not None
+            and (action_res.error is None or action_res.timed_out)
+            and (
+                contract.expect.exit_code == 127
+                or not is_command_not_found(action_res)
+            )
+        ),
+        "execution_completed": (
+            action_res is not None and not action_res.timed_out and action_res.error is None
+        ),
+        "exit_code_matched": (
+            action_res is not None and action_res.exit_code == contract.expect.exit_code
+        ),
+        "stdout_invariants_satisfied": (
+            action_res is not None and all(bool(a.get("passed")) for a in stdout_checks)
+        ),
+        "stderr_invariants_satisfied": (
+            action_res is not None and all(bool(a.get("passed")) for a in stderr_checks)
+        ),
+        "cleanup_succeeded": bool(cleanup_rec and cleanup_rec.get("passed")),
+    }
+
+
+def build_remediation_hint(failing_diagnostics: list[str], errors: list[str]) -> str:
+    """Derive a deterministic remediation hint from failing diagnostics and errors."""
+    if not failing_diagnostics and not errors:
+        return ""
+    hints = [
+        DIAGNOSTIC_REMEDIATIONS[key]
+        for key in failing_diagnostics
+        if key in DIAGNOSTIC_REMEDIATIONS
+    ]
+    base = " ".join(hints)
+    if errors:
+        err_summary = "; ".join(errors[:3])
+        if base:
+            return f"{base} Details: {err_summary}"
+        return f"Resolve verification failure: {err_summary}"
+    return base
+
+
 def evaluate_contract(
     contract: ProofContract,
     timeout: float | None = None,
@@ -758,9 +971,16 @@ def evaluate_contract(
             f_res = execute_subprocess(f_vec.action, timeout=eff_timeout, cwd=cwd)
 
             # Cleanup falsification if defined
-            f_cleanup_res = None
-            if f_vec.cleanup and f_vec.cleanup.strip() and f_vec.cleanup.strip().lower() not in {"none", "-", "n/a"}:
-                f_cleanup_res = execute_subprocess(f_vec.cleanup, timeout=eff_timeout, cwd=cwd)
+            f_cleanup_res: CommandResult | None = None
+            f_cleanup_ok = True
+            f_cleanup_cmd = f_vec.cleanup.strip() if f_vec.cleanup else ""
+            if not is_noop_cleanup(f_cleanup_cmd):
+                f_cleanup_res = execute_subprocess(f_cleanup_cmd, timeout=eff_timeout, cwd=cwd)
+                f_cleanup_ok = (
+                    f_cleanup_res.exit_code == 0
+                    and not f_cleanup_res.timed_out
+                    and f_cleanup_res.error is None
+                )
 
             if f_vec.expect is not None:
                 # Assert custom falsification expectation
@@ -778,6 +998,18 @@ def evaluate_contract(
                 else:
                     f_passed = True
 
+            if f_cleanup_res is not None and not f_cleanup_ok:
+                f_passed = False
+                if f_cleanup_res.timed_out:
+                    errors.append(f"Falsification cleanup timed out after {eff_timeout} seconds")
+                elif f_cleanup_res.error:
+                    errors.append(f"Falsification cleanup execution error: {f_cleanup_res.error}")
+                else:
+                    errors.append(
+                        f"Falsification cleanup command failed with exit code {f_cleanup_res.exit_code}: "
+                        f"{f_cleanup_res.stderr.strip()}"
+                    )
+
             falsification_rec = {
                 "action": f_vec.action,
                 "exit_code": f_res.exit_code,
@@ -787,13 +1019,14 @@ def evaluate_contract(
             }
             if f_cleanup_res is not None:
                 falsification_rec["cleanup_exit_code"] = f_cleanup_res.exit_code
+                falsification_rec["cleanup_passed"] = f_cleanup_ok
 
     finally:
         # Step 4: GUARANTEED CLEANUP EXECUTION (runs even if action fails or times out)
         cleanup_cmd = contract.cleanup.strip() if contract.cleanup else ""
-        if cleanup_cmd and cleanup_cmd.lower() not in {"none", "-", "—", "n/a", "null", "false", "true", ":"}:
+        if not is_noop_cleanup(cleanup_cmd):
             c_res = execute_subprocess(cleanup_cmd, timeout=eff_timeout, cwd=cwd)
-            cleanup_ok = (c_res.exit_code == 0)
+            cleanup_ok = (c_res.exit_code == 0 and not c_res.timed_out and c_res.error is None)
             cleanup_rec = {
                 "executed": True,
                 "command": cleanup_cmd,
@@ -805,13 +1038,22 @@ def evaluate_contract(
                 "passed": cleanup_ok,
             }
             if not cleanup_ok:
-                errors.append(f"Cleanup command failed with exit code {c_res.exit_code}: {c_res.stderr.strip()}")
+                if c_res.timed_out:
+                    errors.append(f"Cleanup command timed out after {eff_timeout} seconds")
+                elif c_res.error:
+                    errors.append(f"Cleanup execution error: {c_res.error}")
+                else:
+                    errors.append(f"Cleanup command failed with exit code {c_res.exit_code}: {c_res.stderr.strip()}")
         else:
             cleanup_rec = {
                 "executed": False,
                 "command": cleanup_cmd or "none",
                 "passed": True,
             }
+
+    diagnostics = build_diagnostics(action_res, assertions, contract, cleanup_rec)
+    failing_diagnostics = [key for key, ok in diagnostics.items() if not ok]
+    remediation_hint = build_remediation_hint(failing_diagnostics, errors)
 
     passed = (len(errors) == 0)
     verdict = "pass" if passed else "fail"
@@ -832,6 +1074,9 @@ def evaluate_contract(
         },
         "expect": contract.expect.to_dict(),
         "assertions": assertions,
+        "diagnostics": diagnostics,
+        "failing_diagnostics": failing_diagnostics,
+        "remediation_hint": remediation_hint,
         "cleanup": cleanup_rec,
         "falsification": falsification_rec,
         "contract": contract.to_dict(),
@@ -849,6 +1094,13 @@ def self_test() -> int:
     """Run comprehensive self-test suite covering passing, failing, and edge cases."""
     print("Running eval_proof_contract self-test suite...")
     cases_run = 0
+
+    def py_cmd(code: str) -> str:
+        exe = sys.executable
+        if os.name == "nt":
+            prefix = f'call "{exe}"' if " " in exe else exe
+            return f'{prefix} -c "{code}"'
+        return f"{shlex.quote(exe)} -c {shlex.quote(code)}"
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
@@ -873,18 +1125,18 @@ def self_test() -> int:
         cases_run += 1
 
         # 2. YAML passing contract with multiline block and list expect
-        yaml_pass = """
-claim: arithmetic proof
-surface: python3
-action: |
-  python3 -c "print(21 * 2)"
-expect:
-  exit_code: 0
-  stdout_contains:
-    - "42"
-  stderr_empty: true
-cleanup: true
-"""
+        yaml_pass = (
+            "claim: arithmetic proof\n"
+            "surface: python\n"
+            "action: |\n"
+            f"  {py_cmd('print(21 * 2)')}\n"
+            "expect:\n"
+            "  exit_code: 0\n"
+            "  stdout_contains:\n"
+            '    - "42"\n'
+            "  stderr_empty: true\n"
+            "cleanup: true\n"
+        )
         c2 = parse_contract(yaml_pass)
         r2 = evaluate_contract(c2, cwd=tmp_path)
         assert r2["passed"] is True, f"Case 2 failed: {r2['errors']}"
@@ -898,7 +1150,7 @@ Some explanation before.
 ```yaml
 claim: markdown yaml fence
 surface: echo
-action: echo "fence_test_output"
+action: echo fence_test_output
 expect:
   exit_code: 0
   stdout_contains: fence_test_output
@@ -913,21 +1165,18 @@ cleanup: true
         cases_run += 1
 
         # 4. Markdown code fence (JSON)
-        md_json = """# Contract Document
-```json
-{
-  "claim": "markdown json fence",
-  "surface": "sh",
-  "action": "printf 'json_token'",
-  "expect": {
-    "exit_code": 0,
-    "stdout_contains": ["json_token"],
-    "stderr_empty": true
-  },
-  "cleanup": "true"
-}
-```
-"""
+        md_json_obj = {
+            "claim": "markdown json fence",
+            "surface": "python",
+            "action": py_cmd("import sys; sys.stdout.write('json_token')"),
+            "expect": {
+                "exit_code": 0,
+                "stdout_contains": ["json_token"],
+                "stderr_empty": True,
+            },
+            "cleanup": "true",
+        }
+        md_json = f"# Contract Document\n```json\n{json.dumps(md_json_obj, indent=2)}\n```\n"
         c4 = parse_contract(md_json)
         r4 = evaluate_contract(c4, cwd=tmp_path)
         assert r4["passed"] is True, f"Case 4 failed: {r4['errors']}"
@@ -937,7 +1186,7 @@ cleanup: true
         md_bullet = """
 - **Claim**: bullet proof contract
 - **Surface**: CLI
-- **Action**: echo "bullet_token"
+- **Action**: echo bullet_token
 - **Expect**:
   - exit_code: 0
   - stdout_contains: bullet_token
@@ -955,7 +1204,7 @@ cleanup: true
 | --- | --- |
 | Claim | Table contract evaluation |
 | Surface | CLI |
-| Action | echo "table_token" |
+| Action | echo table_token |
 | Expect | exit_code: 0, stdout_contains: "table_token", stderr_empty: true |
 | Cleanup | true |
 """
@@ -967,8 +1216,8 @@ cleanup: true
         # 7. Failing assertion: exit_code mismatch
         fail_exit = {
             "claim": "assert failure on exit code",
-            "surface": "python3",
-            "action": "python3 -c 'import sys; sys.exit(7)'",
+            "surface": "python",
+            "action": py_cmd("import sys; sys.exit(7)"),
             "expect": {"exit_code": 0},
             "cleanup": "true",
         }
@@ -996,8 +1245,8 @@ cleanup: true
         # 9. Failing assertion: stderr_empty violation
         fail_stderr = {
             "claim": "assert failure on dirty stderr",
-            "surface": "python3",
-            "action": "python3 -c 'import sys; sys.stderr.write(\"unexpected warning\\n\")'",
+            "surface": "python",
+            "action": py_cmd("import sys; sys.stderr.write('unexpected warning\\n')"),
             "expect": {"exit_code": 0, "stderr_empty": True},
             "cleanup": "true",
         }
@@ -1010,8 +1259,8 @@ cleanup: true
         # 10. Action timeout handling
         timeout_contract = {
             "claim": "timeout enforcement",
-            "surface": "python3",
-            "action": "python3 -c 'import time; time.sleep(2)'",
+            "surface": "python",
+            "action": py_cmd("import time; time.sleep(2)"),
             "expect": {"exit_code": 0},
             "cleanup": "true",
         }
@@ -1026,10 +1275,14 @@ cleanup: true
         test_file = tmp_path / "scratch_flag.txt"
         cleanup_on_fail = {
             "claim": "cleanup runs on failure",
-            "surface": "sh",
-            "action": f"touch '{test_file}' && python3 -c 'import sys; sys.exit(3)'",
+            "surface": "python",
+            "action": py_cmd(
+                f"from pathlib import Path; import sys; Path({test_file.name!r}).write_text('x', encoding='utf-8'); sys.exit(3)"
+            ),
             "expect": {"exit_code": 0},
-            "cleanup": f"rm -f '{test_file}'",
+            "cleanup": py_cmd(
+                f"from pathlib import Path; Path({test_file.name!r}).unlink(missing_ok=True)"
+            ),
         }
         c11 = parse_contract(json.dumps(cleanup_on_fail))
         r11 = evaluate_contract(c11, cwd=tmp_path)
@@ -1045,7 +1298,7 @@ cleanup: true
             "surface": "echo",
             "action": "echo ok",
             "expect": {"exit_code": 0},
-            "cleanup": "python3 -c 'import sys; sys.exit(4)'",
+            "cleanup": py_cmd("import sys; sys.exit(4)"),
         }
         c12 = parse_contract(json.dumps(cleanup_fail))
         r12 = evaluate_contract(c12, cwd=tmp_path)
@@ -1054,16 +1307,16 @@ cleanup: true
         cases_run += 1
 
         # 13. Falsification vector passing (adversarial test successfully rejected)
-        fals_pass = """
-claim: parity check
-surface: python3
-action: python3 -c "import sys; sys.exit(0 if 10 % 2 == 0 else 1)"
-expect:
-  exit_code: 0
-cleanup: true
-falsification_vector:
-  action: python3 -c "import sys; sys.exit(0 if 11 % 2 == 0 else 1)"
-"""
+        fals_pass = (
+            "claim: parity check\n"
+            "surface: python\n"
+            f"action: {json.dumps(py_cmd('import sys; sys.exit(0 if 10 % 2 == 0 else 1)'))}\n"
+            "expect:\n"
+            "  exit_code: 0\n"
+            "cleanup: true\n"
+            "falsification_vector:\n"
+            f"  action: {json.dumps(py_cmd('import sys; sys.exit(0 if 11 % 2 == 0 else 1)'))}\n"
+        )
         c13 = parse_contract(fals_pass)
         r13 = evaluate_contract(c13, cwd=tmp_path)
         assert r13["passed"] is True, f"Case 13 failed: {r13['errors']}"
@@ -1071,16 +1324,16 @@ falsification_vector:
         cases_run += 1
 
         # 14. Falsification vector failing (tautological check detected)
-        fals_tautology = """
-claim: tautology check
-surface: python3
-action: python3 -c "import sys; sys.exit(0)"
-expect:
-  exit_code: 0
-cleanup: true
-falsification_vector:
-  action: python3 -c "import sys; sys.exit(0)"
-"""
+        fals_tautology = (
+            "claim: tautology check\n"
+            "surface: python\n"
+            f"action: {json.dumps(py_cmd('import sys; sys.exit(0)'))}\n"
+            "expect:\n"
+            "  exit_code: 0\n"
+            "cleanup: true\n"
+            "falsification_vector:\n"
+            f"  action: {json.dumps(py_cmd('import sys; sys.exit(0)'))}\n"
+        )
         c14 = parse_contract(fals_tautology)
         r14 = evaluate_contract(c14, cwd=tmp_path)
         assert r14["passed"] is False, "Case 14 should fail because falsification satisfied expect"
@@ -1099,8 +1352,8 @@ falsification_vector:
         # 16. Non-zero expected exit code
         nonzero_expected = {
             "claim": "non-zero expected exit code",
-            "surface": "python3",
-            "action": "python3 -c 'import sys; sys.exit(42)'",
+            "surface": "python",
+            "action": py_cmd("import sys; sys.exit(42)"),
             "expect": {"exit_code": 42},
             "cleanup": "true",
         }
@@ -1114,7 +1367,7 @@ falsification_vector:
         not_contains_pass = {
             "claim": "stdout_not_contains pass",
             "surface": "echo",
-            "action": "echo 'good morning'",
+            "action": "echo good morning",
             "expect": {"exit_code": 0, "stdout_not_contains": ["night"]},
             "cleanup": "true",
         }
@@ -1125,7 +1378,7 @@ falsification_vector:
         not_contains_fail = {
             "claim": "stdout_not_contains fail",
             "surface": "echo",
-            "action": "echo 'good night'",
+            "action": "echo good night",
             "expect": {"exit_code": 0, "stdout_not_contains": ["night"]},
             "cleanup": "true",
         }
@@ -1138,8 +1391,8 @@ falsification_vector:
         # 18. stderr_contains assertion passing & failing
         stderr_pass = {
             "claim": "stderr_contains pass",
-            "surface": "python3",
-            "action": "python3 -c 'import sys; sys.stderr.write(\"specific_warning_xyz\\n\")'",
+            "surface": "python",
+            "action": py_cmd("import sys; sys.stderr.write('specific_warning_xyz\\n')"),
             "expect": {"exit_code": 0, "stderr_contains": ["specific_warning_xyz"]},
             "cleanup": "true",
         }
@@ -1149,8 +1402,8 @@ falsification_vector:
 
         stderr_fail = {
             "claim": "stderr_contains fail",
-            "surface": "python3",
-            "action": "python3 -c 'import sys; sys.stderr.write(\"other_warning\\n\")'",
+            "surface": "python",
+            "action": py_cmd("import sys; sys.stderr.write('other_warning\\n')"),
             "expect": {"exit_code": 0, "stderr_contains": ["missing_warning_abc"]},
             "cleanup": "true",
         }
@@ -1162,8 +1415,8 @@ falsification_vector:
         # 19. stderr_empty: false assertion passing when stderr has output
         stderr_not_empty = {
             "claim": "stderr_empty false pass",
-            "surface": "python3",
-            "action": "python3 -c 'import sys; sys.stderr.write(\"expected diagnostic\\n\")'",
+            "surface": "python",
+            "action": py_cmd("import sys; sys.stderr.write('expected diagnostic\\n')"),
             "expect": {"exit_code": 0, "stderr_empty": False},
             "cleanup": "true",
         }
@@ -1193,8 +1446,8 @@ falsification_vector:
         # 22. Contract-level timeout honored in CLI invocation without --timeout
         contract_with_timeout = {
             "claim": "contract-level timeout honored",
-            "surface": "python3",
-            "action": "python3 -c 'import time; time.sleep(2)'",
+            "surface": "python",
+            "action": py_cmd("import time; time.sleep(2)"),
             "timeout": 0.2,
             "expect": {"exit_code": 0},
             "cleanup": "true",
@@ -1207,6 +1460,301 @@ falsification_vector:
         r22 = json.loads(cli_timeout_receipt.read_text(encoding="utf-8"))
         assert r22["action"]["timed_out"] is True, "Action must be marked timed out"
         assert any("timed out" in err for err in r22["errors"])
+        cases_run += 1
+
+        # 23. Diagnostics: passing contract sets all 7 booleans True, empty failing_diagnostics & remediation_hint
+        assert set(r1["diagnostics"].keys()) == set(DIAGNOSTIC_KEYS)
+        assert all(r1["diagnostics"][k] is True for k in DIAGNOSTIC_KEYS), f"Expected all True: {r1['diagnostics']}"
+        assert r1["failing_diagnostics"] == []
+        assert r1["remediation_hint"] == ""
+        cases_run += 1
+
+        # 24. Diagnostics: exit_code mismatch isolates exit_code_matched == False
+        assert r7["diagnostics"]["contract_syntax_valid"] is True
+        assert r7["diagnostics"]["surface_accessible"] is True
+        assert r7["diagnostics"]["execution_completed"] is True
+        assert r7["diagnostics"]["exit_code_matched"] is False
+        assert r7["diagnostics"]["stdout_invariants_satisfied"] is True
+        assert r7["diagnostics"]["stderr_invariants_satisfied"] is True
+        assert r7["diagnostics"]["cleanup_succeeded"] is True
+        assert r7["failing_diagnostics"] == ["exit_code_matched"]
+        assert "exit_code mismatch" in r7["remediation_hint"]
+        cases_run += 1
+
+        # 25. Diagnostics: stdout failure isolates stdout_invariants_satisfied == False (contains & not_contains)
+        assert r8["diagnostics"]["exit_code_matched"] is True
+        assert r8["diagnostics"]["stdout_invariants_satisfied"] is False
+        assert r8["diagnostics"]["stderr_invariants_satisfied"] is True
+        assert r8["failing_diagnostics"] == ["stdout_invariants_satisfied"]
+        assert "stdout" in r8["remediation_hint"].lower()
+        assert r17b["diagnostics"]["stdout_invariants_satisfied"] is False
+        assert r17b["failing_diagnostics"] == ["stdout_invariants_satisfied"]
+        cases_run += 1
+
+        # 26. Diagnostics: stderr failure isolates stderr_invariants_satisfied == False (stderr_empty & stderr_contains)
+        assert r9["diagnostics"]["exit_code_matched"] is True
+        assert r9["diagnostics"]["stdout_invariants_satisfied"] is True
+        assert r9["diagnostics"]["stderr_invariants_satisfied"] is False
+        assert r9["failing_diagnostics"] == ["stderr_invariants_satisfied"]
+        assert "stderr" in r9["remediation_hint"].lower()
+        assert r18b["diagnostics"]["stderr_invariants_satisfied"] is False
+        assert r18b["failing_diagnostics"] == ["stderr_invariants_satisfied"]
+        cases_run += 1
+
+        # 27. Diagnostics: timeout sets surface_accessible True, execution_completed False, exit_code_matched False
+        assert r10["diagnostics"]["contract_syntax_valid"] is True
+        assert r10["diagnostics"]["surface_accessible"] is True
+        assert r10["diagnostics"]["execution_completed"] is False
+        assert r10["diagnostics"]["exit_code_matched"] is False
+        assert r10["diagnostics"]["cleanup_succeeded"] is True
+        assert "execution_completed" in r10["failing_diagnostics"]
+        assert "exit_code_matched" in r10["failing_diagnostics"]
+        assert "timeout" in r10["remediation_hint"].lower()
+        cases_run += 1
+
+        # 28. Diagnostics: cleanup failure isolates cleanup_succeeded == False
+        assert r12["diagnostics"]["contract_syntax_valid"] is True
+        assert r12["diagnostics"]["surface_accessible"] is True
+        assert r12["diagnostics"]["execution_completed"] is True
+        assert r12["diagnostics"]["exit_code_matched"] is True
+        assert r12["diagnostics"]["stdout_invariants_satisfied"] is True
+        assert r12["diagnostics"]["stderr_invariants_satisfied"] is True
+        assert r12["diagnostics"]["cleanup_succeeded"] is False
+        assert r12["failing_diagnostics"] == ["cleanup_succeeded"]
+        assert "cleanup" in r12["remediation_hint"].lower()
+        cases_run += 1
+
+        # 29. Diagnostics: inaccessible surface (command not found) sets surface_accessible == False
+        missing_surface = {
+            "claim": "detect inaccessible surface command",
+            "surface": "nonexistent_cmd",
+            "action": "patpat_nonexistent_binary_99999",
+            "expect": {"exit_code": 0},
+            "cleanup": "true",
+        }
+        c29 = parse_contract(json.dumps(missing_surface))
+        r29 = evaluate_contract(c29, cwd=tmp_path)
+        assert r29["passed"] is False
+        assert r29["diagnostics"]["contract_syntax_valid"] is True
+        assert r29["diagnostics"]["surface_accessible"] is False
+        assert r29["diagnostics"]["exit_code_matched"] is False
+        assert "surface_accessible" in r29["failing_diagnostics"]
+        assert r29["remediation_hint"]
+        cases_run += 1
+
+        # 30. Diagnostics: CLI --json ContractError emits all-False diagnostics and failing_diagnostics=["contract_syntax_valid"]
+        bad_contract_file = tmp_path / "malformed_contract.json"
+        bad_contract_file.write_text('{"claim": "missing fields only"}', encoding="utf-8")
+        bad_receipt_file = tmp_path / "nested" / "malformed_receipt.json"
+        stdout_buf = io.StringIO()
+        with contextlib.redirect_stdout(stdout_buf):
+            bad_exit = main(["--json", "--receipt", str(bad_receipt_file), str(bad_contract_file)])
+        assert bad_exit == 1, "Malformed contract CLI invocation must return 1"
+        cli_err_receipt = json.loads(stdout_buf.getvalue())
+        assert cli_err_receipt["schema"] == "patpat-proof-receipt/v1"
+        assert cli_err_receipt["passed"] is False
+        assert set(cli_err_receipt["diagnostics"].keys()) == set(DIAGNOSTIC_KEYS)
+        assert all(cli_err_receipt["diagnostics"][k] is False for k in DIAGNOSTIC_KEYS)
+        assert cli_err_receipt["failing_diagnostics"] == ["contract_syntax_valid"]
+        assert "5 canonical fields" in cli_err_receipt["remediation_hint"]
+        assert bad_receipt_file.is_file()
+        assert json.loads(bad_receipt_file.read_text(encoding="utf-8"))["failing_diagnostics"] == ["contract_syntax_valid"]
+        cases_run += 1
+
+        # 31. Diagnostics: expect.exit_code == 127 passes cleanly with all 7 diagnostics True
+        exit_127_expected = {
+            "claim": "expected exit code 127 passes cleanly",
+            "surface": "python",
+            "action": py_cmd("import sys; sys.exit(127)"),
+            "expect": {"exit_code": 127},
+            "cleanup": "true",
+        }
+        c31 = parse_contract(json.dumps(exit_127_expected))
+        r31 = evaluate_contract(c31, cwd=tmp_path)
+        assert r31["passed"] is True, f"Case 31 failed: {r31['errors']}"
+        assert r31["verdict"] == "pass"
+        assert all(r31["diagnostics"][k] is True for k in DIAGNOSTIC_KEYS), f"Expected all True: {r31['diagnostics']}"
+        assert r31["failing_diagnostics"] == []
+        assert r31["remediation_hint"] == ""
+        cases_run += 1
+
+        # 32. Subprocess UTF-8 decoding with replacement on invalid byte sequences
+        utf8_contract = {
+            "claim": "non-ASCII UTF-8 and replacement handling",
+            "surface": "python",
+            "action": py_cmd("import sys; sys.stdout.buffer.write(b'utf8-\\xc3\\xa9-bad-\\xff\\n')"),
+            "expect": {"exit_code": 0, "stdout_contains": ["utf8-\u00e9-bad-\ufffd"]},
+            "cleanup": "true",
+        }
+        c32 = parse_contract(json.dumps(utf8_contract))
+        r32 = evaluate_contract(c32, cwd=tmp_path)
+        assert r32["passed"] is True, f"Case 32 failed: {r32['errors']}"
+        assert all(r32["diagnostics"][k] is True for k in DIAGNOSTIC_KEYS)
+        cases_run += 1
+
+        # 33. Empty and whitespace-only cleanup field rejection
+        for empty_cleanup in ("", "   "):
+            empty_cleanup_json = json.dumps(
+                {
+                    "claim": "empty cleanup rejection",
+                    "surface": "echo",
+                    "action": "echo ok",
+                    "expect": {"exit_code": 0},
+                    "cleanup": empty_cleanup,
+                }
+            )
+            try:
+                parse_contract(empty_cleanup_json)
+                raise AssertionError(f"Expected ContractError for cleanup={empty_cleanup!r}")
+            except ContractError as err:
+                assert "cleanup field cannot be empty" in str(err)
+
+        empty_md_cleanup = (
+            "## Claim\nempty cleanup markdown\n\n"
+            "## Surface\necho\n\n"
+            "## Action\necho ok\n\n"
+            "## Expect\nexit_code: 0\n\n"
+            "## Cleanup\n   \n"
+        )
+        try:
+            parse_contract(empty_md_cleanup)
+            raise AssertionError("Expected ContractError for blank markdown ## Cleanup")
+        except ContractError as err:
+            assert "cleanup field cannot be empty" in str(err)
+        cases_run += 1
+
+        # 34. Unified no-op cleanup handling for primary and falsification_vector.cleanup
+        for noop_val in NOOP_CLEANUP_VALUES:
+            assert is_noop_cleanup(noop_val) is True
+        assert is_noop_cleanup("true") is True
+        assert is_noop_cleanup("none") is True
+        assert is_noop_cleanup(py_cmd("import sys; sys.exit(0)")) is False
+
+        noop_fals_contract = {
+            "claim": "falsification noop cleanup equivalence",
+            "surface": "python",
+            "action": py_cmd("print('primary_ok')"),
+            "expect": {"exit_code": 0, "stdout_contains": ["primary_ok"]},
+            "cleanup": "null",
+            "falsification_vector": {
+                "action": py_cmd("import sys; sys.exit(1)"),
+                "cleanup": "true",
+            },
+        }
+        c34 = parse_contract(json.dumps(noop_fals_contract))
+        r34 = evaluate_contract(c34, cwd=tmp_path)
+        assert r34["passed"] is True, f"Case 34 failed: {r34['errors']}"
+        assert r34["cleanup"]["executed"] is False
+        assert r34["falsification"]["passed"] is True
+        assert "cleanup_exit_code" not in r34["falsification"]
+        assert "cleanup_passed" not in r34["falsification"]
+        cases_run += 1
+
+        # 35. Executed falsification_vector.cleanup: failing cleanup fails contract, passing succeeds
+        fail_fals_cleanup = {
+            "claim": "failing falsification cleanup fails contract",
+            "surface": "python",
+            "action": py_cmd("print('primary_ok')"),
+            "expect": {"exit_code": 0, "stdout_contains": ["primary_ok"]},
+            "cleanup": "true",
+            "falsification_vector": {
+                "action": py_cmd("import sys; sys.exit(1)"),
+                "cleanup": py_cmd("import sys; sys.exit(3)"),
+            },
+        }
+        c35a = parse_contract(json.dumps(fail_fals_cleanup))
+        r35a = evaluate_contract(c35a, cwd=tmp_path)
+        assert r35a["passed"] is False, "Case 35a should fail when falsification cleanup fails"
+        assert r35a["verdict"] == "fail"
+        assert r35a["falsification"]["passed"] is False
+        assert r35a["falsification"]["cleanup_exit_code"] == 3
+        assert r35a["falsification"]["cleanup_passed"] is False
+        assert any("Falsification cleanup command failed with exit code 3" in e for e in r35a["errors"])
+        assert r35a["remediation_hint"]
+
+        pass_fals_cleanup = {
+            "claim": "passing falsification cleanup succeeds",
+            "surface": "python",
+            "action": py_cmd("print('primary_ok')"),
+            "expect": {"exit_code": 0, "stdout_contains": ["primary_ok"]},
+            "cleanup": "true",
+            "falsification_vector": {
+                "action": py_cmd("import sys; sys.exit(1)"),
+                "cleanup": py_cmd("import sys; sys.exit(0)"),
+            },
+        }
+        c35b = parse_contract(json.dumps(pass_fals_cleanup))
+        r35b = evaluate_contract(c35b, cwd=tmp_path)
+        assert r35b["passed"] is True, f"Case 35b failed: {r35b['errors']}"
+        assert r35b["falsification"]["passed"] is True
+        assert r35b["falsification"]["cleanup_exit_code"] == 0
+        assert r35b["falsification"]["cleanup_passed"] is True
+        cases_run += 1
+
+        # 36. Multiline YAML ## Expect parsing with stdout_contains & stdout_not_contains
+        action36_pass = py_cmd("print('ok_alpha\\nok_beta')")
+        action36_fail = py_cmd("print('ok_alpha\\nok_beta\\nforbidden_err')")
+        multiline_md_pass = (
+            "## Claim\nmultiline yaml expect pass\n\n"
+            "## Surface\npython\n\n"
+            f"## Action\n{action36_pass}\n\n"
+            "## Expect\n"
+            "exit_code: 0\n"
+            "stdout_contains:\n"
+            "  - ok_alpha\n"
+            "  - ok_beta\n"
+            "stdout_not_contains:\n"
+            "  - forbidden_err\n"
+            "stderr_empty: true\n\n"
+            "## Cleanup\ntrue\n"
+        )
+        c36a = parse_contract(multiline_md_pass)
+        assert c36a.expect.stdout_contains == ["ok_alpha", "ok_beta"], c36a.expect.stdout_contains
+        assert c36a.expect.stdout_not_contains == ["forbidden_err"], c36a.expect.stdout_not_contains
+        r36a = evaluate_contract(c36a, cwd=tmp_path)
+        assert r36a["passed"] is True, f"Case 36a failed: {r36a['errors']}"
+
+        multiline_md_fail = multiline_md_pass.replace(action36_pass, action36_fail)
+        c36b = parse_contract(multiline_md_fail)
+        r36b = evaluate_contract(c36b, cwd=tmp_path)
+        assert r36b["passed"] is False, "Case 36b should fail when stdout_not_contains matches"
+        assert r36b["diagnostics"]["stdout_invariants_satisfied"] is False
+        cases_run += 1
+
+        # 37. Inline parse_expectation_string support for stdout_not_contains, stderr_contains, stderr_not_contains
+        parsed_no_bullet = parse_expectation_string("exit_code: 0\nstdout_contains:\n  - ok")
+        assert parsed_no_bullet == {"exit_code": 0}, f"Unexpected bullet capture: {parsed_no_bullet}"
+
+        action37_pass = py_cmd("import sys; print('good_out'); sys.stderr.write('soft_warn\\n')")
+        action37_fail_stdout = py_cmd("import sys; print('bad'); sys.stderr.write('soft_warn\\n')")
+        action37_fail_stderr = py_cmd("import sys; print('good_out'); sys.stderr.write('soft_warn fatal\\n')")
+        inline_table = (
+            "| Field | Value |\n"
+            "| --- | --- |\n"
+            "| Claim | inline expect invariants |\n"
+            "| Surface | python |\n"
+            f"| Action | {action37_pass} |\n"
+            '| Expect | exit_code: 0, stdout_not_contains: "bad", stderr_contains: [soft_warn], stderr_not_contains: [fatal, panic] |\n'
+            "| Cleanup | true |\n"
+        )
+        c37a = parse_contract(inline_table)
+        assert c37a.expect.stdout_not_contains == ["bad"]
+        assert c37a.expect.stderr_contains == ["soft_warn"]
+        assert c37a.expect.stderr_not_contains == ["fatal", "panic"]
+        r37a = evaluate_contract(c37a, cwd=tmp_path)
+        assert r37a["passed"] is True, f"Case 37a failed: {r37a['errors']}"
+
+        inline_fail_table = inline_table.replace(action37_pass, action37_fail_stdout)
+        c37b = parse_contract(inline_fail_table)
+        r37b = evaluate_contract(c37b, cwd=tmp_path)
+        assert r37b["passed"] is False, "Case 37b should fail on inline stdout_not_contains"
+        assert r37b["diagnostics"]["stdout_invariants_satisfied"] is False
+
+        inline_stderr_fail = inline_table.replace(action37_pass, action37_fail_stderr)
+        c37c = parse_contract(inline_stderr_fail)
+        r37c = evaluate_contract(c37c, cwd=tmp_path)
+        assert r37c["passed"] is False, "Case 37c should fail on inline stderr_not_contains"
+        assert r37c["diagnostics"]["stderr_invariants_satisfied"] is False
         cases_run += 1
 
     print(f"eval_proof_contract self-test passed: {cases_run} cases ok")
@@ -1269,37 +1817,58 @@ def main(argv: list[str] | None = None) -> int:
     # Read contract text
     try:
         if args.contract == "-":
+            reconfigure = getattr(sys.stdin, "reconfigure", None)
+            if callable(reconfigure):
+                try:
+                    reconfigure(encoding="utf-8", errors="replace")
+                except (OSError, ValueError):
+                    pass
             text = sys.stdin.read()
-            contract_path = None
         else:
             contract_path = Path(args.contract)
             text = contract_path.read_text(encoding="utf-8")
     except OSError as err:
+        diagnostics = {key: False for key in DIAGNOSTIC_KEYS}
+        failing_diagnostics = ["surface_accessible"]
+        errors = [f"Cannot read contract file: {err}"]
         err_receipt = {
             "schema": "patpat-proof-receipt/v1",
             "verdict": "fail",
             "passed": False,
-            "errors": [f"Cannot read contract file: {err}"],
-            "evaluated_at": datetime.now(timezone.utc).isoformat(),
-        }
-        if not args.quiet:
-            print(json.dumps(err_receipt, indent=2))
-        return 1
-
-    # Parse contract
-    try:
-        contract = parse_contract(text, source_path=contract_path)
-    except ContractError as err:
-        err_receipt = {
-            "schema": "patpat-proof-receipt/v1",
-            "verdict": "fail",
-            "passed": False,
-            "errors": [f"Contract parsing error: {err}"],
+            "diagnostics": diagnostics,
+            "failing_diagnostics": failing_diagnostics,
+            "remediation_hint": build_remediation_hint(failing_diagnostics, errors),
+            "errors": errors,
             "evaluated_at": datetime.now(timezone.utc).isoformat(),
         }
         if not args.quiet:
             print(json.dumps(err_receipt, indent=2))
         if args.receipt:
+            args.receipt.parent.mkdir(parents=True, exist_ok=True)
+            args.receipt.write_text(json.dumps(err_receipt, indent=2), encoding="utf-8")
+        return 1
+
+    # Parse contract
+    try:
+        contract = parse_contract(text)
+    except ContractError as err:
+        diagnostics = {key: False for key in DIAGNOSTIC_KEYS}
+        failing_diagnostics = ["contract_syntax_valid"]
+        errors = [f"Contract parsing error: {err}"]
+        err_receipt = {
+            "schema": "patpat-proof-receipt/v1",
+            "verdict": "fail",
+            "passed": False,
+            "diagnostics": diagnostics,
+            "failing_diagnostics": failing_diagnostics,
+            "remediation_hint": build_remediation_hint(failing_diagnostics, errors),
+            "errors": errors,
+            "evaluated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if not args.quiet:
+            print(json.dumps(err_receipt, indent=2))
+        if args.receipt:
+            args.receipt.parent.mkdir(parents=True, exist_ok=True)
             args.receipt.write_text(json.dumps(err_receipt, indent=2), encoding="utf-8")
         return 1
 

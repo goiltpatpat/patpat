@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import errno
 import hashlib
+import io
 import json
 import os
 import re
@@ -339,6 +341,82 @@ def run_directory(root: Path, run_id: str) -> Path:
 
 def state_path(root: Path, run_id: str) -> Path:
     return run_directory(root, run_id) / "state.json"
+
+
+def trajectory_path(root: Path, run_id: str) -> Path:
+    return run_directory(root, run_id) / "trajectory.jsonl"
+
+
+def _last_trajectory_sequence(path: Path) -> int:
+    if path.is_symlink():
+        raise RunStateError(f"trajectory journal must not be a symlink: {path}")
+    if not path.exists():
+        return 0
+    if not path.is_file():
+        raise RunStateError(f"trajectory journal must be a regular file: {path}")
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise RunStateError(f"could not read trajectory journal: {error}") from error
+    try:
+        handle = os.fdopen(descriptor, "rb")
+    except OSError as error:
+        os.close(descriptor)
+        raise RunStateError(f"could not open trajectory journal: {error}") from error
+    try:
+        with handle:
+            raw = handle.read()
+        last_seq = 0
+        for line in raw.decode("utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            item = json.loads(stripped)
+            if isinstance(item, dict):
+                seq = item.get("sequence")
+                if isinstance(seq, int) and not isinstance(seq, bool) and seq > last_seq:
+                    last_seq = seq
+        return last_seq
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RunStateError(f"trajectory journal is invalid: {error}") from error
+
+
+def _append_trajectory_events(root: Path, run_id: str, events: list[dict[str, Any]]) -> None:
+    traj = trajectory_path(root, run_id)
+    last_seq = _last_trajectory_sequence(traj)
+    new_events = [
+        event
+        for event in events
+        if isinstance(event, dict)
+        and isinstance(event.get("sequence"), int)
+        and not isinstance(event.get("sequence"), bool)
+        and event["sequence"] > last_seq
+    ]
+    if not new_events:
+        return
+    new_events.sort(key=lambda event: int(event["sequence"]))
+    lines = [
+        json.dumps(event, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n"
+        for event in new_events
+    ]
+    payload = "".join(lines).encode("utf-8")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_BINARY", 0)
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(traj, flags, 0o600)
+    try:
+        handle = os.fdopen(descriptor, "ab")
+    except OSError:
+        os.close(descriptor)
+        raise
+    with handle:
+        handle.write(payload)
+        handle.flush()
+        os.fsync(handle.fileno())
+    fsync_directory(traj.parent)
 
 
 def provider_receipt_path(root: Path, run_id: str) -> Path:
@@ -736,10 +814,34 @@ def save_state(root: Path, run_id: str, state: dict[str, Any]) -> None:
     errors = schema_errors(state, root, run_id)
     if errors:
         raise RunStateError("; ".join(errors))
+    state_file = state_path(root, run_id)
+    traj_file = trajectory_path(root, run_id)
+    if traj_file.is_symlink() or (traj_file.exists() and not traj_file.is_file()):
+        raise RunStateError(f"trajectory journal path must be a regular file: {traj_file}")
     try:
-        atomic_write_json(state_path(root, run_id), state)
+        _last_trajectory_sequence(traj_file)
+        previous_bytes = state_file.read_bytes() if state_file.exists() else None
+        atomic_write_json(state_file, state)
     except OSError as error:
         raise RunStateError(f"could not persist atomic run state: {error}") from error
+
+    try:
+        _append_trajectory_events(root, run_id, state["events"])
+    except (OSError, RunStateError) as error:
+        try:
+            if previous_bytes is None:
+                if state_file.exists():
+                    state_file.unlink()
+                    fsync_directory(state_file.parent)
+            else:
+                atomic_write(state_file, previous_bytes)
+        except OSError as rollback_error:
+            raise RunStateError(
+                f"could not persist trajectory journal ({error}); rollback failed ({rollback_error})"
+            ) from error
+        if isinstance(error, RunStateError):
+            raise
+        raise RunStateError(f"could not persist atomic trajectory journal: {error}") from error
 
 
 def initialize(
@@ -1007,17 +1109,120 @@ FAILURE_CLASSES = frozenset({"implementation", "verifier", "environment"})
 GATES = frozenset({"pre-edit", "verify", "commit", "ship", "merge"})
 
 
+def format_diagnostic_delta(
+    summary: str,
+    blocker_key: str,
+    failure_class: str,
+    proof_receipt: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    """Build the 5-field Diagnostic Delta structure for repeated failure analysis."""
+    is_v1_receipt = (
+        isinstance(proof_receipt, dict)
+        and proof_receipt.get("schema") == "patpat-proof-receipt/v1"
+    )
+    failing_flags: list[str] = []
+    if is_v1_receipt and proof_receipt is not None:
+        raw_failing = proof_receipt.get("failing_diagnostics")
+        if isinstance(raw_failing, list):
+            for flag in raw_failing:
+                if isinstance(flag, str) and flag.strip() and flag.strip() not in failing_flags:
+                    failing_flags.append(flag.strip())
+        else:
+            raw_diag = proof_receipt.get("diagnostics")
+            if isinstance(raw_diag, dict):
+                for flag, passed in raw_diag.items():
+                    if passed is False and isinstance(flag, str) and flag.strip() and flag.strip() not in failing_flags:
+                        failing_flags.append(flag.strip())
+
+    expected = f"Resolve blocker {blocker_key} [{failure_class}] cleanly"
+    if is_v1_receipt and proof_receipt is not None:
+        claim = str(proof_receipt.get("claim") or "").strip()
+        expect_obj = proof_receipt.get("expect")
+        if claim and isinstance(expect_obj, dict):
+            expected = f"{claim} (expect={json.dumps(expect_obj, sort_keys=True, ensure_ascii=False)})"
+        elif claim:
+            expected = claim
+        elif isinstance(expect_obj, dict):
+            expected = f"Proof contract expectations satisfied: {json.dumps(expect_obj, sort_keys=True, ensure_ascii=False)}"
+
+    raw_errors = proof_receipt.get("errors") if is_v1_receipt and proof_receipt is not None else None
+    errors_list = (
+        [err.strip() for err in raw_errors if isinstance(err, str) and err.strip()]
+        if isinstance(raw_errors, list)
+        else []
+    )
+    actual_parts = [f"blocker={blocker_key}"]
+    if failing_flags:
+        actual_parts.append(f"failing_diagnostics=[{', '.join(failing_flags)}]")
+    else:
+        actual_parts.append(f"failure_class={failure_class}")
+    if errors_list:
+        actual_parts.append(f"errors={'; '.join(errors_list[:3])}")
+    actual = f"{summary} ({'; '.join(actual_parts)})"
+
+    action_obj = proof_receipt.get("action") if is_v1_receipt and proof_receipt is not None else None
+    action_cmd = action_obj.get("command") if isinstance(action_obj, dict) else None
+    if isinstance(action_cmd, str) and action_cmd.strip():
+        changed = (
+            f"Repeated failure on {blocker_key}; verify a changed causal variable before re-running {action_cmd.strip()}"
+        )
+    else:
+        changed = (
+            f"Repeated failure on {blocker_key} [{failure_class}]; isolate one changed variable before retrying"
+        )
+
+    if failing_flags:
+        hypothesis = f"[{failure_class}] {blocker_key}: failure triggered by {', '.join(failing_flags)}"
+    else:
+        hypothesis = f"[{failure_class}] {blocker_key}: prior premise remains unverified ({summary})"
+
+    raw_hint = proof_receipt.get("remediation_hint") if is_v1_receipt and proof_receipt is not None else None
+    if isinstance(raw_hint, str) and raw_hint.strip():
+        next_step = raw_hint.strip()
+    elif failing_flags:
+        next_step = f"Fix failing diagnostics ({', '.join(failing_flags)}) for {blocker_key} before retrying"
+    else:
+        next_step = f"Change hypothesis, {failure_class}, or evidence surface for {blocker_key} before a third attempt"
+
+    return {
+        "expected": expected,
+        "actual": actual,
+        "changed": changed,
+        "hypothesis": hypothesis,
+        "next": next_step,
+    }
+
+
+def _load_proof_receipt(path: Path) -> dict[str, Any]:
+    candidate = path.parent.resolve() / path.name if path.name else path
+    bounded_file_binding(
+        candidate,
+        max_bytes=MAX_STATE_BYTES,
+        error_type=RunStateError,
+        label="proof receipt",
+    )
+    try:
+        data = json.loads(candidate.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RunStateError(f"proof receipt is unreadable or invalid JSON: {error}") from error
+    if not isinstance(data, dict):
+        raise RunStateError("proof receipt must be a JSON object")
+    return data
+
+
 def record_failure(
     root: Path,
     run_id: str,
     summary: str,
     blocker_key: str,
     failure_class: str = "implementation",
+    proof_receipt_path: Path | None = None,
 ) -> dict[str, Any]:
     if failure_class not in FAILURE_CLASSES:
         raise RunStateError(
             f"failure class must be one of {sorted(FAILURE_CLASSES)}, got {failure_class!r}"
         )
+    proof_receipt = _load_proof_receipt(proof_receipt_path) if proof_receipt_path is not None else None
     with run_lock(root, run_id):
         state = load_state(root, run_id)
         if state["node"] in {"REPORT", "BLOCKED"}:
@@ -1031,13 +1236,21 @@ def record_failure(
             and previous.get("node") == state["node"]
         )
         count = int(previous["count"]) + 1 if same_failure_sequence else 1
-        state["last_failure"] = {
+        diagnostic_delta = (
+            format_diagnostic_delta(summary, blocker_key, failure_class, proof_receipt=proof_receipt)
+            if count >= 2
+            else None
+        )
+        last_failure: dict[str, Any] = {
             "key": blocker_key,
             "failure_class": failure_class,
             "snapshot": snapshot,
             "node": state["node"],
             "count": count,
         }
+        if diagnostic_delta is not None:
+            last_failure["diagnostic_delta"] = diagnostic_delta
+        state["last_failure"] = last_failure
         if count >= 3:
             state["node"] = "BLOCKED"
             state["blocked_reason"] = f"[{failure_class}] {blocker_key}"
@@ -1049,6 +1262,7 @@ def record_failure(
             blocker_key=blocker_key,
             failure_class=failure_class,
             count=count,
+            diagnostic_delta=diagnostic_delta,
         )
         save_state(root, run_id, state)
         return state
@@ -1230,7 +1444,7 @@ def compact_state_receipt(root: Path, state: dict[str, Any], action: str) -> dic
     payload = json.dumps(state, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     verification = state.get("verification")
     review = state.get("review")
-    return {
+    receipt: dict[str, Any] = {
         "schema_version": 1,
         "kind": "patpat.run.mutation_receipt",
         "action": action,
@@ -1244,6 +1458,14 @@ def compact_state_receipt(root: Path, state: dict[str, Any], action: str) -> dic
         "blocked": state["node"] == "BLOCKED",
         "state_sha256": hashlib.sha256(payload).hexdigest(),
     }
+    last_failure = state.get("last_failure")
+    if (
+        action == "record:failure"
+        and isinstance(last_failure, dict)
+        and isinstance(last_failure.get("diagnostic_delta"), dict)
+    ):
+        receipt["diagnostic_delta"] = last_failure["diagnostic_delta"]
+    return receipt
 
 
 def print_state_result(root: Path, state: dict[str, Any], action: str, full: bool) -> None:
@@ -2491,6 +2713,283 @@ def run_self_test() -> bool:
         atomic_write_json(state_path(root, "main-run"), tampered)
         if not validation_errors(root, "main-run"):
             raise AssertionError("identity tamper was accepted")
+
+        # Trajectory journal append-only invariants and Diagnostic Delta generation
+        traj_run = "trajectory-delta-run"
+        initialize(root, traj_run, "Verify trajectory journal and diagnostic deltas", "owner", [], [], [], [])
+        traj_file = trajectory_path(root, traj_run)
+        if not traj_file.is_file():
+            raise AssertionError("initialize did not create trajectory.jsonl")
+        initial_traj_bytes = traj_file.read_bytes()
+        if not initial_traj_bytes.endswith(b"\n"):
+            raise AssertionError("trajectory.jsonl must end with a trailing newline")
+        initial_lines = [json.loads(line) for line in initial_traj_bytes.decode("utf-8").splitlines() if line.strip()]
+        if [item["sequence"] for item in initial_lines] != [1]:
+            raise AssertionError("trajectory.jsonl did not record initial sequence 1")
+
+        # Calling save_state without new events must not append duplicate lines
+        reloaded = load_state(root, traj_run)
+        save_state(root, traj_run, reloaded)
+        if traj_file.read_bytes() != initial_traj_bytes:
+            raise AssertionError("save_state appended duplicate events to trajectory.jsonl")
+
+        transition(root, traj_run, "INSPECT")
+        after_inspect_bytes = traj_file.read_bytes()
+        if not after_inspect_bytes.startswith(initial_traj_bytes):
+            raise AssertionError("trajectory.jsonl violated append-only prefix invariant")
+        after_inspect_lines = [json.loads(line) for line in after_inspect_bytes.decode("utf-8").splitlines() if line.strip()]
+        if [item["sequence"] for item in after_inspect_lines] != [1, 2]:
+            raise AssertionError("trajectory.jsonl did not append sequence 2 cleanly")
+
+        # Atomic failure on state.json must not append uncommitted event to trajectory.jsonl
+        original_replace = os.replace
+
+        def fail_replace_traj(source: str | bytes | Path, destination: str | bytes | Path) -> None:
+            del source, destination
+            raise OSError("simulated trajectory replace failure")
+
+        os.replace = fail_replace_traj
+        try:
+            try:
+                transition(root, traj_run, "PROOF_CONTRACT")
+            except RunStateError:
+                pass
+            else:
+                raise AssertionError("simulated save failure was accepted")
+        finally:
+            os.replace = original_replace
+        if traj_file.read_bytes() != after_inspect_bytes:
+            raise AssertionError("failed state save mutated trajectory.jsonl")
+
+        # Diagnostic Delta at count == 2 without proof receipt
+        first_fail = record_failure(root, traj_run, "Unit test exit 1", "unit-check", failure_class="implementation")
+        if "diagnostic_delta" in first_fail["last_failure"] or "diagnostic_delta" in first_fail["events"][-1]:
+            raise AssertionError("diagnostic_delta must not be attached on first failure")
+        second_fail = record_failure(root, traj_run, "Unit test exit 1 again", "unit-check", failure_class="implementation")
+        delta_no_receipt = second_fail["last_failure"].get("diagnostic_delta")
+        if not isinstance(delta_no_receipt, dict) or set(delta_no_receipt) != {
+            "expected",
+            "actual",
+            "changed",
+            "hypothesis",
+            "next",
+        }:
+            raise AssertionError("diagnostic_delta missing canonical 5 keys at count == 2 without receipt")
+        if not all(isinstance(val, str) and val for val in delta_no_receipt.values()):
+            raise AssertionError("diagnostic_delta values must be non-empty strings")
+        if second_fail["events"][-1].get("diagnostic_delta") != delta_no_receipt:
+            raise AssertionError("failure event omitted diagnostic_delta at count == 2")
+
+        # Diagnostic Delta at count == 2 with a failed patpat-proof-receipt/v1 containing 7 typed boolean diagnostics
+        proof_fixture_path = evidence_root.resolve() / "failed-proof-receipt.json"
+        proof_fixture = {
+            "schema": "patpat-proof-receipt/v1",
+            "verdict": "fail",
+            "passed": False,
+            "claim": "CLI exits 0 and prints OK",
+            "surface": "cli",
+            "action": {"command": "python3 tool.py", "exit_code": 2},
+            "expect": {"exit_code": 0, "stdout_contains": ["OK"]},
+            "diagnostics": {
+                "contract_syntax_valid": True,
+                "surface_accessible": True,
+                "execution_completed": True,
+                "exit_code_matched": False,
+                "stdout_invariants_satisfied": False,
+                "stderr_invariants_satisfied": True,
+                "cleanup_succeeded": True,
+            },
+            "failing_diagnostics": ["exit_code_matched", "stdout_invariants_satisfied"],
+            "remediation_hint": "Fix exit code 2 and emit OK on stdout before retrying",
+            "errors": ["exit_code mismatch: expected 0, got 2"],
+        }
+        proof_fixture_path.write_text(json.dumps(proof_fixture, indent=2), encoding="utf-8")
+
+        delta_run = "diagnostic-delta-receipt-run"
+        initialize(root, delta_run, "Verify proof receipt delta extraction", "owner", [], [], [], [])
+        transition(root, delta_run, "INSPECT")
+        record_failure(root, delta_run, "Initial proof failure", "cli-smoke", failure_class="implementation")
+        before_bad_receipt = state_path(root, delta_run).read_bytes()
+        before_bad_traj = trajectory_path(root, delta_run).read_bytes()
+        try:
+            record_failure(
+                root,
+                delta_run,
+                "Missing receipt",
+                "cli-smoke",
+                failure_class="implementation",
+                proof_receipt_path=evidence_root.resolve() / "missing-proof.json",
+            )
+        except RunStateError:
+            pass
+        else:
+            raise AssertionError("missing proof_receipt_path was accepted")
+        if (
+            state_path(root, delta_run).read_bytes() != before_bad_receipt
+            or trajectory_path(root, delta_run).read_bytes() != before_bad_traj
+        ):
+            raise AssertionError("invalid proof receipt modified state or trajectory")
+        cli_stdout = io.StringIO()
+        with contextlib.redirect_stdout(cli_stdout):
+            exit_cli = main([
+                "record",
+                "--root",
+                str(root),
+                "--run-id",
+                delta_run,
+                "--kind",
+                "failure",
+                "--summary",
+                "Second proof failure",
+                "--blocker-key",
+                "cli-smoke",
+                "--failure-class",
+                "implementation",
+                "--proof-receipt",
+                str(proof_fixture_path),
+            ])
+        if exit_cli != 0:
+            raise AssertionError("CLI record --kind failure --proof-receipt failed")
+        cli_payload = json.loads(cli_stdout.getvalue())
+        delta_state = load_state(root, delta_run)
+        delta_with_receipt = delta_state["last_failure"].get("diagnostic_delta")
+        if not isinstance(delta_with_receipt, dict) or set(delta_with_receipt) != {
+            "expected",
+            "actual",
+            "changed",
+            "hypothesis",
+            "next",
+        }:
+            raise AssertionError("diagnostic_delta missing canonical 5 keys with proof receipt")
+        if (
+            "exit_code_matched" not in delta_with_receipt["actual"]
+            or "stdout_invariants_satisfied" not in delta_with_receipt["actual"]
+        ):
+            raise AssertionError("diagnostic_delta actual omitted failing boolean diagnostic flags")
+        if "Fix exit code 2 and emit OK on stdout before retrying" not in delta_with_receipt["next"]:
+            raise AssertionError("diagnostic_delta next omitted remediation_hint")
+        if cli_payload.get("diagnostic_delta") != delta_with_receipt:
+            raise AssertionError("CLI failure output omitted diagnostic_delta")
+        compact_failure = compact_state_receipt(root, delta_state, "record:failure")
+        if compact_failure.get("diagnostic_delta") != delta_with_receipt:
+            raise AssertionError("compact failure receipt omitted diagnostic_delta")
+
+        final_traj_lines = [
+            json.loads(line)
+            for line in trajectory_path(root, delta_run).read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        if [item["sequence"] for item in final_traj_lines] != list(range(1, delta_state["sequence"] + 1)):
+            raise AssertionError("trajectory.jsonl sequence did not match state events")
+        if final_traj_lines[-1].get("diagnostic_delta") != delta_with_receipt:
+            raise AssertionError("trajectory.jsonl failure event omitted diagnostic_delta")
+
+        # Targeted failing_diagnostics must not inflate from all-False diagnostics dict
+        targeted_receipt = {
+            "schema": "patpat-proof-receipt/v1",
+            "claim": "Lint check passes",
+            "diagnostics": {
+                "command_found": False,
+                "exit_code_matched": False,
+                "stdout_matched": False,
+                "stderr_clean": False,
+                "files_exist": False,
+                "content_matched": False,
+                "output_clean": False,
+            },
+            "failing_diagnostics": ["exit_code_matched"],
+            "errors": ["command exited with 2"],
+            "remediation_hint": "Fix lint violations before retrying",
+        }
+        targeted_delta = format_diagnostic_delta(
+            "Lint check failed",
+            "lint-gate",
+            "implementation",
+            proof_receipt=targeted_receipt,
+        )
+        if "failing_diagnostics=[exit_code_matched]" not in targeted_delta["actual"]:
+            raise AssertionError("targeted failing_diagnostics flag missing from diagnostic_delta actual")
+        for non_failing_flag in ("command_found", "stdout_matched", "files_exist"):
+            if non_failing_flag in targeted_delta["actual"]:
+                raise AssertionError(
+                    f"non-targeted diagnostics flag {non_failing_flag} leaked into diagnostic_delta actual"
+                )
+
+        # Empty failing_diagnostics with non-empty errors must preserve error details
+        error_only_receipt = {
+            "schema": "patpat-proof-receipt/v1",
+            "claim": "Timed command completes",
+            "diagnostics": {"command_found": False, "exit_code_matched": False},
+            "failing_diagnostics": [],
+            "errors": ["timed out after 30s"],
+        }
+        error_only_delta = format_diagnostic_delta(
+            "Command timed out",
+            "timeout-gate",
+            "implementation",
+            proof_receipt=error_only_receipt,
+        )
+        if "failing_diagnostics=[" in error_only_delta["actual"]:
+            raise AssertionError("empty failing_diagnostics emitted empty diagnostic flag list")
+        if "failure_class=implementation" not in error_only_delta["actual"]:
+            raise AssertionError("failure_class omitted when failing_diagnostics is empty")
+        if "errors=timed out after 30s" not in error_only_delta["actual"]:
+            raise AssertionError("proof_receipt errors dropped when failing_diagnostics is empty")
+
+        # Trajectory pre-check and rollback when _append_trajectory_events fails
+        rollback_run = "trajectory-rollback-run"
+        initialize(root, rollback_run, "Verify trajectory rollback", "owner", [], [], [], [])
+        stable_state_bytes = state_path(root, rollback_run).read_bytes()
+        stable_traj_bytes = trajectory_path(root, rollback_run).read_bytes()
+        original_append = _append_trajectory_events
+
+        def fail_append_traj(target_root: Path, target_run: str, events: list[dict[str, Any]]) -> None:
+            del target_root, target_run, events
+            raise OSError("simulated trajectory append failure")
+
+        current_module = sys.modules[__name__]
+        setattr(current_module, "_append_trajectory_events", fail_append_traj)
+        try:
+            try:
+                transition(root, rollback_run, "INSPECT")
+            except RunStateError:
+                pass
+            else:
+                raise AssertionError("transition succeeded when trajectory append failed")
+            if state_path(root, rollback_run).read_bytes() != stable_state_bytes:
+                raise AssertionError("state.json was not rolled back after trajectory append failure")
+            if trajectory_path(root, rollback_run).read_bytes() != stable_traj_bytes:
+                raise AssertionError("trajectory.jsonl changed after failed append")
+
+            try:
+                initialize(root, "fresh-rollback-run", "Should roll back state.json", "owner", [], [], [], [])
+            except RunStateError:
+                pass
+            else:
+                raise AssertionError("initialize succeeded when trajectory append failed")
+            if state_path(root, "fresh-rollback-run").exists():
+                raise AssertionError("failed initialize left orphaned state.json after trajectory append error")
+        finally:
+            setattr(current_module, "_append_trajectory_events", original_append)
+
+        # Invalid trajectory path type must abort before mutating existing state.json
+        dir_traj_run = "dir-traj-run"
+        initialize(root, dir_traj_run, "Verify trajectory path validation", "owner", [], [], [], [])
+        pre_dir_state = state_path(root, dir_traj_run).read_bytes()
+        trajectory_path(root, dir_traj_run).unlink()
+        trajectory_path(root, dir_traj_run).mkdir()
+        try:
+            try:
+                transition(root, dir_traj_run, "INSPECT")
+            except RunStateError:
+                pass
+            else:
+                raise AssertionError("transition succeeded with directory at trajectory.jsonl")
+            if state_path(root, dir_traj_run).read_bytes() != pre_dir_state:
+                raise AssertionError("state.json was mutated despite invalid trajectory path")
+        finally:
+            trajectory_path(root, dir_traj_run).rmdir()
+
         return symlink_supported
 
 
@@ -2546,6 +3045,7 @@ def build_parser() -> argparse.ArgumentParser:
             command_parser.add_argument(
                 "--failure-class", choices=("implementation", "verifier", "environment")
             )
+            command_parser.add_argument("--proof-receipt", type=Path)
             command_parser.add_argument("--claim")
             command_parser.add_argument("--surface")
             command_parser.add_argument("--action")
@@ -2562,9 +3062,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.self_test:
         symlink_checks_passed = run_self_test()
         symlink_status = "passed" if symlink_checks_passed else "skipped (creation unsupported)"
@@ -2650,6 +3150,7 @@ def main() -> int:
                     args.summary,
                     args.blocker_key,
                     failure_class=args.failure_class or "implementation",
+                    proof_receipt_path=args.proof_receipt,
                 )
             else:
                 if not args.summary:

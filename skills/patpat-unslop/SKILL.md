@@ -63,6 +63,10 @@ Review engineering documentation, PR text, and code diffs for artificial writing
 19. **Preserve high-value invariants and cut structural code inflation.** Actively keep comments that document non-obvious *Why*, domain invariants, concurrency/reentrancy fences, upstream library bug workarounds (citing issue URLs or RFCs), or required legal notices. Strip structural code bloat: single-caller pass-through wrapper functions, silent broad exception swallowing (`except Exception: pass`), speculative fallback flags not required by the proof contract, and duplicate helpers that re-implement existing repository or standard-library primitives.
 20. **Anti-reward-hacking and verifier integrity.** Reject test-skipping annotations (`@pytest.mark.skip`, `@unittest.skip`, `test.skip(`, `it.skip(`, `[Fact(Skip=...)]`), warning or linter suppressions (`#pragma warning disable`, `// eslint-disable`, `# noqa`, `// @ts-ignore`), and arbitrary sleep delays (`time.sleep(`, `Task.Delay(`) introduced to force green builds. An agent must fix the underlying defect, not silence the oracle.
 
+## Deterministic AST and comment check
+
+Run [`scripts/unslop_ast_check.py`](scripts/unslop_ast_check.py) for deterministic AST and comment checking across Rules 12/16 (`ai-conversational-slop`), 19 (`broad-exception-swallowing`, `single-caller-wrapper`), and 20 (`test-skipping-annotation`, `test-skipping-call`, `linter-suppression`), supporting whole paths and `--diff` line filtering.
+
 ## Mutation boundary
 
 Remain read-only with respect to repository implementation and external delivery. Limit incidental verifier artifacts to the declared proof contract, clean them up, and hand any authorized mutation back to `patpat-loop`.

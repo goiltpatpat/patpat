@@ -2076,13 +2076,29 @@ def copy_self_test_source(source_root: Path, destination: Path) -> None:
     if listing.returncode != 0:
         raise RuntimeError(f"git could not inventory the source tree: {listing.stderr.decode(errors='replace')}")
 
+    deleted_listing = subprocess.run(
+        ["git", "ls-files", "--deleted", "-z"],
+        cwd=source_root,
+        check=False,
+        capture_output=True,
+    )
+    if deleted_listing.returncode != 0:
+        raise RuntimeError(
+            f"git could not inventory deleted files: {deleted_listing.stderr.decode(errors='replace')}"
+        )
+    deleted_paths = {
+        Path(os.fsdecode(raw_path))
+        for raw_path in deleted_listing.stdout.split(b"\0")
+        if raw_path
+    }
+
     for raw_path in listing.stdout.split(b"\0"):
         if not raw_path:
             continue
         relative = Path(os.fsdecode(raw_path))
         if relative.is_absolute() or ".." in relative.parts:
             raise RuntimeError(f"git returned a path outside the source tree: {relative}")
-        if is_ignored_self_test_path(relative):
+        if relative in deleted_paths or is_ignored_self_test_path(relative):
             continue
         source = source_root / relative
         target = destination / relative

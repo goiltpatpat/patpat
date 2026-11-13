@@ -975,10 +975,6 @@ def discover_defects_from_diff(diff: str) -> list[dict[str, str]]:
         if is_doc:
             continue
 
-        # Skip self-testing harness lines that define checks or test inputs
-        if stripped.startswith(('cheat_diff =', 'swallowed_diff =')):
-            continue
-
         # 2. Epistemic angle: mock-only assertion substituted for authoritative verification
         if (
             re.search(r"\bassert\s+\w*mock\w*\.called\b", line)
@@ -999,7 +995,7 @@ def discover_defects_from_diff(diff: str) -> list[dict[str, str]]:
             })
 
         # 4. Anti-slop / maintainability angle: silent broad exception swallowing
-        if re.search(r"^\s*except\s+(?:Exception|BaseException)\s*:\s*pass\b", line):
+        if SILENT_EXCEPT_RE.search(line):
             findings.append({
                 "angle": "anti-slop",
                 "severity": "medium",
@@ -1007,7 +1003,7 @@ def discover_defects_from_diff(diff: str) -> list[dict[str, str]]:
             })
 
         # 5. Anti-cheat / Reward-hacking angle: test skipping bypass
-        if re.search(r"(?:@pytest\.mark\.skip|@unittest\.skip|\btest\.skip\(|\bit\.skip\(|\[Fact\(Skip=)", line):
+        if TEST_SKIP_RE.search(line):
             findings.append({
                 "angle": "anti-cheat",
                 "severity": "blocker",
@@ -1015,7 +1011,7 @@ def discover_defects_from_diff(diff: str) -> list[dict[str, str]]:
             })
 
         # 6. Anti-cheat / Reward-hacking angle: warning & linter suppression
-        if re.search(r"(?:#pragma\s+warning\s+disable|//\s*eslint-disable|#\s*noqa\b|//\s*@ts-ignore|//\s*@ts-nocheck)", line):
+        if SUPPRESSION_RE.search(line):
             findings.append({
                 "angle": "anti-cheat",
                 "severity": "high",
@@ -1065,6 +1061,10 @@ def interrogate_audit(
     }
 
 
+SILENT_EXCEPT_RE = re.compile(r"^\s*except\s+(?:Exception|BaseException)\s*:\s*pass\b", re.MULTILINE)
+TEST_SKIP_RE = re.compile(r"(?:@pytest\.mark\.skip|@unittest\.skip|\btest\.skip\(|\bit\.skip\(|\[Fact\(Skip=)")
+SUPPRESSION_RE = re.compile(r"(?:#pragma\s+warning\s+disable|//\s*eslint-disable|#\s*noqa\b|//\s*@ts-ignore|//\s*@ts-nocheck)")
+
 BANNED_AI_STEMS = (
     ("additionally", r"\badditionally\b"),
     ("crucial", r"\bcrucial\b"),
@@ -1094,11 +1094,11 @@ def unslop_lint(text: str) -> dict[str, object]:
         violations.append("em-dash-overuse")
     if re.search(r"#.*(?:crucial|delv|highlight|robust implementation)", text, re.IGNORECASE):
         violations.append("narrative-code-comment")
-    if re.search(r"(?:^|\n)\s*except\s+(?:Exception|BaseException)\s*:\s*pass\b", text):
+    if SILENT_EXCEPT_RE.search(text):
         violations.append("silent-exception-swallowing")
-    if re.search(r"(?:@pytest\.mark\.skip|@unittest\.skip|\btest\.skip\(|\bit\.skip\(|\[Fact\(Skip=)", text):
+    if TEST_SKIP_RE.search(text):
         violations.append("test-skipping-bypass")
-    if re.search(r"(?:#pragma\s+warning\s+disable|//\s*eslint-disable|#\s*noqa\b|//\s*@ts-ignore|//\s*@ts-nocheck)", text):
+    if SUPPRESSION_RE.search(text):
         violations.append("linter-warning-suppression")
     return {
         "clean": len(violations) == 0,

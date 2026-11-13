@@ -56,6 +56,8 @@ Independent review remains required before default ship, land or merge, durable-
 
 Confirm the target exists when possible. Prefer deterministic reads before writes. Do not guess paths or host homes. Retry only with new evidence. Never claim success from a tool attempt alone.
 
+When inspecting or refactoring across multiple files in a shell-capable environment, prefer one atomic standard-library Python 3 script over sequential multi-turn file read and edit round-trips. Filter noisy command or test logs at the source rather than dumping raw output into context.
+
 ## Skill state and mutation gate
 
 Each skill declares a Patpat-owned ontology string in `metadata.patpat.ontology`. Treat it as a compact routing hint, not proof, permission, or runtime enforcement.
