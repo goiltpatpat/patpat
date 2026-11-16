@@ -64,6 +64,7 @@ jobs:
           python3 skills/patpat-learn/scripts/verify_corrections.py --self-test
           python3 skills/patpat-learn/scripts/verify_corrections.py --root .
           python3 scripts/check_attribution.py --self-test
+          python3 scripts/worktree_audit.py --self-test
           python3 scripts/context_footprint.py --self-test
           python3 skills/patpat-verify/scripts/eval_proof_contract.py --self-test
           python3 skills/patpat-unslop/scripts/unslop_ast_check.py --self-test
@@ -182,6 +183,8 @@ jobs:
           python skills/patpat-verify/scripts/eval_proof_contract.py --self-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python skills/patpat-unslop/scripts/unslop_ast_check.py --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/worktree_audit.py --self-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Set up Node

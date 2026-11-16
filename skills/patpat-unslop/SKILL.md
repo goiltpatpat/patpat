@@ -56,7 +56,7 @@ Review engineering documentation, PR text, and code diffs for artificial writing
 
 ### Code and Comment Discipline
 
-15. **Redundant code paraphrasing.** Delete comments that merely restate what code identifiers, types, and logic already express (e.g., `// set active to true` or `// loop over items`). Code must communicate *how*; comments exist only to communicate *why* or non-obvious constraints.
+15. **Redundant code paraphrasing and compensating comments.** Delete comments that merely restate what code identifiers, types, and logic already express (e.g., `// set active to true` or `// loop over items`). Code must communicate *how*; comments exist only to communicate *why* or non-obvious constraints. **MUST KILL / refactor flag:** when a comment only exists to explain an unclear symbol name or tangled control flow, do not keep the comment—rename the symbol or extract/simplify the control flow so the code is self-explanatory.
 16. **Dead code and historical commentary.** Eliminate commented-out blocks of code, obsolete workarounds, and conversational apologies (e.g., `// hack: fix later`). Git tracks history; active source files must contain only living, executable code.
 17. **Decorative comment dividers.** Remove ASCII banners, delimiter lines (`// ====================`), and sectional boxes. Use blank lines and modular file organization instead.
 18. **Orphaned TODOs.** Remove unanchored, vague `TODO` comments without an owner, issue link, or immediate actionable condition.
