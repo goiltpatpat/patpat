@@ -41,6 +41,10 @@ For work outside a durable `patpat-run`, execute the authoritative check in the 
 7. Inspect the final diff and version-control state for unrelated changes.
 8. Record the command or action, observed result, cleanup, and limitation for each material claim; do not mark the whole request verified with uncovered outcomes.
 
+### Runtime isolation
+
+When verifying live servers, browsers, or databases, bind isolated ports, use temporary data and profile directories (`mktemp`), and keep all runtime state ephemeral. Never reuse default user ports, shared browser profiles, or persistent databases so parallel workers and verification runs never clobber live user sessions. Clean up all temporary processes and directories afterward.
+
 For every test or evaluator used as evidence, apply the behavioral oracle from [proof over proxy](../patpat-loop/principles/proof-over-proxy.md). A mock-call assertion, copied constant, self-referential expected value, or fixture-only agreement cannot prove user-observed behavior; use a concrete input and observed output/effect. If a behavioral claim has no observable oracle, report `INCONCLUSIVE`; use static evidence only for requirements that are static from the outset.
 
 ## Claim-adaptive verification and proxy rejection

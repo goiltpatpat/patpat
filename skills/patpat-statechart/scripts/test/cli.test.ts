@@ -9,6 +9,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { plainText } from "../backends/plain-text.ts";
 import { readMessages } from "../frontends/messages.ts";
+import { drawn } from "./drawn.ts";
 import { tempDir } from "./tmp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -889,18 +890,6 @@ test("a view with a group in a theme color draws that color and names the group 
   assert.match(chart, new RegExp(`^ {2}class ${legend} teal$`, "m"));
 });
 
-const shown = (text: string) => text.replace(/#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)));
-
-const drawn = (chart: string) => {
-  const names = new Map<string, string>();
-  for (const m of chart.matchAll(/^ *(?:state "(.*)" as (s\d+) \{|(s\d+): (.*))$/gm))
-    names.set(m[2] ?? m[3], shown(m[1] ?? m[4]));
-  const arrows: string[] = [];
-  for (const [, from, to, text] of chart.matchAll(/^ *(s\d+) --> (s\d+): (.*)$/gm))
-    arrows.push(`${names.get(from)} --> ${names.get(to)}: ${shown(text)}`);
-  return { states: [...names.values()], arrows };
-};
-
 const byX = (labels: unknown[]) => `export const state = (v) => ${JSON.stringify(labels)}[v.x];\n`;
 
 const fanOut = (n: number) => {
@@ -934,7 +923,7 @@ for (const [what, c] of [
       view: byX([["a\0b"], ["a", "b"], ["c"], ["d"]]),
       status: 0,
       states: ["ab", "a", "b", "c", "d"],
-      arrows: ["ab --> b: Inc", "b --> c: Inc", "c --> d: Inc"],
+      arrows: ["a start --> b", "ab --> a: Inc", "b --> c: Inc", "c --> d: Inc"],
       says: /^TLC reached 4 states and 3 steps\. The chart draws 4 states and 3 arrows\.$/m,
     },
   ],
@@ -950,7 +939,14 @@ for (const [what, c] of [
       ]),
       status: 0,
       states: ["R f", "S p", "R ab", "S q", "R a", "R b", "S r"],
-      arrows: ["S p --> S q: Inc", "S p --> S r: Inc"],
+      arrows: [
+        "R f start --> S p",
+        "R ab start --> S q",
+        "R b start --> S r",
+        "R a start --> R b",
+        "S p --> R ab: Inc",
+        "S p --> R a: Inc",
+      ],
       says: /^The regions chart lets R f, S p go to R a\0b, S r by Inc, which the model never does\. So the chart draws parent states in place of regions\.$/m,
     },
   ],
@@ -972,7 +968,7 @@ for (const [what, c] of [
       view: byX([["a\u0001b"], ["a", "b"], ["c"], ["d"]]),
       status: 0,
       states: ["a\u0001b", "a", "b", "c", "d"],
-      arrows: ["a\u0001b --> b: Inc", "b --> c: Inc", "c --> d: Inc"],
+      arrows: ["a start --> b", "a\u0001b --> a: Inc", "b --> c: Inc", "c --> d: Inc"],
       says: /^TLC reached 4 states and 3 steps\. The chart draws 4 states and 3 arrows\.$/m,
     },
   ],
@@ -1010,7 +1006,7 @@ for (const [what, c] of [
       view: byX([["a"], ["P", "b\u0002c"], ["d"], ["e"]]),
       status: 1,
       states: ["a", "P", "b\u0002c", "d", "e"],
-      arrows: ["a --> b\u0002c: Next", "b\u0002c --> d: Next", "d --> e: Next"],
+      arrows: ["P start --> b\u0002c", "a --> P: Next", "b\u0002c --> d: Next", "d --> e: Next"],
       says: /^## NotOne breaks\nThe shortest path has 1 step:\n0\. a\n1\. Next: P \/ b\cBc$/m,
     },
   ],
@@ -1047,10 +1043,15 @@ for (const [what, c] of [
       status: 0,
       states: ["R f", "S p", "R a", "S r", "R b", "S q", "R X\u0003a", "S q", "R X\u0003b", "S r"],
       arrows: [
-        "S p --> S r: Go\u0003X",
-        "S p --> S q: Go\u0003X",
-        "S p --> S q: Go",
-        "S p --> S r: Go",
+        "R f start --> S p",
+        "R a start --> S r",
+        "R b start --> S q",
+        "R X\u0003a start --> S q",
+        "R X\u0003b start --> S r",
+        "S p --> R a: Go\u0003X",
+        "S p --> R b: Go\u0003X",
+        "S p --> R X\u0003a: Go",
+        "S p --> R X\u0003b: Go",
       ],
       says: /^The regions chart lets R f, S p go to R a, S q by Go\cCX, which the model never does\. So the chart draws parent states in place of regions\.$/m,
     },
@@ -1133,7 +1134,7 @@ for (const [what, make, words] of [
     "the folder of an earlier run",
     (out) =>
       assert.equal(run(path.join(corpus, "MediaPlayerProps"), { args: ["--out", out] }).status, 1),
-    /is not empty\. It has chart\.mmd\./,
+    /is not empty\. It has chart\.html\./,
   ],
   [
     "a file",
@@ -1183,7 +1184,7 @@ test("an empty --out folder gets the chart and the report", () => {
   const r = run(path.join(corpus, "Login"), { args: ["--out", out] });
   assert.equal(r.stderr, "");
   assert.equal(read(path.join(out, "report.md")), read(path.join(corpus, "Login", "report.md")));
-  assert.deepEqual(fs.readdirSync(out).sort(), ["chart.mmd", "report.md", "tlc.out"]);
+  assert.deepEqual(fs.readdirSync(out).sort(), ["chart.html", "chart.mmd", "chart.svg", "report.md", "tlc.out"]);
 });
 
 for (const [what, config, words] of [

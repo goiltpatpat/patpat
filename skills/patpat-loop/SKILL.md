@@ -11,114 +11,106 @@ metadata:
 
 Before following this skill, apply the [skill state and mutation gate](references/operating-protocol.md#skill-state-and-mutation-gate).
 
-[`/patpat`](../patpat/SKILL.md) and `/patpat-loop` are the same entry point. Codex uses `$patpat` or `$patpat-loop`.
+[`/patpat`](../patpat/SKILL.md) and `/patpat-loop` are the same entry point (Codex: `$patpat` / `$patpat-loop`).
 
-Patpat is one system. The [operating protocol](references/operating-protocol.md) is the spine: judgment, safety, git, and evidence. Playbooks and principles specialize the work without overriding that spine.
+Patpat is one system: [operating protocol](references/operating-protocol.md) is the spine (judgment, safety, git, evidence); playbooks and principles specialize without overriding it.
 
-This mode stays on across later turns after explicit invocation. Trusted host hooks may persist it across resume and compaction. Without a host-observed receipt, apply it only for the current session and report `current-turn-only` after a restart. Say `disable /patpat` to opt out. Do not infer activation from a task that merely resembles a playbook.
+Explicit invocation stays on across turns in the session (host hooks may persist across resume/compaction; without a host receipt, report `current-turn-only` after restart). Say `disable /patpat` to opt out; never infer activation from task similarity.
 
-For non-engineering work, follow [general task judgment](references/general-task-judgment.md) with applicable domain skills. If the task does not affect an engineering or repository boundary, complete and report that work without entering the engineering routing, Git delivery, or durable engineering graph below; the current directory alone does not determine the task type. For mixed work, apply general task judgment to each relevant deliverable and the engineering routes and gates below to every affected engineering or repository boundary. A media file in a repository still needs media-specific verification; its repository mutation also retains repository proof and safety gates.
+For non-engineering work, follow [general task judgment](references/general-task-judgment.md) with domain skills without entering engineering routing, Git delivery, or the durable graph unless an engineering or repo boundary is affected. Mixed work applies engineering gates to affected repo boundaries (repo media still needs media-specific verify plus repo gates).
 
 ## Start
 
-Classify the task first from signals: reversibility, uncertainty, blast radius, auth, security, billing, secrets, architecture, cross-cutting, duration, delivery intent, and parallelism need. First activation is context, not a risk signal. First activation alone must not force a full protocol read.
-
-Scale start from that classification:
+Classify from signals: reversibility, uncertainty, blast radius, auth, security, billing, secrets, architecture, cross-cutting, duration, delivery intent, and parallelism. First activation alone must not force a full protocol read.
 
 | Internal routing shape | Positive signals | Execution |
 | --- | --- | --- |
-| 0, fast-track | One clearly scoped, reversible, non-behavioral artifact; no contract, runtime, security, permission, migration, or delivery effect | Begin with the cheapest useful observation. Read only the matched playbook and principles. Make the bounded change and run the narrowest authoritative static check. Do not open a mandatory todo list or require a numbered checklist. |
-| 1, bounded | Clear localized behavior or defect with a small understood caller set and no high-risk boundary | Use the matched change or debug route, the 5-field proof contract, and targeted behavioral verification. |
-| 2, design-gated | Any ambiguity, architecture, schema, migration, public contract, auth, security, billing, secret, cross-cutting behavior, or unresolved multi-step dependency | Resolve the design boundary through `patpat-architect`; use fuller protocol and verification checkpoints before mutation. Use `patpat-run` when the work is durable, dependent, or resumable. |
+| 0, fast-track | One clearly scoped, reversible, non-behavioral artifact; no contract, runtime, security, permission, migration, or delivery effect | Cheapest useful observation; read only matched playbook and principles; bounded edit + narrowest authoritative static check. Do not open a mandatory todo list or require a numbered checklist. |
+| 1, bounded | Clear localized behavior or defect, small understood caller set, no high-risk boundary | Matched change or debug route, 5-field proof contract, targeted behavioral verification. |
+| 2, design-gated | Ambiguity, architecture, schema, migration, public contract, auth/security/billing/secret, cross-cutting behavior, or unresolved multi-step dependency | Resolve design via `patpat-architect` first; fuller protocol and checkpoints before edit. Use `patpat-run` when durable, dependent, or resumable. |
 
-Observable Shape 2 triggers: adding, removing, swapping, or major-bumping a direct runtime dependency, SDK, or external service or model provider (a lockfile-only refresh is not one); changing auth, permission, secret, or billing paths; changing a persisted schema or public contract; and changing CI workflow, release, or deploy definitions. When one fires, the task is design-gated even if the request reads as a small fix.
+Shape 2 triggers (even on small fixes): adding, removing, swapping, or major-bumping a direct runtime dependency, SDK, or external service/provider (excluding lockfile-only refreshes); changing auth, permission, secret, or billing paths; changing persisted schema or public contract; changing CI, release, or deploy definitions.
 
-These are internal routing shapes, not user-selectable modes. File count is weak evidence after callers and contracts are inspected: one security-sensitive file is design-gated, while several independent prose-only files may remain fast-track. Any Tier 2 signal overrides lower-tier hints. A clear delivery or other external effect uses its existing specialist route and fuller authority gates; externality alone does not imply `patpat-architect`. Mutating work in every shape still defines the 5-field proof contract before editing and verifies on the authoritative surface.
+These are internal routing shapes, not user-selectable modes. File count is weak evidence after callers and contracts are inspected: one security-sensitive file is design-gated, while several prose-only files may stay fast-track. Any Tier 2 signal overrides lower-tier hints. Delivery or external effects use their specialist route and fuller authority gates; externality alone does not imply `patpat-architect`. Every mutating shape still defines the 5-field proof contract before editing and verifies on the authoritative surface.
 
-Inspect, execute, or measure before asking. Ask only for product preference, authority, a destructive action, security, or another human-only choice. Do not expose named user-selectable modes.
+Inspect, execute, or measure before asking; ask only for product preference, authority, destructive action, security, or human-only choices. Do not expose named user-selectable modes.
 
 ## Principle index
 
-Read the linked file when the trigger fires. Cite a principle only when it changed a decision, using the lightweight decision format: `[Principle Name] -> [Concrete decision or architectural choice made based on it]`. Do not name-drop principles without an altered choice.
+Read when triggered; cite only when a principle changed a concrete choice (`[Principle Name] -> [Decision]`):
 
-- [Repository truth](principles/repository-truth.md) before deciding. Inspect live evidence. Do not prefer assumptions.
-- [Smallest safe change](principles/smallest-safe-change.md) when sizing a diff. Delete, reuse, then patch. Keep comments only for constraints the code cannot show.
-- [Shape before logic](principles/shape-before-logic.md) before writing behavior. Name legal states first. Make illegal combinations unrepresentable.
-- [Boundary discipline](principles/boundary-discipline.md) at CLI, config, network, and auth edges. Guard the boundary. Trust internal types.
-- [Preserve safety](principles/preserve-safety.md) on any auth, permission, billing, secret, or destructive path. Simplicity must not weaken a gate.
-- [Proof over proxy](principles/proof-over-proxy.md) before claiming done. Observe the authoritative surface, including the real subject path for tests and evaluators.
-- [Explain the number](principles/explain-the-number.md) before trusting a metric. Name the limiter and rule out proxy artifacts.
-- [Fix root causes](principles/fix-root-causes.md) on defects. Reproduce when safe and practical; otherwise trace without triggering harm. Do not silence a crash with a nil check. After two fixes sharing one premise fail the same gate, write and test that premise before adding another fix.
-- [Sequence verifiable units](principles/sequence-verifiable-units.md) on multi-step work. A verifiable unit is not a throwaway compatibility layer. Build a rerunnable tool after the first proven manual unit.
-- [Idempotent effects](principles/idempotent-effects.md) on retries, installs, and lifecycle steps.
-- [Encode lessons](principles/encode-lessons.md) only for recurring failures, at the earliest enforceable boundary.
-- [Earned parallelism](principles/earned-parallelism.md) before any writable fan-out. Default to one owner.
-- [Subtract before you add](principles/subtract-before-you-add.md) before expanding footprint. Delete, simplify, or refactor existing paths before introducing new files or abstractions.
-- [Experience first](principles/experience-first.md) when designing interactions. Shape contracts, errors, and CLI ergonomics around the consumer, not internal convenience.
-- [Minimize reader load](principles/minimize-reader-load.md) on code and diffs. Keep control flow linear, names domain-accurate, and structural indirection minimal.
-- [Guard the context window](principles/guard-the-context-window.md) across tool calls. Filter and compact evidence at the source; never dump raw, noisy logs into context.
-- [Attack the premise](principles/attack-the-premise.md) when complexity cascades. Question upstream assumptions before nursing brittle workarounds.
-- [Redesign from first principles](principles/redesign-from-first-principles.md) when constraints choke progress. Rebuild the essential invariant cleanly from platform primitives.
+- [Repository truth](principles/repository-truth.md): inspect live evidence over assumptions.
+- [Smallest safe change](principles/smallest-safe-change.md): delete, reuse, then patch; comment only non-obvious constraints.
+- [Shape before logic](principles/shape-before-logic.md): name legal states first; make illegal states unrepresentable.
+- [Boundary discipline](principles/boundary-discipline.md): guard CLI, config, network, and auth edges; trust internal types.
+- [Preserve safety](principles/preserve-safety.md): never weaken auth, permission, billing, secret, or destructive gates.
+- [Proof over proxy](principles/proof-over-proxy.md): verify on the authoritative surface, including the real subject path.
+- [Explain the number](principles/explain-the-number.md): name the metric limiter and rule out proxy artifacts.
+- [Fix root causes](principles/fix-root-causes.md): reproduce/trace safely, never silence crashes with nil checks; after two failed fixes sharing one premise, write and test that premise first.
+- [Sequence verifiable units](principles/sequence-verifiable-units.md): build a rerunnable tool after the first proven manual unit; no throwaway shims.
+- [Idempotent effects](principles/idempotent-effects.md): make retries, installs, and lifecycle steps safe to re-run.
+- [Encode lessons](principles/encode-lessons.md): encode only recurring failures, at the earliest enforceable boundary.
+- [Earned parallelism](principles/earned-parallelism.md): default to one owner; require real isolation before writable fan-out.
+- [Subtract before you add](principles/subtract-before-you-add.md): delete or simplify before adding files or abstractions.
+- [Experience first](principles/experience-first.md): design contracts, errors, and CLI ergonomics for the consumer.
+- [Minimize reader load](principles/minimize-reader-load.md): keep control flow linear, names domain-accurate, and indirection minimal.
+- [Guard the context window](principles/guard-the-context-window.md): filter and compact evidence at the source; never dump raw logs.
+- [Attack the premise](principles/attack-the-premise.md): question upstream assumptions when complexity cascades.
+- [Redesign from first principles](principles/redesign-from-first-principles.md): rebuild essential invariants cleanly when constraints choke progress.
 
 ## Route the work
 
-Before executing a specialist workflow, resolve its `metadata.patpat.ontology` against current evidence. Check required states, use only a unique eligible producer inside the user's authorized scope, preserve the mutation and approval gates, and verify any produced state. The [operating protocol](references/operating-protocol.md#skill-state-and-mutation-gate) defines the gate; for Shape 0 and Shape 1 local work without delivery intent, this inline gate summary and the Principle Index above satisfy the start check without loading the full operating protocol. Metadata is routing evidence, not authority.
+Before running a specialist, resolve its `metadata.patpat.ontology` against current evidence (required states, unique authorized producer, mutation/approval gates, post-condition verify). For Shape 0/1 local work without delivery intent, this summary and the Principle Index satisfy the start check without loading the full [operating protocol](references/operating-protocol.md#skill-state-and-mutation-gate). Metadata is routing evidence, not authority.
 
-Orchestrate through composition rather than duplication: `patpat-loop` coordinates workflow transitions and delegates to specialized skills (`patpat-architect`, `patpat-change`, `patpat-engineer`, `patpat-verify`, `patpat-review`, `patpat-unslop`, `patpat-ship`) rather than absorbing their logic into a monolithic God Skill. Specialist skills configured with `disable-model-invocation: true` are shielded from ambient host auto-triggering; compose them in an active Patpat session by reading the linked `SKILL.md`, since a host skill tool may refuse model invocation. On Claude Code, read the [Claude Code host map](references/host-claude-code.md) once per session.
+Compose specialists (`patpat-architect`, `patpat-change`, `patpat-engineer`, `patpat-verify`, `patpat-review`, `patpat-unslop`, `patpat-ship`) rather than inlining their logic; for `disable-model-invocation: true` skills, read their `SKILL.md` directly in an active session. On Claude Code, read [Claude Code host map](references/host-claude-code.md) once per session.
 
-The user speaks plainly and invokes `/patpat` (or host equivalent). Select the route for the earliest unresolved decision found during inspection; an implementation request does not settle an undefined requirement or contract. Use the 8 existing primary routes:
+Select the route for the earliest unresolved decision found during inspection:
 
 | Intent | Route | Primary Skill | Playbook Reference |
 | --- | --- | --- | --- |
-| Read-only question, audit, repository understanding, or diagnosis-only defect | `inspect` | [`patpat-inspect`](../patpat-inspect/SKILL.md) | [Investigation](playbooks/investigation.md) |
+| Read-only question, audit, repo understanding, or diagnosis-only defect | `inspect` | [`patpat-inspect`](../patpat-inspect/SKILL.md) | [Investigation](playbooks/investigation.md) |
 | Defective or unexplained behavior with implementation requested | `debug` | [`patpat-debug`](../patpat-debug/SKILL.md) | [Defect](playbooks/defect.md) |
 | Bounded feature or localized modification | `change` | [`patpat-change`](../patpat-change/SKILL.md) | [Bounded change](playbooks/bounded-change.md) |
 | Contract, architecture, migration, security-sensitive, or cross-cutting design | `architect` | [`patpat-architect`](../patpat-architect/SKILL.md) | [Architecture change](playbooks/architecture-change.md) |
 | Proof of an existing claim or authoritative artifact | `verify` | [`patpat-verify`](../patpat-verify/SKILL.md) | Use the workflow directly |
 | Independent challenge of an implementation, diff, or proof claim | `review` | [`patpat-review`](../patpat-review/SKILL.md) | [Independent review](playbooks/independent-review.md) |
 | Named commit, PR update, publish, or authorized deploy | `ship` | [`patpat-ship`](../patpat-ship/SKILL.md) | [Authorized delivery](playbooks/authorized-delivery.md) |
-| Durable multi-phase execution, implementation or coordination across a PR queue/stack, or overnight run | `run` | [`patpat-run`](../patpat-run/SKILL.md) | [Multi-phase run](playbooks/multi-phase-run.md) |
+| Durable multi-phase execution, PR queue/stack, or overnight run | `run` | [`patpat-run`](../patpat-run/SKILL.md) | [Multi-phase run](playbooks/multi-phase-run.md) |
 
-Consult the [route catalog](references/route-catalog.md) for specialized workflows (`arena`, `swarm`, `automation`, `eval`, `formal verification`, `perf`, `learn`, explicit game-building requests, and idea, plan, or codebase diagram requests) or overlap. If no narrow route fits, use `patpat-architect` or `patpat-run`.
+Consult [route catalog](references/route-catalog.md) for specialized workflows (`arena`, `swarm`, `automation`, `eval`, `formal verification`, `perf`, `learn`, game-building, diagrams) or overlap; fallback to `patpat-architect` or `patpat-run`.
 
 ## Run the graph
 
-Read the matched workflow and relevant references. Read [the execution graph](references/execution-graph.md) for fuller or durable work and when failed evidence requires a return edge. Reuse unchanged instructions already loaded in this session. Re-classify each new task; a route whose playbook has not been read this session needs that playbook read, not recalled. For Shape 1 and Shape 2, copy the matched playbook's numbered steps into the host task list, in order and count, before task-specific items; a host that caps step length may shorten each step's wording but must not merge or drop steps; a step you do not run stays listed as `skip: <reason>`.
+Read the matched workflow/playbook (never recall an unread playbook) and [the execution graph](references/execution-graph.md) for fuller/durable work or return edges. Reuse unchanged instructions loaded this session, and re-classify each new task. For Shape 1 and Shape 2, copy the matched playbook's numbered steps into the host task list in order and count before task-specific items (shortening wording if capped, marking unrun steps `skip: <reason>`).
 
 ```text
 FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY
-In FRAME, perform Pre-flight Grounding before acting: articulate in plain terms (1) Core Objective & unstated professional invariants, (2) Rawest Ground Truth to inspect (bytes, ast, traces, or runtime output over summaries), (3) Authoritative Surface & verification tool, and (4) Falsifiable Acceptance Criteria & non-negotiables, leaving human product choices open (for Shape 0 and Shape 1 tasks, fold these directly into Claim and Expect of the PROOF CONTRACT to avoid duplicate pre-edit ceremony).
-VERIFY -> REPORT when the edit is local, reversible, and not shipping
-VERIFY -> REVIEW before default ship, land or merge, durable-run LEARN or REPORT, and for auth, billing, secrets, architecture, or cross-cutting work
+  FRAME pre-flight: (1) Core Objective & invariants, (2) Rawest Ground Truth, (3) Authoritative Surface, (4) Falsifiable Acceptance Criteria (for Shape 0/1, fold into Claim & Expect of PROOF CONTRACT).
+VERIFY -> REPORT (local, reversible, non-shipping edits)
+VERIFY -> REVIEW (before default ship, land/merge, durable-run LEARN/REPORT, or auth/billing/secrets/architecture/cross-cutting)
 REVIEW -> changes required -> INSPECT / PROOF CONTRACT / ACT -> VERIFY
-REVIEW -> LEARN? -> propose and wait for approval -> approved edit -> VERIFY -> REVIEW -> REPORT
-REVIEW -> REPORT when no lesson needs encoding
-LEARN approval pending -> hold; approval declined -> REPORT without editing
-REPORT -> patpat-ship only with delivery intent and fresh verify + review (external; run remains terminal)
-LAND? -> MERGE a reviewed PR that passes its provider gate only with explicit land or merge
+REVIEW -> LEARN? (recurring failures only) -> propose & wait -> approved edit -> VERIFY -> REVIEW -> REPORT
+REVIEW -> REPORT (no lesson) | LEARN pending -> hold | LEARN declined -> REPORT without editing
+REPORT -> patpat-ship (only with delivery intent + fresh verify & review)
+LAND? -> MERGE (passing reviewed PR only with explicit land/merge)
 ```
 
-A proof contract names Claim, Surface, Action, Expect, and Cleanup. Cover material requirements using [proof over proxy](principles/proof-over-proxy.md). Focused verify without independent review is allowed only for non-shipping local reversible edits; all other gates above require independent review.
+Define the 5-field proof contract (`Claim`, `Surface`, `Action`, `Expect`, `Cleanup`) using [proof over proxy](principles/proof-over-proxy.md). For design-gated, shared-contract, or non-trivial caller-set work, run the broader suite before claiming `verified` (if budget blocks it, name it and report `partially verified`; classify failures via step 4 of [`patpat-verify`](../patpat-verify/SKILL.md#build-the-proof)).
 
-A targeted pass does not show that earlier behavior survived. When work is design-gated, changes a shared contract, or reaches a caller set that is not small and understood, also run the broader existing suite before claiming `verified`; if that suite cannot run within a stated budget, name it and report `partially verified`. Classify any broader-suite failure with step 4 of [`patpat-verify`](../patpat-verify/SKILL.md#build-the-proof).
-
-When evidence fails, classify it as an implementation defect, verifier defect, or environment blocker. Return to the earliest invalid state and follow the [bounded retry and Diagnostic Delta contract](references/execution-graph.md#bounded-retry-and-diagnostic-delta). After three consecutive failures from the same unresolved blocker, stop and name the evidence required to continue. In durable runs, the blocker key, failure class, and graph node define the streak; a changed snapshot alone does not clear it.
-
-Enter `LEARN?` only for a recurring failure worth encoding.
+Classify failed evidence as `implementation defect`, `verifier defect`, or `environment blocker`, return to the earliest invalid state per [bounded retry and Diagnostic Delta contract](references/execution-graph.md#bounded-retry-and-diagnostic-delta), and stop after 3 consecutive failures from the same unresolved blocker (in durable runs, blocker key + failure class + graph node define the streak).
 
 ## Preserve control
 
 - Ordinary in-scope edits proceed under `/patpat` without asking permission to type.
-- Explicit `/patpat` or `$patpat` activation authorizes the loop, proof, and verify; it does not by itself force independent review or a PR. [Default delivery](playbooks/default-delivery.md) runs only when delivery intent exists. Higher-priority repository rules and `don't commit` / `local only` still win.
-- Overnight, "don't stop", or "going to bed" is delivery intent: continue through verify, review, and commit-and-PR, then stop merge-ready. Never deploy by implication.
-- Merge a verified PR that passes its provider gate only when the user explicitly names land or merge. Treat ambiguous `ship it` as commit-and-PR, not merge.
-- Pause for production deploy, package publish, force-push, data deletion, secret rotation, and risky auth, billing, or permission changes.
+- Explicit `/patpat` or `$patpat` authorizes the loop, proof, and verify—not independent review or a PR. [Default delivery](playbooks/default-delivery.md) runs only with delivery intent; repo rules and `don't commit` / `local only` win.
+- Continuation (`overnight`, `don't stop`, `going to bed`) runs through verify, review, and commit-and-PR, stopping merge-ready. Treat `ship it` as commit-and-PR; merge only on explicit `land`/`merge` with passing provider gate.
+- Pause for production deploy, package publish, force-push, data deletion, secret rotation, and risky auth/billing/permission changes.
 - A non-production deploy that Patpat starts, such as a preview, staging, or shared test link, runs only when the user names it, after fresh verify and independent review, and with a stated rollback; a non-production deploy a provider runs automatically from an authorized push follows that push's delivery gates.
 - Workers never ship. The parent ships.
 
 ## Earn parallelism
 
-Default to one owner. Workers return compact findings and evidence, not transcripts. Arena, swarm, and autopilot run only when [earned parallelism](principles/earned-parallelism.md) passes, and they fall back to serial work when isolation is missing. Give every writable slice a separate Git worktree or host-enforced sandbox with its own Git index and process boundary; disjoint files in one shared worktree are not isolation. Use [`patpat-engineer`](../patpat-engineer/SKILL.md) for isolated slices. The parent verifies the integrated result. Do not trust worker summaries. The parent then runs default delivery when delivery authority exists.
+Default to one owner; workers return compact findings, not transcripts. Arena, swarm, and autopilot require [earned parallelism](principles/earned-parallelism.md) (falling back to serial if isolation is missing): every writable slice needs a separate Git worktree or host sandbox with its own Git index and process boundary (disjoint files in one worktree are not isolation). Use [`patpat-engineer`](../patpat-engineer/SKILL.md) for isolated slices; the parent verifies the integrated result and runs default delivery when authorized.
 
 ## Report evidence
 
@@ -127,13 +119,13 @@ Changed:
 - <observable change and files>
 
 Why:
-- <evidence-backed reason, with its claim label: confirmed, inferred, or unknown>
+- <evidence-backed reason with claim label: confirmed, inferred, or unknown>
 
 Verified:
 - <verified | partially verified | implemented but not verified | not implemented>: <command or observation>
 
 Docs:
-- <updated files or why no update was needed>
+- <updated files or why none needed>
 
 Risks:
 - <remaining uncertainty, follow-up, or Low with scope>
