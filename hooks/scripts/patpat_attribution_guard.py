@@ -39,6 +39,9 @@ def _normalize_command_text(command: str) -> str:
     return command.replace("\\r\\n", "\n").replace("\\n", "\n")
 
 
+STRIP_CHARS = " \t'\"`"
+
+
 def find_attribution(text: str) -> list[str]:
     """Return forbidden AI-agent attribution hits; human co-authors and tool-generated notes pass."""
     normalized = _normalize_command_text(text)
@@ -48,7 +51,8 @@ def find_attribution(text: str) -> list[str]:
         name = match.group("name") or ""
         email = (match.group("email") or "").strip().lower()
         if AGENT_NAMES.search(name) or email in AGENT_EMAILS:
-            hit = f"agent Co-Authored-By trailer: {match.group(0).strip(' \t\'\"`')}"
+            snippet = match.group(0).strip(STRIP_CHARS)
+            hit = f"agent Co-Authored-By trailer: {snippet}"
             if hit not in seen:
                 seen.add(hit)
                 hits.append(hit)
@@ -56,7 +60,8 @@ def find_attribution(text: str) -> list[str]:
         rest = match.group("rest") or ""
         raw = match.group(0)
         if AGENT_NAMES.search(rest) or "🤖" in raw:
-            hit = f"'Generated with' footer: {raw.strip(' \t\'\"`')}"
+            snippet = raw.strip(STRIP_CHARS)
+            hit = f"'Generated with' footer: {snippet}"
             if hit not in seen:
                 seen.add(hit)
                 hits.append(hit)
