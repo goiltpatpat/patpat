@@ -1,8 +1,5 @@
 # Redesign from First Principles
 
-When legacy constraints or accreted complexity choke progress, strip the problem down to fundamental truths and reconstruct the cleanest solution.
+**Rule:** When legacy constraints or accreted complexity choke progress, strip historical accidents, temporary bridges, and boilerplate down to the essential invariant, then rebuild the simplest cohesive mechanism from language/platform primitives.
 
-1. Identify the essential invariant: What must strictly hold true regardless of platform, framework, or tooling?
-2. Strip away historical accidents, temporary compatibility bridges, and defensive boilerplate.
-3. Synthesize the simplest cohesive mechanism that satisfies the essential invariant using language and platform primitives.
-4. Ensure the resulting design is self-consistent, verifiable by construction, and easy to reason about in isolation.
+**Test:** Does the resulting design enforce the essential invariant by construction and stand on its own without compatibility crutches?

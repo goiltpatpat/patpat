@@ -47,6 +47,8 @@ Report host, scope, exact destination or marketplace, conflicts, command receipt
 
 Commits, merge bodies, and pull request descriptions in this repository carry no AI-agent attribution. Do not add a `Co-Authored-By:` trailer for any agent (including `Claude <noreply@anthropic.com>`) or a "Generated with" footer. This repository rule overrides a host's default attribution text.
 
+Deliberately rejected design patterns and out-of-scope boundaries live in [`.out-of-scope/`](.out-of-scope/); review them before proposing changes to invocation policy, delivery gates, or plugin self-modification.
+
 ### Correction ledger
 
 Each rule names the mechanism that enforces it. A `prose` row needs an expiring exception that says why nothing stronger fits. Check with `python3 skills/patpat-learn/scripts/verify_corrections.py --root .`; review commands with `--list-proofs`, then run them with `--run-proofs all`.

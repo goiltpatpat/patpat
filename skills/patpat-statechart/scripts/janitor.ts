@@ -1,6 +1,7 @@
-import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { finished } from "node:stream/promises";
+import { killGroup } from "./kill.ts";
 
 const [pidText, stage, tmp] = process.argv.slice(2);
 const pid = Number(pidText);
@@ -11,30 +12,11 @@ const safeTmp =
 
 if (!Number.isSafeInteger(pid) || pid <= 0 || !safeStage || !safeTmp) process.exit(2);
 
-let done = false;
-const cleanup = async () => {
-  if (done) return;
-  done = true;
-  await new Promise<void>((resolve) => {
-    const child =
-      process.platform === "win32"
-        ? spawn("taskkill.exe", ["/PID", String(pid), "/T", "/F"], {
-            stdio: "ignore",
-            windowsHide: true,
-          })
-        : spawn("kill", ["-KILL", "--", `-${pid}`], { stdio: "ignore" });
-    child.once("error", () => resolve());
-    child.once("close", () => resolve());
-  });
-  for (const target of [stage, tmp]) fs.rmSync(target, { recursive: true, force: true });
-};
-
-let intentional = false;
-process.stdin.setEncoding("utf8");
-process.stdin.on("data", (chunk: string) => {
-  if (chunk.includes("done\n")) intentional = true;
-});
-process.stdin.once("end", () => {
-  if (intentional) process.exit(0);
-  void cleanup();
-});
+let input = "";
+process.stdin.setEncoding("utf8").on("data", (chunk: string) => (input += chunk));
+await finished(process.stdin).catch(() => {});
+if (input.includes("done\n")) process.exit(0);
+const running = !input.includes("exited");
+const groupOutlivesWorker = process.platform !== "win32";
+if (running || groupOutlivesWorker) await killGroup(pid);
+for (const target of [stage, tmp]) fs.rmSync(target, { recursive: true, force: true });

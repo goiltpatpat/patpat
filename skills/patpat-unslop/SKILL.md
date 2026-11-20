@@ -10,62 +10,47 @@ metadata:
 
 Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
-Review engineering documentation, PR text, and code diffs for artificial writing artifacts and fluff. Preserve technical meaning, context, and the author's intended voice.
-
-## Process
-
-1. Scan text against the pattern catalog below.
-2. Report concrete rewrite recommendations that preserve exact technical meaning with natural, concise phrasing.
-3. Replace vague hand-waving with concrete references, code symbols, or numbers.
+Review engineering docs, PR text, and code diffs for fluff and structural bloat while preserving technical meaning and author voice. Scan against the catalog below, propose concrete rewrites, and replace hand-waving with exact symbols, numbers, or references.
 
 ## Pattern Catalog
 
+Rule numbers are stable: retired rules leave gaps and are never renumbered so cross-references never shift.
+
 ### Content and Substance
 
-1. **Superficial participial clauses.** Eliminate ungrounded `-ing` trailing clauses such as *"highlighting...", "ensuring...", "reflecting...", "showcasing...", "fostering..."*. Replace with active statements or concrete causal evidence.
-2. **Vague attributions.** Eliminate *"Industry standards suggest"*, *"Experts believe"*, *"Many developers prefer"*. Name the concrete specification, RFC, or team constraint, or delete the phrase.
-3. **Empty summary filler.** Remove introductory or concluding cheerleading phrases like *"In summary, this change enhances stability"* or *"It is worth noting that..."*. State the technical fact directly.
+1. **Superficial participial clauses.** Cut ungrounded trailing `-ing` clauses (*highlighting, ensuring, reflecting, showcasing, fostering*); state the concrete causal fact.
+2. **Vague attributions.** Cut *"Industry standards suggest / Experts believe / Many developers prefer"*; cite the exact spec, RFC, or constraint, or delete.
+3. **Empty summary filler.** Cut cheerleading intros/outros (*"In summary, this enhances stability"*, *"It is worth noting..."*); state the fact directly.
 
 ### Language and Vocabulary
 
-4. **Inflated vocabulary.** These words are often vague or inflated. Replace them only when the alternative preserves the exact claim and tone:
-   - *additionally* -> *also* or merge sentences
-   - *crucial / pivotal* -> *required* or *necessary*
-   - *delve* -> *inspect* or *investigate*
-   - *enhance* -> *improve* or name the concrete modification
-   - *foster* -> *allow* or *enable*
-   - *intricate* -> *complex* or specify the architecture
-   - *landscape* -> *context* or specify the system
-   - *tapestry* -> remove or replace only when decorative; preserve literal or domain-specific uses
-   - *testament* -> name the specific evidence when used as vague praise; preserve literal uses
-   - *underscore* -> *show* or *confirm*
-   - *vibrant* -> remove or replace only when decorative; preserve literal or domain-specific uses
-5. **Fancy copulas.** Replace *"serves as"*, *"stands as"*, *"boasts"*, *"features"* with simple *"is"* or *"has"*.
-6. **False contrasts.** Eliminate *"Not only X, but also Y"* structures. State both facts plainly.
-7. **Rule-of-three bias.** Do not force lists or arguments into groups of three. Use the natural, accurate count.
-8. **Synonym cycling.** Avoid rotating synonyms for the same entity (*"the caller, the invoker, the consumer"*). Pick the canonical domain term and stick with it.
-9. **Fake ranges.** Eliminate *"from X to Y"* when X and Y are not points on a continuous scalar spectrum. Use an exact list.
+4. **Inflated vocabulary.** Replace decorative/vague terms only when preserving exact meaning: *additionally*->*also*, *crucial/pivotal*->*required*, *delve*->*inspect*, *enhance*->*improve/name change*, *foster*->*enable*, *intricate*->*complex*, *landscape*->*context*, *underscore*->*show/confirm*; cut decorative *tapestry/testament/vibrant* (keep literal uses).
+5. **Fancy copulas.** Replace *"serves as / stands as / boasts / features"* with *"is"* or *"has"*.
+6. **False contrasts.** Cut *"Not only X, but also Y"*; state both facts plainly.
+7. **Rule-of-three bias.** Use the natural item count; do not pad lists to three.
+8. **Synonym cycling.** Keep one canonical domain term per entity (*caller*, not *caller/invoker/consumer*).
+9. **Fake ranges.** Replace *"from X to Y"* with an exact list unless X..Y is a continuous scalar range.
 
 ### Style and Punctuation
 
-10. **Em dash overuse.** Remove an em dash used only to join clauses. Keep it when it marks a parenthetical aside, interruption, attribution, or quoted source; prefer simpler punctuation only when it preserves the same meaning and voice.
-11. **Excessive bullet nesting.** Prefer flat, compact bullet points or code blocks over multi-nested outlines.
-12. **Apologetic or sycophantic tone.** Never use *"Certainly!"*, *"I would be happy to..."*, or *"You are absolutely right!"*. State technical findings and decisions neutrally.
-13. **Narrative code commentary.** Strip conversational commentary from code changes. Code should communicate via types, names, and explicit structure.
-14. **Unproven claims.** Never state that a fix works or tests pass without attaching fresh, observable command receipts.
+10. **Em dash overuse.** Remove em dashes used only to join clauses; keep them for asides, interruptions, or attributions when clearer.
+11. **Excessive bullet nesting.** Prefer flat bullets or code blocks over multi-nested outlines.
+12. **Apologetic or sycophantic tone.** Cut *"Certainly!"*, *"I would be happy to..."*, *"You are absolutely right!"*; stay neutral.
+13. **Narrative code commentary.** Strip conversational prose from diffs; communicate through types, names, and structure.
+14. **Unproven claims.** Never claim a fix works or tests pass without fresh command receipts.
 
 ### Code and Comment Discipline
 
-15. **Redundant code paraphrasing and compensating comments.** Delete comments that merely restate what code identifiers, types, and logic already express (e.g., `// set active to true` or `// loop over items`). Code must communicate *how*; comments exist only to communicate *why* or non-obvious constraints. **MUST KILL / refactor flag:** when a comment only exists to explain an unclear symbol name or tangled control flow, do not keep the comment—rename the symbol or extract/simplify the control flow so the code is self-explanatory.
-16. **Dead code and historical commentary.** Eliminate commented-out blocks of code, obsolete workarounds, and conversational apologies (e.g., `// hack: fix later`). Git tracks history; active source files must contain only living, executable code.
-17. **Decorative comment dividers.** Remove ASCII banners, delimiter lines (`// ====================`), and sectional boxes. Use blank lines and modular file organization instead.
-18. **Orphaned TODOs.** Remove unanchored, vague `TODO` comments without an owner, issue link, or immediate actionable condition.
-19. **Preserve high-value invariants and cut structural code inflation.** Actively keep comments that document non-obvious *Why*, domain invariants, concurrency/reentrancy fences, upstream library bug workarounds (citing issue URLs or RFCs), or required legal notices. Strip structural code bloat: single-caller pass-through wrapper functions, silent broad exception swallowing (`except Exception: pass`), speculative fallback flags not required by the proof contract, and duplicate helpers that re-implement existing repository or standard-library primitives.
-20. **Anti-reward-hacking and verifier integrity.** Reject test-skipping annotations (`@pytest.mark.skip`, `@unittest.skip`, `test.skip(`, `it.skip(`, `[Fact(Skip=...)]`), warning or linter suppressions (`#pragma warning disable`, `// eslint-disable`, `# noqa`, `// @ts-ignore`), and arbitrary sleep delays (`time.sleep(`, `Task.Delay(`) introduced to force green builds. An agent must fix the underlying defect, not silence the oracle.
+15. **Redundant paraphrasing and compensating comments.** Delete comments that restate code (`// loop over items`). Comments explain *why* or non-obvious constraints only. If a comment compensates for an unclear name or tangled flow, rename or simplify instead.
+16. **Dead code and historical commentary.** Delete commented-out code, obsolete workarounds, and apologies (`// hack: fix later`); Git holds history.
+17. **Decorative comment dividers.** Remove ASCII banners, `// ====`, and boxes; use blank lines and modules.
+18. **Orphaned TODOs.** Delete unanchored `TODO`s lacking an owner, issue link, or actionable condition.
+19. **Keep high-value invariants; cut structural bloat.** Keep comments encoding non-obvious *why*, domain invariants, concurrency fences, upstream bug URLs/RFCs, or legal notices. Cut single-caller pass-through wrappers, silent broad catches (`except Exception: pass`), speculative fallback flags, and duplicate helpers.
+20. **Anti-reward-hacking and verifier integrity.** Reject test skips (`@pytest.mark.skip`, `test.skip(`, `it.skip(`, `[Fact(Skip=...)]`), linter/warning suppressions (`# noqa`, `// eslint-disable`, `#pragma warning disable`, `// @ts-ignore`), and arbitrary sleeps (`time.sleep(`, `Task.Delay(`) added to force green builds. Fix the defect, never silence the oracle.
 
 ## Deterministic AST and comment check
 
-Run [`scripts/unslop_ast_check.py`](scripts/unslop_ast_check.py) for deterministic AST and comment checking across Rules 12/16 (`ai-conversational-slop`), 19 (`broad-exception-swallowing`, `single-caller-wrapper`), and 20 (`test-skipping-annotation`, `test-skipping-call`, `linter-suppression`), supporting whole paths and `--diff` line filtering.
+Run [`scripts/unslop_ast_check.py`](scripts/unslop_ast_check.py) for deterministic checking across Rules 12/16 (`ai-conversational-slop`), 19 (`broad-exception-swallowing`, `single-caller-wrapper`), and 20 (`test-skipping-annotation`, `test-skipping-call`, `linter-suppression`), supporting whole paths and `--diff` filtering.
 
 ## Mutation boundary
 

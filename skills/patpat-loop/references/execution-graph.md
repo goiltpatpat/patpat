@@ -71,3 +71,15 @@ A third attempt is allowed only when `Next` changes at least one of the hypothes
 In durable runs, VERIFY and REVIEW may return directly to INSPECT or PROOF_CONTRACT. Returning to an earlier contract decision clears the old contract and verification/review receipts and advances the evidence epoch; record the revised 5-field contract before ACT. An initial contract recorded during INSPECT survives the forward transition to PROOF_CONTRACT. Record the contradiction and next decision in the existing decision trail. REPORT remains terminal: new post-delivery evidence, a new head, or a late merge request starts a new scoped run if durable state is needed, without reopening old approval or proof.
 
 After an approved edit, `VERIFY` advances the evidence epoch and invalidates prior verification and review receipts; obtain a fresh independent review before `REPORT`. The LEARN approval hold is a human authorization boundary, not a receipt enforced by `run_state.py`. Treat `LEARN` as proposal-pending; do not edit or transition to `VERIFY` until explicit approval is received.
+
+## Phase-Boundary Hygiene
+
+At every phase or slice boundary, pick the first `YES` in this five-option fresh-context tree:
+
+1. **Continue** — staying in the same unbroken design phase or active slice within the working smart zone (~150k tokens) where primary-source context still helps.
+2. **`/clear`** — current slice/ticket is complete and disposable (state is persisted in git, spec/tickets, or durable run store); start fresh.
+3. **Handoff** — state must transfer across harness, directory, colleague, or side-fork without dragging transcript noise.
+4. **Subagent** — work is an isolated, bounded, or AFK slice; spawn a **fresh (non-forked) subagent** with a **pointer-only brief** (spec, ticket/slice, commits, out-of-repo exploration notes, and exact proof bar—never rely on inherited transcript history).
+5. **`/compact`** — last resort only; compaction produces a lossy secondary source.
+
+Keep pre-build design phases (`FRAME -> INSPECT -> DESIGN GATE`, or grill -> spec -> tickets) in one unbroken context window so domain decisions stay primary-source. Between independent execution slices or fix retries, prefer `/clear` or fresh non-forked subagents with pointer-only briefs over resuming stale transcripts.

@@ -1,6 +1,6 @@
 ---
 name: patpat-engineer
-description: Execute one bounded implementation slice delegated by a named integration owner. Use only when ownership, forbidden scope, allowed mutations, and a proof contract are explicit; do not use for broad direct user requests.
+description: Execute one delegated implementation slice under explicit ownership, scope boundaries, and a proof contract.
 disable-model-invocation: true
 metadata:
   patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Codebase","requires_state":["execution-plan-settled"],"produces_state":["engineered-diff-staged"],"verification_cmd":"git diff --check"}'

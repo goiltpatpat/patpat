@@ -1,12 +1,5 @@
 # Guard the Context Window
 
-The context window is a finite, scarce, high-value working memory space. Protect it from noise, flooding, and sprawl.
+**Rule:** Protect context as scarce runtime training data: filter/summarize at the source (never dump raw logs or full traversals), require concise findings/receipts from subagents (ban open-ended agent chatter), compress dead-end debugging into one causal breadcrumb, and place active paths, error signatures, and hard constraints last for recency.
 
-1. Avoid dumping large raw blobs, full directory traversals, or un-filtered AST logs into conversational context.
-2. Summarize, filter, and index information at the source using compact tools and scripts before reporting findings.
-3. Subagents and background tasks must return concise syntheses, key diffs, and verification receipts, not voluminous raw execution transcripts.
-4. Keep context clean so that critical constraints, instructions, and error signals remain prominent and uncorrupted.
-5. Prevent conversational multi-agent sprawl: ban open-ended agent-to-agent chatter. Communication must remain strictly hierarchical, bounded by deterministic task inputs and compact structured outputs.
-6. Treat active context as runtime training data. Prompts, skills, and observations effectively train the agent at inference time. Every token shapes the active policy distribution; eliminate ambiguous prose, contradictory rules, and irrelevant debris so the model's behavioral distribution remains bounded by verified invariants.
-7. Compress discarded debugging dead-ends: replace verbose multi-step exploratory failures or dead ends with a single causal breadcrumb stating the tested premise and reason for rejection.
-8. Recency ordering for task constraints: place active file paths, exact error signatures, and strict constraints at the end of prompt briefs to mitigate attention degradation across long context windows.
+**Test:** Before posting or handing off, strip any raw blob, duplicate rule, or dead-end transcript that does not change the next decision.

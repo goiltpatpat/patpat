@@ -1,6 +1,6 @@
 ---
 name: patpat-ship
-description: Commit and open or update a ready pull request after verified work when delivery intent exists, and merge only with explicit land or merge language. Use at the end of an active Patpat implementation and for explicit ship, land, merge, publish, or deploy requests.
+description: Commit and open or update a ready pull request when delivery intent exists, and merge only when explicitly named.
 disable-model-invocation: true
 metadata:
   patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"DESTRUCTIVE","target_entity":"PullRequest","requires_state":["delivery-review-cleared"],"produces_state":["delivery-pr-ready"],"verification_cmd":"python3 <loaded-skill-directory>/scripts/verify_delivery.py --root <workspace-root>"}'

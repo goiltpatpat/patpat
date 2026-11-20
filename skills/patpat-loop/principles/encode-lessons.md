@@ -1,14 +1,5 @@
 # Encode Lessons in Structure
 
-Turn a recurring failure into the earliest enforceable constraint.
+**Rule:** Encode recurring failures from active-task evidence at the earliest enforceable layer: (1) type/schema/contract, (2) focused test, (3) lint/validator rule, (4) deterministic script/guard, (5) workflow skill/principle, (6) durable docs. Skip one-off reminders and transcript summaries.
 
-Prefer mechanisms in this order:
-
-1. type, schema, or contract;
-2. focused test;
-3. lint or validator rule;
-4. deterministic script or guard;
-5. workflow skill or principle;
-6. durable documentation.
-
-Use active-task evidence. Do not accumulate vague reminders, transcript summaries, or single-session idiosyncrasies. Verify both directions: the mechanism must detect or prevent the target failure without introducing negative transfer, friction, or regressions on unrelated workflows.
+**Test:** Confirm the mechanism catches the target failure without regressions or friction on unrelated workflows.

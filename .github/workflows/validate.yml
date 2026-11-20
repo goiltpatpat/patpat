@@ -61,6 +61,7 @@ jobs:
           python3 skills/patpat-eval/scripts/eval_stats.py --self-test
           python3 skills/patpat-run/scripts/validate_plan.py --self-test
           python3 hooks/scripts/patpat_loop_state.py --self-test
+          python3 hooks/scripts/patpat_attribution_guard.py --self-test
           python3 skills/patpat-learn/scripts/verify_corrections.py --self-test
           python3 skills/patpat-learn/scripts/verify_corrections.py --root .
           python3 scripts/check_attribution.py --self-test
@@ -171,6 +172,8 @@ jobs:
           python skills/patpat-eval/scripts/eval_stats.py --self-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python hooks/scripts/patpat_loop_state.py --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python hooks/scripts/patpat_attribution_guard.py --self-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/smoke_windows_codex_hooks.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

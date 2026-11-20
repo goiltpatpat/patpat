@@ -1,6 +1,6 @@
 ---
 name: patpat-repository-diagram
-description: Turn an explicitly requested idea, question, plan, or codebase into an interactive diagram. Create a self-contained HTML/SVG artifact from a user brief, repository evidence, or both, with five typed views and stable IDs for refinement. Use patpat-inspect for prose-only explanations and engineering skills for code changes.
+description: Turn a brief, plan, or codebase into a self-contained interactive HTML/SVG diagram with typed views and stable IDs.
 disable-model-invocation: true
 metadata:
   patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Artifact","requires_state":["workspace-root-open"],"produces_state":["interactive-diagram-rendered"],"verification_cmd":"python3 scripts/validate.py"}'

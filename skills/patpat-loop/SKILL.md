@@ -81,7 +81,7 @@ Consult [route catalog](references/route-catalog.md) for specialized workflows (
 
 ## Run the graph
 
-Read the matched workflow/playbook (never recall an unread playbook) and [the execution graph](references/execution-graph.md) for fuller/durable work or return edges. Reuse unchanged instructions loaded this session, and re-classify each new task. For Shape 1 and Shape 2, copy the matched playbook's numbered steps into the host task list in order and count before task-specific items (shortening wording if capped, marking unrun steps `skip: <reason>`).
+Read the matched workflow/playbook (never recall an unread playbook) and [the execution graph](references/execution-graph.md) for fuller/durable work or return edges. Reuse unchanged instructions loaded this session, and re-classify each new task. For Shape 1 and Shape 2, copy the matched playbook's applicable numbered steps into the host task list in order before task-specific items (shortening wording if capped; omit unrun steps instead of cluttering the list).
 
 ```text
 FRAME -> INSPECT -> PROOF CONTRACT -> ACT -> VERIFY
@@ -110,7 +110,7 @@ Classify failed evidence as `implementation defect`, `verifier defect`, or `envi
 
 ## Earn parallelism
 
-Default to one owner; workers return compact findings, not transcripts. Arena, swarm, and autopilot require [earned parallelism](principles/earned-parallelism.md) (falling back to serial if isolation is missing): every writable slice needs a separate Git worktree or host sandbox with its own Git index and process boundary (disjoint files in one worktree are not isolation). Use [`patpat-engineer`](../patpat-engineer/SKILL.md) for isolated slices; the parent verifies the integrated result and runs default delivery when authorized.
+Default to one owner; workers return compact findings, not transcripts. Follow [phase-boundary hygiene](references/execution-graph.md#phase-boundary-hygiene): keep design phases in one unbroken window, and spawn fresh non-forked subagents with pointer-only briefs for isolated slices. Every spawned subagent/worker kickoff MUST open on line 1 with `Read <abs-path>/skills/patpat-engineer/references/worker-contract.md before anything else.` (resolved to the absolute path, because slash-command skills do not auto-load in spawned agents). Arena, swarm, and autopilot require [earned parallelism](principles/earned-parallelism.md) (falling back to serial if isolation is missing): every writable slice needs a separate Git worktree or host sandbox with its own Git index and process boundary (disjoint files in one worktree are not isolation). Use [`patpat-engineer`](../patpat-engineer/SKILL.md) for isolated slices; the parent verifies the integrated result and runs default delivery when authorized.
 
 ## Report evidence
 

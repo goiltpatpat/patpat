@@ -1,0 +1,236 @@
+#!/usr/bin/env python3
+"""PreToolUse Bash guard blocking AI-agent attribution in git commit / gh pr commands (P1)."""
+
+from __future__ import annotations
+
+import argparse
+import io
+import json
+import re
+import sys
+from typing import Any
+
+MAX_STDIN_BYTES = 256 * 1024
+
+BASH_TOOLS = {"bash", "shell", "terminal", "run_command", "exec"}
+
+GUARDED_COMMAND = re.compile(
+    r"(?:^|[;&|(\n])\s*(?:(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*)"
+    r"(?:git\b[^;&|\n]*\bcommit\b|gh\s+pr\s+(?:create|edit|merge)\b)",
+    re.IGNORECASE,
+)
+
+# Mirrors scripts/check_attribution.py::find_attribution (P1).
+AGENT_NAMES = re.compile(
+    r"\b(claude|anthropic|openai|chatgpt|codex|copilot|cursor ?agent|gemini|grok|devin|aider|windsurf)\b",
+    re.IGNORECASE,
+)
+AGENT_EMAILS = {"noreply@anthropic.com", "cursoragent@cursor.com"}
+CO_AUTHOR = re.compile(
+    r"""(?im)(?:^|['"`])[\t ]*co-authored-by:\s*(?P<name>[^<\n'"`]*?)\s*(?:<(?P<email>[^>\n'"`]*)>)?[\t ]*(?:['"`]|$)"""
+)
+GENERATED = re.compile(
+    r"""(?im)(?:^|['"`])[\t ]*(?:🤖\s*)?generated (?:with|by)\b(?P<rest>[^\n'"`]*)"""
+)
+
+
+def _normalize_command_text(command: str) -> str:
+    """Expand escaped newlines in inline shell strings so line-anchored checks see them."""
+    return command.replace("\\r\\n", "\n").replace("\\n", "\n")
+
+
+def find_attribution(text: str) -> list[str]:
+    """Return forbidden AI-agent attribution hits; human co-authors and tool-generated notes pass."""
+    normalized = _normalize_command_text(text)
+    hits: list[str] = []
+    seen: set[str] = set()
+    for match in CO_AUTHOR.finditer(normalized):
+        name = match.group("name") or ""
+        email = (match.group("email") or "").strip().lower()
+        if AGENT_NAMES.search(name) or email in AGENT_EMAILS:
+            hit = f"agent Co-Authored-By trailer: {match.group(0).strip(' \t\'\"`')}"
+            if hit not in seen:
+                seen.add(hit)
+                hits.append(hit)
+    for match in GENERATED.finditer(normalized):
+        rest = match.group("rest") or ""
+        raw = match.group(0)
+        if AGENT_NAMES.search(rest) or "🤖" in raw:
+            hit = f"'Generated with' footer: {raw.strip(' \t\'\"`')}"
+            if hit not in seen:
+                seen.add(hit)
+                hits.append(hit)
+    return hits
+
+
+def extract_command(payload: MappingLike) -> str | None:
+    tool_name = payload.get("tool_name")
+    if isinstance(tool_name, str) and tool_name.strip().lower() not in BASH_TOOLS:
+        return None
+    for container_key in ("tool_input", "input"):
+        container = payload.get(container_key)
+        if isinstance(container, dict):
+            cmd = container.get("command")
+            if isinstance(cmd, str) and cmd.strip():
+                return cmd
+    cmd = payload.get("command")
+    if isinstance(cmd, str) and cmd.strip():
+        return cmd
+    return None
+
+
+MappingLike = dict[str, Any]
+
+
+def evaluate_payload(payload: Any) -> tuple[int, str]:
+    """Return (exit_code, stderr_message). 0 = allow (fail-open), 2 = block."""
+    if not isinstance(payload, dict):
+        return 0, ""
+    command = extract_command(payload)
+    if not command:
+        return 0, ""
+    if not GUARDED_COMMAND.search(command):
+        return 0, ""
+    hits = find_attribution(command)
+    if not hits:
+        return 0, ""
+    detail = "; ".join(hits)
+    message = (
+        f"Blocked by Patpat attribution guard (P1): {detail}. "
+        "Remove AI-agent Co-Authored-By trailers and 'Generated with' footers per AGENTS.md."
+    )
+    return 2, message
+
+
+def handle_stream(stream: io.TextIOBase) -> tuple[int, str]:
+    raw = stream.read(MAX_STDIN_BYTES + 1)
+    if not raw or not raw.strip() or len(raw) > MAX_STDIN_BYTES:
+        return 0, ""
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return 0, ""
+    return evaluate_payload(payload)
+
+
+def self_test() -> int:
+    cases: list[tuple[str, str, int]] = [
+        ("empty stdin fails open", "", 0),
+        ("malformed json fails open", "{not json", 0),
+        (
+            "non-bash tool fails open",
+            json.dumps({"tool_name": "Write", "tool_input": {"command": "git commit -m 'Co-Authored-By: Claude'"}}),
+            0,
+        ),
+        (
+            "non-matching echo command fails open",
+            json.dumps({"tool_name": "Bash", "tool_input": {"command": "echo 'Co-Authored-By: Claude <noreply@anthropic.com>'"}}),
+            0,
+        ),
+        (
+            "non-matching grep command fails open",
+            json.dumps({"tool_name": "Bash", "tool_input": {"command": "grep 'Generated with' scripts/check_attribution.py"}}),
+            0,
+        ),
+        (
+            "clean git commit with human co-author and tool note passes",
+            json.dumps({
+                "tool_name": "Bash",
+                "tool_input": {
+                    "command": "git commit -m 'feat: clean' -m 'Generated by scripts/stage_plugin.py' -m 'Co-Authored-By: Pat Human <pat@openai.com>'"
+                },
+            }),
+            0,
+        ),
+        (
+            "git commit with agent trailer and email blocks",
+            json.dumps({
+                "tool_name": "Bash",
+                "tool_input": {
+                    "command": "git commit -m 'fix: x' -m 'Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>'"
+                },
+            }),
+            2,
+        ),
+        (
+            "git commit with agent trailer without email blocks",
+            json.dumps({
+                "tool_name": "Bash",
+                "tool_input": {"command": "git commit -m 'fix: x\\n\\nCo-Authored-By: Claude'"},
+            }),
+            2,
+        ),
+        (
+            "git commit heredoc with cursor agent blocks",
+            json.dumps({
+                "tool_name": "Bash",
+                "tool_input": {
+                    "command": "git commit -F - <<'EOF'\nfix: y\n\nCo-Authored-By: Cursor Agent <cursoragent@cursor.com>\nEOF"
+                },
+            }),
+            2,
+        ),
+        (
+            "gh pr create with robot generated footer blocks",
+            json.dumps({
+                "tool_name": "Bash",
+                "tool_input": {
+                    "command": "gh pr create --title 'x' --body 'Summary\\n\\n🤖 Generated with [Claude Code](https://claude.com/claude-code)'"
+                },
+            }),
+            2,
+        ),
+        (
+            "gh pr edit with generated by codex blocks",
+            json.dumps({
+                "tool_name": "Bash",
+                "tool_input": {"command": "gh pr edit 42 --body 'Generated by Codex'"},
+            }),
+            2,
+        ),
+        (
+            "gh pr merge with gemini co-author blocks",
+            json.dumps({
+                "tool_name": "Bash",
+                "tool_input": {"command": "gh pr merge 42 --squash --body 'Co-Authored-By: Gemini'"},
+            }),
+            2,
+        ),
+        (
+            "chained git add && git commit blocks",
+            json.dumps({
+                "tool_name": "Bash",
+                "tool_input": {"command": "git add . && git commit -m 'fix\\n\\nGenerated with Claude'"},
+            }),
+            2,
+        ),
+    ]
+    failed: list[str] = []
+    for name, raw_input, expected_code in cases:
+        code, message = handle_stream(io.StringIO(raw_input))
+        if code != expected_code:
+            failed.append(f"{name}: expected exit {expected_code}, got {code} ({message!r})")
+        elif expected_code == 2 and "Patpat attribution guard" not in message:
+            failed.append(f"{name}: missing guard message on block")
+    if failed:
+        for item in failed:
+            print(f"FAIL {item}", file=sys.stderr)
+        return 1
+    print(f"patpat_attribution_guard self-test ok: {len(cases)} cases")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--self-test", action="store_true")
+    args = parser.parse_args(argv)
+    if args.self_test:
+        return self_test()
+    code, message = handle_stream(sys.stdin)
+    if message:
+        print(message, file=sys.stderr)
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

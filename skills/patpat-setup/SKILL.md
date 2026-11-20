@@ -1,6 +1,6 @@
 ---
 name: patpat-setup
-description: Inspect the active agent host and install or validate Patpat through its supported native plugin manager or an explicit Agent Skills directory. Use for Patpat installation, discovery, update, removal, or host compatibility questions.
+description: Inspect the active host and install, validate, update, or remove Patpat via its supported package route.
 disable-model-invocation: true
 metadata:
   patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"DESTRUCTIVE","target_entity":"AgentHost","requires_state":["workspace-root-open"],"produces_state":["host-environment-configured"],"verification_cmd":"python3 scripts/validate.py"}'

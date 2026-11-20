@@ -19,7 +19,9 @@ from update_skills import (
     build_ownership_document,
     inspect_installation,
     inventory,
+    is_ignored,
     load_recorded_inventory,
+    skill_copy_ignore,
 )
 from validate import validate_root
 
@@ -111,7 +113,7 @@ def install_paths(source: Path, target: Path, skills: list[Path], mode: str, dry
         for skill in skills:
             destination = transaction / skill.name
             if mode == "copy":
-                shutil.copytree(skill, destination)
+                shutil.copytree(skill, destination, ignore=skill_copy_ignore(skill))
             else:
                 destination.symlink_to(skill, target_is_directory=True)
             staged_paths[skill.name] = destination
@@ -184,8 +186,16 @@ def install_paths(source: Path, target: Path, skills: list[Path], mode: str, dry
 
 
 def trees_match(source: Path, target: Path) -> bool:
-    source_files = sorted(path.relative_to(source) for path in source.rglob("*") if path.is_file())
-    target_files = sorted(path.relative_to(target) for path in target.rglob("*") if path.is_file())
+    source_files = sorted(
+        path.relative_to(source)
+        for path in source.rglob("*")
+        if path.is_file() and not is_ignored(path.relative_to(source), skill_name=source.name)
+    )
+    target_files = sorted(
+        path.relative_to(target)
+        for path in target.rglob("*")
+        if path.is_file() and not is_ignored(path.relative_to(target), skill_name=target.name)
+    )
     return source_files == target_files and all(
         (source / relative).read_bytes() == (target / relative).read_bytes()
         for relative in source_files
@@ -216,6 +226,7 @@ def run_self_test(source: Path, skills: list[Path]) -> int:
             "nested overlap refusal": statuses["nested overlap"] == 2,
             "ancestor overlap refusal": statuses["ancestor overlap"] == 2,
             "copy fidelity": all(trees_match(skill, copy_target / skill.name) for skill in skills),
+            "excludes statechart test corpus": not (copy_target / "patpat-statechart" / "scripts" / "test").exists(),
             "symlink fidelity": all((link_target / skill.name).is_symlink() for skill in skills),
         }
         recorded = load_recorded_inventory(copy_target)
@@ -295,8 +306,13 @@ def run_self_test(source: Path, skills: list[Path]) -> int:
 
         original_copytree = shutil.copytree
 
-        def interrupt_copy(source_path: Path, destination: Path, dirs_exist_ok: bool = False) -> None:
-            del source_path, dirs_exist_ok
+        def interrupt_copy(
+            source_path: Path,
+            destination: Path,
+            *args: object,
+            **kwargs: object,
+        ) -> None:
+            del source_path, args, kwargs
             destination.mkdir()
             (destination / "partial").write_text("partial", encoding="utf-8")
             raise KeyboardInterrupt

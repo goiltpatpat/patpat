@@ -1,6 +1,6 @@
 ---
 name: patpat-change
-description: Implement one bounded repository change with a small diff and explicit proof. Use for clear features, localized refactors, and requested fixes after the root cause or design is known.
+description: Implement one bounded feature, localized refactor, or known-cause fix with a small diff and explicit proof.
 disable-model-invocation: true
 metadata:
   patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Codebase","requires_state":["workspace-root-open"],"produces_state":["bounded-change-staged"],"verification_cmd":"git diff --check"}'

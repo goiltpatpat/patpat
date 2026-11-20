@@ -1,8 +1,5 @@
 # Experience First
 
-Work backward from the operator or consumer experience to the implementation, not forward from internal technical convenience.
+**Rule:** Work backward from the consumer's interface (CLI, API, errors, output); never leak internal plumbing across the boundary. Errors must state what failed, observed evidence, and concrete remediation.
 
-1. Shape the external interface—CLI syntax, API contract, error feedback, and output format—around what the consumer needs to understand and act upon effortlessly.
-2. Never leak internal plumbing, temporary tokens, or accidental implementation artifacts across the user boundary.
-3. Error messages must be actionable: state what failed, cite the observed evidence, and indicate the concrete remediation.
-4. If a feature is awkward or painful to invoke or test, the architecture is wrong.
+**Test:** Invoke and test the surface as a consumer—if usage or testing is awkward, fix the boundary before the internals.
