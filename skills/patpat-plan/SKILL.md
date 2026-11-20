@@ -1,6 +1,6 @@
 ---
 name: patpat-plan
-description: Design a falsifiable workflow for multi-phase repository work or a task with no safe narrow route. Use when several contracts or verification surfaces must be sequenced; remain read-only.
+description: Design a falsifiable, multi-phase workflow with sequenced contracts and verification surfaces without editing.
 disable-model-invocation: true
 metadata:
   patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"EngineeringTask","requires_state":["architecture-design-settled"],"produces_state":["execution-plan-settled"],"verification_cmd":"python3 <loaded-skill-directory>/scripts/verify_plan.py --root <workspace-root>"}'
@@ -14,11 +14,15 @@ When invoked directly, read the [operating protocol](../patpat-loop/references/o
 
 Read [repository truth](../patpat-loop/principles/repository-truth.md), [sequence verifiable units](../patpat-loop/principles/sequence-verifiable-units.md), and apply the [bespoke workflow playbook](../patpat-loop/playbooks/bespoke-workflow.md).
 
-Inspect enough repository evidence to name the contracts, dependencies, risks, and authoritative surfaces. Define one falsifiable completion predicate. Split work only at boundaries that can independently return to a verified state.
+Resolve unknowns from repository evidence first; ask only questions whose answers change the contract, sequence, or acceptance.
 
-Resolve material unknowns from repository evidence first. Group any remaining answerable decisions by dependency and ask only questions whose answers would change the contract, sequence, or acceptance; continue independent work while an answer is pending.
+## 5-Step Multi-Phase Plan
 
-Remain read-only. Produce phases with verification and rollback hooks, unresolved facts, authority gates, and the smallest safe first unit. Hand implementation to the matching focused workflow or `patpat-run`; do not implement inside this skill.
+1. **Skip rule**: skip multi-phase planning for small, single-unit changes—route directly to `patpat-change` or `patpat-debug`.
+2. **Prototype first**: when an observable experiment can settle an open design or sequencing question, run a disposable scratch prototype before locking the plan.
+3. **Write one plan file**: define one falsifiable completion predicate, landing order, dependency graph, and one checkbox section per PR/verifiable unit (each independently returning to a verified state, with rollback hooks, unresolved facts, and authority gates).
+4. **Add verification boxes**: include explicit **unit**, **live**, and **perf** verification checkboxes (marking N/A only when genuinely inapplicable) on every phase/PR section.
+5. **Stop before execution**: remain read-only; present the plan and smallest safe first unit, and hand execution to the matched specialist or `patpat-run`—never implement inside this skill.
 
 ## Mutation boundary
 

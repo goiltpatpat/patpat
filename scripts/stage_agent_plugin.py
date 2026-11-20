@@ -16,6 +16,7 @@ from stage_plugin import (
     StageError,
     copy_entry,
     file_inventory,
+    is_ignored_package_path,
     paths_overlap,
     reject_link_entries,
     stage as stage_native_plugin,
@@ -39,7 +40,7 @@ AGENT_METADATA_FIELDS = (
     "license",
     "keywords",
 )
-IGNORED_SKILL_PATH_PARTS = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
+IGNORED_SKILL_PATH_PARTS = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "node_modules"}
 PORTABLE_INVOCATION_NOTE = "Only use when the user explicitly requests it."
 
 
@@ -114,6 +115,7 @@ def copy_skills(source: Path, destination: Path) -> None:
         if (
             any(part in IGNORED_SKILL_PATH_PARTS for part in relative.parts)
             or relative.suffix.lower() in {".pyc", ".pyo"}
+            or is_ignored_package_path(source / relative, source)
         ):
             continue
         original = source / relative

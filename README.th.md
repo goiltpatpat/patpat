@@ -105,39 +105,68 @@ REVIEW -> LEARN? -> เสนอและรอการอนุมัติ ->
 ทักษะการวาดแผนภาพ (diagram) และ statechart ทำงานร่วมกันเป็นคู่: แผนภาพวงจรชีวิตสามารถใช้เป็นจุดเริ่มต้นสร้าง statechart ด้วย label เดียวกัน และเมื่อพบกฎที่ถูกละเมิด จะส่งผลกลับมายังแผนภาพเป็นเรื่องราวแบบนำทางที่ระบุจุดที่ flow ผิดพลาด
 
 <details>
-<summary>ดูรายการ Skill ทั้งหมด 29 รายการ</summary>
+<summary>ดูรายการ Skill ทั้งหมด 29 รายการ (แยกตามเฟสงานและวิธีเรียกใช้)</summary>
 
-| Skill | ใช้เมื่อ |
-| --- | --- |
-| [`patpat`](skills/patpat/SKILL.md) | คำสั่งย่อ (slash alias) สำหรับเข้าสู่ลูป |
-| [`patpat-loop`](skills/patpat-loop/SKILL.md) | งานที่ไม่ใช่งานเล็กๆ และจำเป็นต้องใช้ลูปการทำงานเต็มรูปแบบ |
-| [`00-workspace-mapper`](skills/00-workspace-mapper/SKILL.md) | สร้างแผนผัง workspace ที่ยังไม่คุ้นเคยอย่างชัดเจน |
-| [`patpat-inspect`](skills/patpat-inspect/SKILL.md) | อธิบาย, ตรวจสอบ (audit), หรือวินิจฉัยโดยไม่มีการแก้ไขไฟล์ |
-| [`patpat-impact`](skills/patpat-impact/SKILL.md) | พิสูจน์ผลกระทบ (blast radius) และความถูกต้องของระบบปลายน้ำ |
-| [`patpat-plan`](skills/patpat-plan/SKILL.md) | จัดลำดับเฟสงานที่สามารถพิสูจน์ผลได้ โดยยังไม่ลงมือทำจริง |
-| [`patpat-architect`](skills/patpat-architect/SKILL.md) | สรุปข้อตกลงสัญญา (contracts), การย้ายระบบ (migrations) และความเสี่ยงก่อน |
-| [`patpat-interrogate`](skills/patpat-interrogate/SKILL.md) | ท้าทายการออกแบบหรือการเปลี่ยนแปลงจากมุมมองเชิงปรปักษ์ |
-| [`patpat-repository-diagram`](skills/patpat-repository-diagram/SKILL.md) | เปลี่ยนไอเดีย แผนงาน หรือโค้ดเบสให้เป็นแผนภาพอินเทอร์แอคทีฟ |
-| [`patpat-statechart`](skills/patpat-statechart/SKILL.md) | จำลองการย้ายสถานะของ flow, ตรวจกฎด้วย TLC, และแสดงบั๊กเป็นเส้นทางเดิน |
-| [`patpat-change`](skills/patpat-change/SKILL.md) | นำฟีเจอร์หรือการ refactor 1 จุดที่มีขอบเขตชัดเจนไปปฏิบัติจริง |
-| [`patpat-debug`](skills/patpat-debug/SKILL.md) | สร้างซ้ำ (reproduce), หาสาเหตุที่แท้จริง, และแก้ไข |
-| [`patpat-perf`](skills/patpat-perf/SKILL.md) | ปรับปรุงประสิทธิภาพที่วัดค่าได้เมื่อพบการถดถอยของทรัพยากร |
-| [`patpat-game-builder`](skills/patpat-game-builder/SKILL.md) | สร้างชิ้นส่วนเกมที่เล่นได้จริง แล้วพิสูจน์เส้นทางการเล่นจริงของผู้เล่น |
-| [`patpat-verify`](skills/patpat-verify/SKILL.md) | ทดสอบข้ออ้างอิงบนชิ้นงานจริงหรือส่วนติดต่อผู้ใช้จริง |
-| [`patpat-verifier`](skills/patpat-verifier/SKILL.md) | สร้างหรือดูแลรักษาตัวตรวจสอบเฉพาะของโปรเจกต์ |
-| [`patpat-formal-verify`](skills/patpat-formal-verify/SKILL.md) | สร้างและดูแลรักษา formal model แบบมีขอบเขตเพื่อให้การเปลี่ยนแปลงถัดไปรันซ้ำได้ |
-| [`patpat-review`](skills/patpat-review/SKILL.md) | พยายามหาจุดบกพร่องหรือพิสูจน์หักล้างการเปลี่ยนแปลงและหลักฐานอย่างเป็นอิสระ |
-| [`patpat-unslop`](skills/patpat-unslop/SKILL.md) | ตัดเนื้อหาส่วนเกินออกจากเอกสารวิศวกรรม, ข้อความ PR และ diff |
-| [`patpat-run`](skills/patpat-run/SKILL.md) | ขับเคลื่อนหรือสานต่อกราฟงานหลายเฟสที่ทนทานต่อการขัดจังหวะ |
-| [`patpat-engineer`](skills/patpat-engineer/SKILL.md) | ปฏิบัติงานย่อยส่วนหนึ่งที่แยกขาดจากส่วนอื่นสำหรับผู้รับผิดชอบที่ระบุ |
-| [`patpat-arena`](skills/patpat-arena/SKILL.md) | แข่งขันแนวทางที่แยกกันจากโจทย์เดียวกัน แล้วสังเคราะห์ผลลัพธ์ที่ผ่านการยืนยัน 1 เดียว |
-| [`patpat-swarm`](skills/patpat-swarm/SKILL.md) | ครอบคลุมงานย่อยหรือการแข่งขันแบบคู่ขนาน แล้วส่งรายงานสรุปรวม 1 ฉบับ |
-| [`patpat-ship`](skills/patpat-ship/SKILL.md) | Commit และเปิด PR เมื่อมีเจตนาส่งมอบ; merge เฉพาะเมื่อระบุชื่อชัดเจน |
-| [`patpat-learn`](skills/patpat-learn/SKILL.md) | แปลงความล้มเหลวที่เกิดขึ้นซ้ำให้กลายเป็นข้อจำกัดที่ทนทานและเล็กที่สุด |
-| [`patpat-skill`](skills/patpat-skill/SKILL.md) | สร้าง skill ใหม่ที่นำกลับมาใช้ซ้ำได้ |
-| [`patpat-eval`](skills/patpat-eval/SKILL.md) | ประเมินการกระตุ้นและพฤติกรรมของ skill ด้วยเกณฑ์การให้คะแนนอิงหลักฐาน |
-| [`patpat-automation`](skills/patpat-automation/SKILL.md) | ออกแบบระบบอัตโนมัติแบบ fail-closed โดยยังไม่เปิดใช้งาน |
-| [`patpat-setup`](skills/patpat-setup/SKILL.md) | ติดตั้ง ตรวจสอบความถูกต้อง หรือลบ Patpat บนโฮสต์ |
+Skill ทั้งหมดจัดเก็บแบบแบน (flat) ภายใต้ [`skills/`](skills/) เพื่อให้ทุกโฮสต์ค้นพบได้ตรงกัน ตารางด้านล่างจัดกลุ่มตาม **เฟสของกระบวนการทำงาน (Workflow Phase)** และ **นโยบายการเรียกใช้ (Invocation)** (`Model-invoked` สามารถโหลดจากคำขอภาษาธรรมดาบนโฮสต์ที่รองรับ; `Explicit-only` ตั้งค่า `disable-model-invocation: true` และต้องเรียกใช้ด้วยชื่อโดยตรง)
+
+#### Entry (จุดเริ่มต้น)
+
+| Skill | การเรียกใช้ | วัตถุประสงค์ |
+| --- | --- | --- |
+| [`patpat`](skills/patpat/SKILL.md) | Model-invoked (explicit entry) | คำสั่งย่อ (slash alias) สำหรับเข้าสู่ลูป Patpat |
+| [`patpat-loop`](skills/patpat-loop/SKILL.md) | Model-invoked (explicit entry) | รันลูปการทำงานวิศวกรรมเต็มรูปแบบบนฐานหลักฐาน |
+
+#### Inspect & Plan (สำรวจและวางแผน)
+
+| Skill | การเรียกใช้ | วัตถุประสงค์ |
+| --- | --- | --- |
+| [`patpat-inspect`](skills/patpat-inspect/SKILL.md) | Model-invoked | อธิบาย ตรวจสอบ (audit) หรือวินิจฉัยพฤติกรรมโค้ดโดยไม่แก้ไขไฟล์ |
+| [`00-workspace-mapper`](skills/00-workspace-mapper/SKILL.md) | Explicit-only | สร้างหรืออัปเดตดัชนีหลักฐานของ workspace ที่ `.patpat/context-graph.json` |
+| [`patpat-impact`](skills/patpat-impact/SKILL.md) | Explicit-only | ไล่ตรวจสอบและพิสูจน์ผลกระทบ (blast radius) และสัญญาปลายน้ำโดยไม่แก้ไขไฟล์ |
+| [`patpat-plan`](skills/patpat-plan/SKILL.md) | Explicit-only | ออกแบบและจัดลำดับเฟสงานที่พิสูจน์หักล้างได้โดยยังไม่ลงมือทำจริง |
+| [`patpat-architect`](skills/patpat-architect/SKILL.md) | Explicit-only | สรุปสถาปัตยกรรม การย้ายระบบ และสัญญาก่อนเขียนโค้ด หรือสแกนโอกาสปรับปรุงแบบอ่านอย่างเดียว |
+| [`patpat-interrogate`](skills/patpat-interrogate/SKILL.md) | Explicit-only | ท้าทายสถาปัตยกรรม การออกแบบ และการเปลี่ยนแปลงจากมุมมองเชิงปรปักษ์โดยไม่แก้ไขไฟล์ |
+
+#### Build & Debug (พัฒนาและแก้บั๊ก)
+
+| Skill | การเรียกใช้ | วัตถุประสงค์ |
+| --- | --- | --- |
+| [`patpat-change`](skills/patpat-change/SKILL.md) | Explicit-only | พัฒนาฟีเจอร์ รีแฟกเตอร์เฉพาะจุด หรือแก้บั๊กที่รู้สาเหตุแล้วพร้อมหลักฐานชัดเจน |
+| [`patpat-debug`](skills/patpat-debug/SKILL.md) | Explicit-only | สร้างซ้ำบั๊ก พิสูจน์สาเหตุที่แท้จริง และแก้ไขพร้อมหลักฐานรันไทม์ |
+| [`patpat-perf`](skills/patpat-perf/SKILL.md) | Explicit-only | วินิจฉัยประสิทธิภาพถดถอยหรือปรับปรุงค่าตัวเลขเทียบกับเกณฑ์ฐานที่วัดเทียบกันได้ |
+| [`patpat-game-builder`](skills/patpat-game-builder/SKILL.md) | Explicit-only | สร้างชิ้นส่วนเกมที่เล่นได้จริง และพิสูจน์กฎกับเส้นทางการเล่นจริง |
+| [`patpat-run`](skills/patpat-run/SKILL.md) | Explicit-only | ขับเคลื่อน บันทึก checkpoint สานต่อ หรือรับช่วงงานหลายเฟสผ่าน state machine แบบ deterministic |
+| [`patpat-engineer`](skills/patpat-engineer/SKILL.md) | Explicit-only | ปฏิบัติงานย่อยเฉพาะส่วนที่ได้รับมอบหมายภายใต้ขอบเขตและสัญญาพิสูจน์ชัดเจน |
+| [`patpat-arena`](skills/patpat-arena/SKILL.md) | Explicit-only | แข่งขันแนวทางที่แยกกันจากโจทย์เดียวกัน แล้วสังเคราะห์และพิสูจน์ผลลัพธ์ 1 เดียว |
+| [`patpat-swarm`](skills/patpat-swarm/SKILL.md) | Explicit-only | กระจายงานย่อยหรือการแข่งขันแบบคู่ขนาน แล้วส่งรายงานสรุปรวม 1 ฉบับ |
+
+#### Verify & Review (พิสูจน์และรีวิว)
+
+| Skill | การเรียกใช้ | วัตถุประสงค์ |
+| --- | --- | --- |
+| [`patpat-verify`](skills/patpat-verify/SKILL.md) | Explicit-only | พิสูจน์ข้ออ้างบนชิ้นงานหลักหรือพื้นผิวผู้ใช้จริง |
+| [`patpat-verifier`](skills/patpat-verifier/SKILL.md) | Explicit-only | สร้างหรือดูแลรักษาตัวตรวจสอบเฉพาะของโปรเจกต์ที่รันทดสอบระบบจริง |
+| [`patpat-formal-verify`](skills/patpat-formal-verify/SKILL.md) | Explicit-only | สร้างหรือดูแลรักษาชุดตรวจสอบโมเดลแบบ formal สำหรับเงื่อนไขสถานะหรือ concurrency ที่สำคัญ |
+| [`patpat-review`](skills/patpat-review/SKILL.md) | Explicit-only | ท้าทายการเปลี่ยนแปลง diff และหลักฐานอย่างเป็นอิสระโดยไม่แก้ไขไฟล์ |
+| [`patpat-unslop`](skills/patpat-unslop/SKILL.md) | Explicit-only | ตัดเนื้อหาส่วนเกินออกจากเอกสารวิศวกรรม ข้อความ PR และ diff |
+
+#### Ship & Learn (ส่งมอบและเรียนรู้)
+
+| Skill | การเรียกใช้ | วัตถุประสงค์ |
+| --- | --- | --- |
+| [`patpat-ship`](skills/patpat-ship/SKILL.md) | Explicit-only | Commit และเปิดหรืออัปเดต PR เมื่อมีเจตนาส่งมอบ; merge เฉพาะเมื่อระบุชัดเจน |
+| [`patpat-learn`](skills/patpat-learn/SKILL.md) | Explicit-only | แปลงความล้มเหลวหรือข้อแก้ไขที่เกิดซ้ำให้เป็นข้อจำกัดเชิงโครงสร้างที่เล็กที่สุด |
+
+#### Diagrams, Statecharts & Meta (แผนภาพ, Statechart และเมตา)
+
+| Skill | การเรียกใช้ | วัตถุประสงค์ |
+| --- | --- | --- |
+| [`patpat-repository-diagram`](skills/patpat-repository-diagram/SKILL.md) | Explicit-only | เปลี่ยนโจทย์ แผนงาน หรือโค้ดเบสให้เป็นแผนภาพ HTML/SVG แบบอินเทอร์แอคทีฟ |
+| [`patpat-statechart`](skills/patpat-statechart/SKILL.md) | Explicit-only | จำลองสถานะของ flow ตรวจกฎด้วย TLA+/TLC และแสดงกฎที่ละเมิดเป็นเส้นทาง Mermaid |
+| [`patpat-skill`](skills/patpat-skill/SKILL.md) | Explicit-only | สร้างหรือปรับปรุง agent skill ที่นำกลับมาใช้ซ้ำได้พร้อมการพิสูจน์พฤติกรรม |
+| [`patpat-eval`](skills/patpat-eval/SKILL.md) | Explicit-only | ประเมินการกระตุ้นและพฤติกรรมของ skill ด้วยการทดลองอิงหลักฐาน |
+| [`patpat-automation`](skills/patpat-automation/SKILL.md) | Explicit-only | ออกแบบหรือขึ้นโครงระบบอัตโนมัติแบบ fail-closed โดยยังไม่เปิดใช้งาน |
+| [`patpat-setup`](skills/patpat-setup/SKILL.md) | Explicit-only | ตรวจสอบโฮสต์ปัจจุบัน และติดตั้ง ตรวจความถูกต้อง อัปเดต หรือลบ Patpat |
 
 </details>
 
@@ -205,6 +234,7 @@ Patpat ไม่เปลี่ยนความสามารถทางเ�
 - **การเขียนแบบคู่ขนานต้องการสภาพแวดล้อมที่แยกขาด:** Arena, swarm และ autopilot ต้องการ Git worktree ที่แยกกัน หรือ sandbox ที่โฮสต์บังคับใช้ มิฉะนั้นจะถอยกลับมาทำงานแบบเรียงลำดับทีละงาน
 - **การกระทำที่มีความเสี่ยงสูงจะหยุดพักรอการยืนยันเสมอ:** การ deploy ขึ้น production, การเผยแพร่แพ็กเกจ, การ force-push, การลบข้อมูล, การหมุนเวียน secrets และการเปลี่ยนแปลง auth หรือระบบเงินที่มีความเสี่ยง ต้องได้รับการอนุมัติอย่างชัดเจน และข้อผิดพลาดจริงของ CI จะบล็อกการ merge เสมอ
 - **ไม่มีการตั้งค่าโมเดลล่วงหน้า (No model presets):** Worker จะสืบทอดโมเดลจาก parent เว้นแต่คุณหรือโฮสต์จะเป็นผู้เลือก ดูที่ [การเลือกโมเดล](skills/patpat-setup/SKILL.md#model-choice)
+- **ขอบเขตที่ปฏิเสธอย่างชัดเจน (Documented rejections):** ฟีเจอร์และรูปแบบการออกแบบที่ตั้งใจให้อยู่นอกขอบเขตถูกบันทึกไว้ใน [`.out-of-scope/`](.out-of-scope/)
 
 ## แบบจำลองความเชื่อถือและสิทธิ์ความปลอดภัย (Trust model)
 

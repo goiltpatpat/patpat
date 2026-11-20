@@ -1,6 +1,6 @@
 ---
 name: patpat-verifier
-description: Create or maintain a project-specific verification skill that launches, exercises, observes, and cleans up the real system. Use when a repository lacks repeatable proof of its user-facing behavior.
+description: Create or maintain a project-local verifier that launches, exercises, observes, and cleans up the real system.
 disable-model-invocation: true
 metadata:
   patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"AgentSkill","requires_state":["workspace-root-open"],"produces_state":["project-verifier-configured"],"verification_cmd":"git status --short"}'

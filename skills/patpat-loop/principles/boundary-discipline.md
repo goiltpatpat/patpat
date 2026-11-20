@@ -1,5 +1,5 @@
 # Boundary Discipline
 
-Concentrate validation and adaptation where trust changes: user input, config, network, storage, process, lifecycle, serialization, and external APIs.
+**Rule:** Validate and adapt at trust boundaries (user input, config, network, storage, process, lifecycle, serialization, external APIs); keep internal logic explicit without scattering redundant defensive checks.
 
-Trace data and control across those boundaries. Symbol search alone does not prove blast radius. Keep internal logic explicit and avoid scattering defensive checks after the boundary has already been crossed.
+**Test:** Trace data and control across every touched boundary—symbol search alone does not prove blast radius.

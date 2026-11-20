@@ -1,37 +1,11 @@
 # Proof Over Proxy
 
-Define the claim before choosing a check.
+**Rule:** Translate every material user and safety requirement into an observable 5-field proof contract (`Claim`, `Surface`, `Action`, `Expect`, `Cleanup`) before editing; never weaken an expectation to fit a failing result. Verify on the authoritative surface through the real user/verifier interface using the Onion Model: (1) Static/Type -> (2) Empirical Execution -> (3) Mutation Resilience (fault-inject to ensure tests fail on broken logic) -> (4) Adversarial Audit on high-risk boundaries (never burn review tokens before lower gates pass).
 
-Translate every material user requirement, including preservation and safety constraints, into an observable Claim and Expect in the existing 5-field proof contract. For several requirements, reuse short labels across Claim, Surface, Action, and Expect, then record a result or named evidence gap for each label. Keep one claim inline for a simple edit; do not create a separate requirements document. Reconcile coverage with the request before ACT and before claiming verified; an omitted requirement is an evidence gap even when every declared check passes. Change an expectation only when requirement or contract evidence justifies it, not to fit a failing result.
+Reject synthetic mock illusions and reward-hacking bypasses (skipped tests, linter suppressions, empty catches, arbitrary sleeps). Derive expected values from the requirement or an independent reference, never by running the changed subject and copying its output; a baseline captured before a behavior-preserving change is that reference. The opposite failure also counts: a test that fails when only internals change and every observable result stays the same is pinned to the implementation, so rewrite it against the contract or delete it. Pair every "no call happened" assertion with a case where the call does happen. Assert error types/codes callers branch on, await async results, and assert changed state/effects for void calls. Classify oracles (repository, runtime, independent reference, lockstep), require independent/lockstep oracles for runtime equivalence, and bind durable evidence to exact revision, inputs, environment, and oracle (recollect if any binding changes).
 
-- Identify the authoritative artifact or user surface.
-- Capture a baseline or reproduce the symptom when relevant.
-- Run the smallest targeted automated check.
-- Exercise the real behavior when practical.
-- Observe the result and material side effects directly.
-- Record the action, result, and limitation.
-
-For tests and evaluators, call the subject through the interface its users or the authoritative verifier uses and assert a literal observed result or material side effect. A check that would still pass if the subject or imported implementation returned `undefined` or `None`, or that only proves a function was called, a constant was copied, or a fixture agrees with itself, is not behavioral proof. For void or side-effect-only behavior, assert the changed state or emitted effect; for async behavior, await the authoritative result; for nondeterministic behavior, assert a bounded invariant or independently derived effect rather than an exact unstable value. Replace proxy checks with a concrete input and expected output/effect. The opposite failure also counts: a test that fails when only internals change and every observable result stays the same is pinned to the implementation, so rewrite it against the contract or delete it. Derive expected values from the requirement or an independent reference, never by running the changed subject and copying its output; a baseline captured before a behavior-preserving change is that reference. Assert the error type or code that callers branch on, not message text, unless the text itself is the contract. A payload the subject sends to a mocked external boundary is the subject's observable behavior, though it does not prove the external contract; a call to an internal helper is not behavior. Pair every "no call happened" assertion with a case where the call does happen. Prefer no new test over one that mocks internals, depends on timing, or would be deleted after the fix. If a behavioral claim has no observable contract, mark the evidence `INCONCLUSIVE`; classify a claim as static only when the requirement itself is static from the outset.
-
-Layer verification hierarchically (the Onion Model):
-1. Static & Type Gate: Compiler, linter, typecheck, and AST shape (0 tokens, sub-second).
-2. Empirical Execution Gate: Deterministic behavioral test execution on real targets (0 tokens).
-3. Mutation Resilience Gate: Scratch fault injection (e.g. inverted conditions, dummy returns) to confirm tests fail when subject logic breaks (0 tokens). A test suite that remains green against a corrupted subject mutant is proxy theater.
-4. Adversarial Audit Gate: Skeptical independent review scoped strictly to high-risk boundaries (auth, security, invariants, data loss).
-Never burn review tokens on a candidate whose lower-tier deterministic gates have not all passed.
-
-Reject synthetic proxy illusions: in-memory mocks, stubs, and synthetic unit fixtures frequently decouple from production runtime realities. A test passing against mocked dependencies proves only that the subject agrees with the mock, not that it will survive live execution. Core behavioral claims, contract boundaries, and security invariants must be verified against their true authoritative surface (real CLI execution, deterministic exit codes, live process states, filesystem mutations, or end-to-end integration paths). Never accept mock verification as proof of an external contract or production invariant. Reject reward-hacking bypasses: test skipping annotations, compiler or linter suppressions, empty exception handlers, and arbitrary sleep delays introduced to force green builds; an oracle must not be silenced or weakened.
-
-Classify the oracle as repository, runtime, independent reference, or lockstep. Claims of runtime equivalence require an independent reference or lockstep comparison; a build, local implementation, or same-context reviewer cannot prove equivalence.
-
-Bind durable evidence to the exact revision or snapshot it checked, the relevant inputs and environment, and the oracle used. A material change to any binding makes the evidence stale; recollect it instead of carrying a green result forward.
+**Test:** Would the check still pass if the subject returned `None`/`undefined`, skipped the work, or only called an internal helper? If yes, replace it with an observable input->effect oracle, or mark the claim `INCONCLUSIVE`.
 
 ## Close the deliverable set
 
-Reconcile each required deliverable and provider or destination against the actual output before claiming completion. Inspect each output in its intended form; for a user-facing image, interactive artifact, or web page, inspect the rendered or live surface when a suitable viewer is available. File existence alone is not proof.
-
-Report evidence separately for each output. Use `partially verified` when an output exists but required evidence could not be checked. If a required output is missing or failed, report the task as incomplete and name that output; success elsewhere must not hide it.
-
-Do not treat compilation, test success, file timestamps, cached output, or an agent summary as proof of a different claim.
-
-Delivery receipts prove delivery only. When the requested outcome depends on post-delivery behavior, inspect that surface within existing authority or name the pending observation and responsible handoff. Keep the overall outcome partially verified until that evidence exists; do not infer permission to deploy or mutate production to obtain it.
+Reconcile every required deliverable and destination against actual rendered or live output before claiming completion (file existence, compilation, timestamps, cached output, or delivery receipts alone are not proof). Report each output separately; use `partially verified` for unchecked outputs, and mark the task incomplete if any required output is missing or failed.

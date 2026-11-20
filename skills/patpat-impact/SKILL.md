@@ -1,6 +1,6 @@
 ---
 name: patpat-impact
-description: Trace and prove the blast radius of an existing or proposed repository change. Use for downstream-regression questions, risky diffs, contract consumers, or claims that a small change is safe; remain read-only.
+description: Trace and prove the downstream blast radius and contract impact of a proposed or existing change without editing.
 disable-model-invocation: true
 metadata:
   patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Codebase","requires_state":["workspace-root-open"],"produces_state":["impact-blast-radius-proven"],"verification_cmd":"git diff --stat"}'

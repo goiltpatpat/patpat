@@ -1,9 +1,5 @@
 # Sequence Verifiable Units
 
-Split multi-step work into the fewest atomic, reversible units that each return the system to a verifiable state.
+**Rule:** Split multi-step work into the fewest atomic, reversible units that each return to a verified state—no throwaway compatibility shims (migrate all internal callers and delete the old API in the same wave). Build a rerunnable tool after the first proven manual unit when a transform repeats. A configured Git remote is not push authority: checkpoint locally unless delivery/continuation authority permits remote writes, bind verification to the exact pushed head, and require independent review before pushing to an existing PR or delivery surface.
 
-Verify each unit before starting the next. A unit is an engineering boundary, not permission to create a commit, branch, pull request, or external artifact.
-
-A verifiable unit is not a throwaway compatibility layer. Do not add a dual path just to make an intermediate step look complete. When a new internal API replaces an old one and no named external consumer needs compatibility, migrate every caller and delete the old API in the same wave. If the same transform will run more than once, build a rerunnable tool after the first proven manual unit and use that tool for the rest of the wave.
-
-A configured Git remote is a destination, not authority. Remote Git writes remain fail-closed: a remote existing grants no push authority by itself. In multi-phase, long-running, or autonomous execution, push a verified unit checkpoint only when existing delivery intent or continuation authority permits remote writes and repository or user policy does not prohibit them. Bind verification to the exact pushed head. If the push updates an existing pull request or otherwise exposes that candidate for delivery, require independent review of that exact head before pushing. A checkpoint push is not a ready-PR or merge decision; completion still follows default delivery with current verification and review. Without remote-write authority, checkpoint locally only.
+**Test:** Each unit passes verification independently before the next begins, and leaves zero dual-path shims behind.

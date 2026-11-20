@@ -1,0 +1,3 @@
+interface:
+  display_name: "Patpat Inspect"
+  short_description: "Explain repository behavior, ownership, or rationale without editing"

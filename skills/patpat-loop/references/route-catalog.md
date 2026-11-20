@@ -2,7 +2,9 @@
 
 Read this catalog only when the common routes in `patpat-loop` do not settle the workflow.
 
-When one request requires outputs from more than one specialized row, keep `patpat-loop` as the orchestrator and run each relevant workflow; do not choose one specialist and drop another explicit deliverable. Use `patpat-plan` when dependent phases need a separate execution plan. Skills marked for explicit user invocation or manual invocation remain fully composable as sub-steps when orchestrated by `patpat-loop` or `patpat-run`; orchestrators compose with specialists along declared state-graph edges to avoid duplicating specialist rules into one giant monolithic skill.
+**Two-Load & Composable Primitives:** Balance *context load* (always-loaded descriptions and steering files) against *cognitive load* (commands humans must recall). User-invoked workflows set `disable-model-invocation: true` (zero ambient context load, concise human-facing description) and are invoked explicitly or read directly by orchestrators. Composable primitives are small, reusable methodology/vocabulary skills composed along declared `metadata.patpat.ontology` state-graph edges by `patpat-loop` or `patpat-run`, avoiding monolithic rule duplication.
+
+When one request requires outputs from more than one specialized row, keep `patpat-loop` as the orchestrator and run each relevant workflow; do not choose one specialist and drop another explicit deliverable. Use `patpat-plan` when dependent phases need a separate execution plan.
 
 | Intent | Workflow | Playbook |
 | --- | --- | --- |

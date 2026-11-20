@@ -1,5 +1,5 @@
 # Idempotent Effects
 
-Design retries and partial runs to converge on the same intended state.
+**Rule:** Design retries and partial runs to converge on the same state: give every external effect an immutable identity, dedupe check, preflight, bounded retry, and single write coordinator. Define compensation when reversible; fail closed before irreversible effects when state or authority is uncertain.
 
-Give every external effect an immutable identity, dedupe check, immediate preflight, and bounded retry policy. Define compensation when reversal is possible. For an irreversible effect, fail before the effect when state or authority is uncertain and state the irreversibility explicitly. Keep one coordinator responsible for writes.
+**Test:** Re-running the step after a partial failure must produce the same end state with no duplicate external effect.

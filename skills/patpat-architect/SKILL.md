@@ -1,6 +1,6 @@
 ---
 name: patpat-architect
-description: Design repository-native changes before implementation or run a requested read-only architecture-opportunity scan. Use for architecture, migrations, public contracts, security-sensitive boundaries, cross-cutting work, or decisions with meaningful compatibility risk.
+description: Design repository-native architecture, migrations, and contracts before coding, or run a read-only opportunity scan.
 disable-model-invocation: true
 metadata:
   patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Codebase","requires_state":["workspace-root-open"],"produces_state":["architecture-design-settled"],"verification_cmd":"git diff --name-only"}'
@@ -14,33 +14,36 @@ When invoked directly, read the [operating protocol](../patpat-loop/references/o
 
 Read [repository truth](../patpat-loop/principles/repository-truth.md), [smallest safe change](../patpat-loop/principles/smallest-safe-change.md), [preserve safety](../patpat-loop/principles/preserve-safety.md), [subtract before you add](../patpat-loop/principles/subtract-before-you-add.md), [attack the premise](../patpat-loop/principles/attack-the-premise.md), and [redesign from first principles](../patpat-loop/principles/redesign-from-first-principles.md). Apply the [architecture change playbook](../patpat-loop/playbooks/architecture-change.md).
 
-Ground the design in current repository evidence. Name the contract, its callers, the changed behavior, migration impact, compatibility risk, rollback path, and proof contract.
+## Core Selection Flow
 
-Deliver architectural specifications, designs, and trade-off comparisons as persistent artifact files (under `docs/designs/` or the harness artifact directory) rather than flooding conversation chat. The conversational reply reports the artifact path, compact executive summary, and explicit open trade-offs requiring user direction. For a material architecture decision or a change that crosses a meaningful boundary, the architecture output must include a compact caller usage sketch, the core data or type shape, boundary-relevant signatures, failure modes, rejected alternatives, and the proof that will show implementation still preserves the chosen shape. If implementation needs an unplanned parameter, state escape hatch, or compatibility path, stop and revisit the sketch before adding a workaround. Keep smaller local changes on the bounded-change path.
+1. **Trace every touched system**: ground the design in live repository evidence—contract, callers, changed behavior, migration/compatibility risk, rollback path, and proof contract.
+2. **Sketch two shapes** (or 2–4 genuinely divergent orthogonal shapes): *minimal interface* (1–3 narrow entry points), *maximum flexibility* (composable primitives), *common-caller ergonomics* (80% happy path), or *ports and adapters* (strict core/I/O seam).
+3. **Pick the winner**: choose **one owner per piece of state, one way to do each task, and the least for callers to know**—scored on **Depth** (high capability-to-interface ratio; reject shallow wrappers), **Locality** (co-locate what changes together), and **Seam** quality (testable, swappable boundary).
+4. **Route large or contested designs** to [`patpat-arena`](../patpat-arena/SKILL.md). Keep smaller local changes on the bounded-change path.
 
-Prefer a design that reduces degrees of freedom and reuses repository structure. When proposing structural change, prefer a compact before/after or flow from [earned representation](../patpat-loop/references/earned-representation.md). Seek independent review before implementing auth, billing, permissions, destructive migrations, production infrastructure, or public contract changes. Stop for explicit approval when required.
+**Prototype first:** when an observable experiment can settle a fork (latency, integration, failure mode, ergonomics), run the [prototype playbook](../patpat-loop/playbooks/prototype.md) in an isolated disposable scratch area and recommend from evidence instead of guessing. Escalate to the user only for product preferences, authority boundaries, or irreversible trade-offs.
 
-Keep architecture work read-only by default. Do not edit implementation files. When the user also requested implementation, finish the design gate and hand the authorized unit to `patpat-change` under `patpat-loop` instead of implementing inside this workflow.
+## Deep Modules & Layering
 
-When the user asks what architecture should improve rather than asking to design a known change, run the bounded discovery route in the [architecture change playbook](../patpat-loop/playbooks/architecture-change.md). Return no more than three source-backed candidates with current friction, proposed boundary, test payoff, and confidence. Stop for the user to choose before design or implementation. Do not make this scan an automatic prelude to every architecture request.
+Use **Deep Modules** terms: *Module* (hides complexity behind a clear boundary), *Interface* (narrow public surface), *Implementation* (hidden mechanics), *Adapter* (thin boundary translator), *Depth* (capability-to-interface ratio), *Seam* (test/substitution boundary).
 
-When an observable experiment can settle a design fork, apply the [prototype playbook](../patpat-loop/playbooks/prototype.md). Keep prototypes in an isolated scratch area outside production paths and treat them as disposable evidence, not implementation.
+Keep dependencies pointing inward across unidirectional layers:
+- **Domain Core**: pure entities, state transitions, invariants (no framework, transport, or I/O dependencies).
+- **Application Services**: use cases, command dispatchers, orchestration.
+- **Adapters**: CLI parsers, HTTP/API clients, storage, external providers.
 
-Produce a concise sequence in this form:
+## Deliverables & Discovery
+
+Write designs and trade-offs to a persistent artifact (`docs/designs/` or harness artifact dir); keep chat to the artifact path, executive summary, and open user decisions. Include: caller usage sketch, core data/type shape, boundary signatures, failure modes, rejected alternatives, proof contract, and a compact before/after from [earned representation](../patpat-loop/references/earned-representation.md), plus a verification sequence:
 
 ```text
 1. <step> -> verify: <targeted check or observation>
 2. <step> -> verify: <targeted check or observation>
 ```
 
-## Placement and layering heuristics
+If implementation later needs an unplanned parameter, state escape hatch, or compatibility path, stop and revisit the sketch first. Require independent review and explicit approval before auth, billing, permissions, destructive migrations, production infra, or public contract changes.
 
-Structure new code and boundary refactors into explicit, unidirectional layers:
-- **Domain Core**: Pure domain entities, state-machine transitions, and core invariants. No dependencies on external frameworks, transports, or I/O.
-- **Application Services**: Use cases, command dispatchers, orchestration graphs, and coordination logic.
-- **Adapters**: Concrete implementations of boundary interfaces—CLI parsers, HTTP/API clients, disk storage, and external providers.
-
-Never leak adapter concerns into the domain core. Dependencies point inward toward the core.
+For open-ended architecture-opportunity scans (only when requested, never as an automatic prelude), run the bounded discovery route in [architecture change](../patpat-loop/playbooks/architecture-change.md), return <=3 source-backed candidates (friction, proposed boundary, test payoff, confidence), and stop for user selection.
 
 ## Mutation boundary
 

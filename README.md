@@ -105,39 +105,68 @@ REVIEW -> LEARN? -> propose and wait for approval -> approved edit -> VERIFY -> 
 The diagram and statechart skills work as a pair: a lifecycle diagram can seed a statechart with the same labels, and a broken rule returns to the diagram as a guided story that marks where the flow goes wrong.
 
 <details>
-<summary>All 29 skills</summary>
+<summary>All 29 skills (by workflow phase and invocation)</summary>
 
-| Skill | Use it when |
-| --- | --- |
-| [`patpat`](skills/patpat/SKILL.md) | Slash alias for the loop. |
-| [`patpat-loop`](skills/patpat-loop/SKILL.md) | The work is non-trivial and needs the full loop. |
-| [`00-workspace-mapper`](skills/00-workspace-mapper/SKILL.md) | Explicitly map an unfamiliar workspace. |
-| [`patpat-inspect`](skills/patpat-inspect/SKILL.md) | Explain, audit, or diagnose without editing. |
-| [`patpat-impact`](skills/patpat-impact/SKILL.md) | Prove blast radius and downstream invariants. |
-| [`patpat-plan`](skills/patpat-plan/SKILL.md) | Sequence verifiable phases without implementing them. |
-| [`patpat-architect`](skills/patpat-architect/SKILL.md) | Settle contracts, migrations, and risk first. |
-| [`patpat-interrogate`](skills/patpat-interrogate/SKILL.md) | Challenge a design or change from adversarial perspectives. |
-| [`patpat-repository-diagram`](skills/patpat-repository-diagram/SKILL.md) | Turn an idea, plan, or codebase into an interactive diagram. |
-| [`patpat-statechart`](skills/patpat-statechart/SKILL.md) | Chart how a flow moves between states, check its rules with TLC, and show each bug as a path. |
-| [`patpat-change`](skills/patpat-change/SKILL.md) | Implement one bounded feature or refactor. |
-| [`patpat-debug`](skills/patpat-debug/SKILL.md) | Reproduce, root-cause, and fix. |
-| [`patpat-perf`](skills/patpat-perf/SKILL.md) | Improve a measured resource regression. |
-| [`patpat-game-builder`](skills/patpat-game-builder/SKILL.md) | Build a playable game slice, then verify the real player path. |
-| [`patpat-verify`](skills/patpat-verify/SKILL.md) | Test a claim on the real artifact or user surface. |
-| [`patpat-verifier`](skills/patpat-verifier/SKILL.md) | Create or maintain a project-specific verifier. |
-| [`patpat-formal-verify`](skills/patpat-formal-verify/SKILL.md) | Create and maintain bounded formal models that later changes rerun. |
-| [`patpat-review`](skills/patpat-review/SKILL.md) | Independently try to falsify a change and its evidence. |
-| [`patpat-unslop`](skills/patpat-unslop/SKILL.md) | Cut filler from engineering docs, PR text, and diffs. |
-| [`patpat-run`](skills/patpat-run/SKILL.md) | Drive or resume a durable multi-phase graph. |
-| [`patpat-engineer`](skills/patpat-engineer/SKILL.md) | Execute one isolated slice for a named owner. |
-| [`patpat-arena`](skills/patpat-arena/SKILL.md) | Compete isolated attempts and synthesize one verified result. |
-| [`patpat-swarm`](skills/patpat-swarm/SKILL.md) | Cover slices or races and return one report. |
-| [`patpat-ship`](skills/patpat-ship/SKILL.md) | Commit-and-PR with delivery intent; merge only when named. |
-| [`patpat-learn`](skills/patpat-learn/SKILL.md) | Encode a recurring failure as the smallest durable constraint. |
-| [`patpat-skill`](skills/patpat-skill/SKILL.md) | Author a reusable skill. |
-| [`patpat-eval`](skills/patpat-eval/SKILL.md) | Evaluate skill triggering and behavior with an evidence rubric. |
-| [`patpat-automation`](skills/patpat-automation/SKILL.md) | Design fail-closed automation without enabling it. |
-| [`patpat-setup`](skills/patpat-setup/SKILL.md) | Install, validate, or remove Patpat on a host. |
+Skills stay flat under [`skills/`](skills/) for host discovery. Every row below lists both its **workflow phase** and **invocation policy** (`Model-invoked` can load from plain-language prompts on supported hosts; `Explicit-only` sets `disable-model-invocation: true` and must be called by name).
+
+#### Entry
+
+| Skill | Invocation | Purpose |
+| --- | --- | --- |
+| [`patpat`](skills/patpat/SKILL.md) | Model-invoked (explicit entry) | Slash alias for the Patpat loop. |
+| [`patpat-loop`](skills/patpat-loop/SKILL.md) | Model-invoked (explicit entry) | Run the full evidence-driven engineering loop. |
+
+#### Inspect & Plan
+
+| Skill | Invocation | Purpose |
+| --- | --- | --- |
+| [`patpat-inspect`](skills/patpat-inspect/SKILL.md) | Model-invoked | Explain, audit, or diagnose repository behavior without editing. |
+| [`00-workspace-mapper`](skills/00-workspace-mapper/SKILL.md) | Explicit-only | Write or refresh a compact workspace index at `.patpat/context-graph.json`. |
+| [`patpat-impact`](skills/patpat-impact/SKILL.md) | Explicit-only | Trace and prove downstream blast radius and contract impact without editing. |
+| [`patpat-plan`](skills/patpat-plan/SKILL.md) | Explicit-only | Sequence falsifiable multi-phase work without implementing it. |
+| [`patpat-architect`](skills/patpat-architect/SKILL.md) | Explicit-only | Settle architecture, migrations, and contracts before coding, or run an opportunity scan. |
+| [`patpat-interrogate`](skills/patpat-interrogate/SKILL.md) | Explicit-only | Challenge architecture, designs, and changes from adversarial perspectives without editing. |
+
+#### Build & Debug
+
+| Skill | Invocation | Purpose |
+| --- | --- | --- |
+| [`patpat-change`](skills/patpat-change/SKILL.md) | Explicit-only | Implement one bounded feature, localized refactor, or known-cause fix with proof. |
+| [`patpat-debug`](skills/patpat-debug/SKILL.md) | Explicit-only | Reproduce a defect, prove its root cause, and fix it with runtime evidence. |
+| [`patpat-perf`](skills/patpat-perf/SKILL.md) | Explicit-only | Diagnose a resource regression or drive sustained numeric optimization against a baseline. |
+| [`patpat-game-builder`](skills/patpat-game-builder/SKILL.md) | Explicit-only | Build a playable game slice and verify rules and a real playthrough. |
+| [`patpat-run`](skills/patpat-run/SKILL.md) | Explicit-only | Drive, checkpoint, resume, or take over multi-phase work via a deterministic state machine. |
+| [`patpat-engineer`](skills/patpat-engineer/SKILL.md) | Explicit-only | Execute one delegated implementation slice for a named integration owner. |
+| [`patpat-arena`](skills/patpat-arena/SKILL.md) | Explicit-only | Compete isolated attempts at one brief and verify one synthesized result. |
+| [`patpat-swarm`](skills/patpat-swarm/SKILL.md) | Explicit-only | Fan out isolated workers across slices or races and return one aggregated report. |
+
+#### Verify & Review
+
+| Skill | Invocation | Purpose |
+| --- | --- | --- |
+| [`patpat-verify`](skills/patpat-verify/SKILL.md) | Explicit-only | Prove a claim against its authoritative artifact or real user surface. |
+| [`patpat-verifier`](skills/patpat-verifier/SKILL.md) | Explicit-only | Create or maintain a project-local verifier for real-system behavior. |
+| [`patpat-formal-verify`](skills/patpat-formal-verify/SKILL.md) | Explicit-only | Create or maintain a project-local formal verification suite for costly invariants. |
+| [`patpat-review`](skills/patpat-review/SKILL.md) | Explicit-only | Independently challenge an implementation, diff, and its evidence without editing. |
+| [`patpat-unslop`](skills/patpat-unslop/SKILL.md) | Explicit-only | Cut filler and superficial patterns from engineering docs, PR text, and diffs. |
+
+#### Ship & Learn
+
+| Skill | Invocation | Purpose |
+| --- | --- | --- |
+| [`patpat-ship`](skills/patpat-ship/SKILL.md) | Explicit-only | Commit and open or update a ready PR with delivery intent; merge only when named. |
+| [`patpat-learn`](skills/patpat-learn/SKILL.md) | Explicit-only | Convert a recurring failure or correction into the smallest durable constraint. |
+
+#### Diagrams, Statecharts & Meta
+
+| Skill | Invocation | Purpose |
+| --- | --- | --- |
+| [`patpat-repository-diagram`](skills/patpat-repository-diagram/SKILL.md) | Explicit-only | Turn a brief, plan, or codebase into a self-contained interactive HTML/SVG diagram. |
+| [`patpat-statechart`](skills/patpat-statechart/SKILL.md) | Explicit-only | Model a flow's states, check rules with TLA+/TLC, and show broken rules as Mermaid paths. |
+| [`patpat-skill`](skills/patpat-skill/SKILL.md) | Explicit-only | Create or revise a reusable agent skill with behavioral proof. |
+| [`patpat-eval`](skills/patpat-eval/SKILL.md) | Explicit-only | Evaluate skill triggering and behavior using scoped, evidence-based trials. |
+| [`patpat-automation`](skills/patpat-automation/SKILL.md) | Explicit-only | Design or scaffold fail-closed external automation without enabling it. |
+| [`patpat-setup`](skills/patpat-setup/SKILL.md) | Explicit-only | Inspect the active host and install, validate, update, or remove Patpat. |
 
 </details>
 
@@ -205,6 +234,7 @@ Patpat does not turn capability into authority, and it does not claim more than 
 - **Parallel writes need isolation.** Arena, swarm, and autopilot require separate worktrees or host sandboxes and otherwise fall back to serial work.
 - **Risky actions always pause.** Production deploy, package publish, force-push, data deletion, secret rotation, and risky auth or billing changes need explicit approval. A real CI failure blocks merge.
 - **No model presets.** Workers inherit the parent model unless you or the host choose; see [model choice](skills/patpat-setup/SKILL.md#model-choice).
+- **Documented rejections.** Deliberately out-of-scope features and rejected design patterns are recorded under [`.out-of-scope/`](.out-of-scope/).
 
 ## Trust model
 

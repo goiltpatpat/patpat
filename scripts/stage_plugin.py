@@ -22,6 +22,7 @@ PACKAGE_ENTRIES = (
     ".codex-plugin",
     ".cursor-plugin",
     ".gitignore",
+    ".out-of-scope",
     "AGENTS.md",
     "LICENSE",
     "README.md",
@@ -37,7 +38,7 @@ PACKAGE_ENTRIES = (
     "skills",
 )
 IGNORED_NAMES = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "node_modules"}
-IGNORED_PACKAGE_PATHS = {"docs/diagrams"}
+IGNORED_PACKAGE_PATHS = {"docs/diagrams", "skills/patpat-statechart/scripts/test"}
 
 
 class StageError(RuntimeError):
@@ -181,6 +182,8 @@ def stage(source: Path, target: Path) -> dict[str, str]:
             raise StageError("local Memory Bank entered the staged artifact")
         if (temporary / "docs" / "diagrams").exists():
             raise StageError("local docs/diagrams artifacts entered the staged package")
+        if (temporary / "skills" / "patpat-statechart" / "scripts" / "test").exists():
+            raise StageError("statechart test corpus entered the staged package")
         staged_errors = validate_root(temporary)
         if staged_errors:
             raise StageError(f"staged artifact validation failed: {'; '.join(staged_errors)}")

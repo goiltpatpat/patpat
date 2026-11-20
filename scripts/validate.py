@@ -560,6 +560,8 @@ EXPECTED_HOOK_FILES = {
     Path("hooks/hooks.json"),
     Path("hooks/scripts/patpat_loop_state.py"),
     Path("hooks/scripts/patpat_loop_state.cmd"),
+    Path("hooks/scripts/patpat_attribution_guard.py"),
+    Path("hooks/scripts/patpat_attribution_guard.cmd"),
 }
 
 
@@ -1281,7 +1283,7 @@ def validate_hooks(root: Path, parsed: dict[str, dict[str, object]], errors: lis
         except json.JSONDecodeError:
             hook_data = {}
         hook_events = hook_data.get("hooks") if isinstance(hook_data, dict) else None
-        for event in ("SessionStart", "UserPromptSubmit", "SessionEnd"):
+        for event in ("SessionStart", "UserPromptSubmit", "SessionEnd", "PreToolUse"):
             groups = hook_events.get(event, []) if isinstance(hook_events, dict) else []
             commands = [
                 entry.get("commandWindows")

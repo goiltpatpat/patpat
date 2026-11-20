@@ -24,7 +24,8 @@ from validate import validate_root
 INVENTORY_NAME = ".patpat-inventory.json"
 BACKUP_MANIFEST_NAME = ".patpat-backup.json"
 SCHEMA = 1
-IGNORED_NAMES = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
+IGNORED_NAMES = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "node_modules"}
+IGNORED_SKILL_PATHS = {"patpat-statechart/scripts/test"}
 NAME_LINE = re.compile(r"^name:\s*['\"]?([^'\"\s]+)['\"]?\s*$")
 SKILL_NAME = re.compile(r"^(?:patpat(?:-[a-z0-9]+)*|00-workspace-mapper)$")
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
@@ -104,15 +105,42 @@ def paths_overlap(first: Path, second: Path) -> bool:
     return first == second or first in second.parents or second in first.parents
 
 
-def is_ignored(path: Path) -> bool:
-    return any(part in IGNORED_NAMES for part in path.parts) or path.suffix in {".pyc", ".pyo"}
+def is_ignored(path: Path, *, skill_name: str | None = None) -> bool:
+    if any(part in IGNORED_NAMES for part in path.parts) or path.suffix in {".pyc", ".pyo"}:
+        return True
+    relative = f"{skill_name}/{path.as_posix()}" if skill_name else path.as_posix()
+    folded = relative.casefold()
+    return any(
+        folded == excluded.casefold() or folded.startswith(f"{excluded.casefold()}/")
+        for excluded in IGNORED_SKILL_PATHS
+    )
+
+
+def skill_copy_ignore(skill_root: Path):
+    resolved_root = skill_root.resolve()
+    skill_name = skill_root.name
+    pattern_ignore = shutil.ignore_patterns(*IGNORED_NAMES, "*.pyc", "*.pyo")
+
+    def ignore(directory: str, names: list[str]) -> list[str]:
+        ignored = set(pattern_ignore(directory, names))
+        current = Path(directory).resolve()
+        for name in names:
+            try:
+                relative = (current / name).relative_to(resolved_root)
+            except ValueError:
+                continue
+            if is_ignored(relative, skill_name=skill_name):
+                ignored.add(name)
+        return sorted(ignored)
+
+    return ignore
 
 
 def inventory(root: Path) -> dict[str, str]:
     files: dict[str, str] = {}
     for path in sorted(root.rglob("*")):
         relative = path.relative_to(root)
-        if is_ignored(relative):
+        if is_ignored(relative, skill_name=root.name):
             continue
         if path.is_symlink():
             raise UpdateError(f"owned skill contains a symlink: {path}")
@@ -418,7 +446,7 @@ def copy_skill(source: Path, destination: Path) -> None:
         source,
         destination,
         copy_function=shutil.copy2,
-        ignore=shutil.ignore_patterns(*IGNORED_NAMES, "*.pyc", "*.pyo"),
+        ignore=skill_copy_ignore(source),
     )
 
 
