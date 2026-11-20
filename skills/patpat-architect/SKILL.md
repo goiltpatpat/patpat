@@ -19,7 +19,7 @@ Read [repository truth](../patpat-loop/principles/repository-truth.md), [smalles
 1. **Trace every touched system**: ground the design in live repository evidence—contract, callers, changed behavior, migration/compatibility risk, rollback path, and proof contract.
 2. **Sketch two shapes** (or 2–4 genuinely divergent orthogonal shapes): *minimal interface* (1–3 narrow entry points), *maximum flexibility* (composable primitives), *common-caller ergonomics* (80% happy path), or *ports and adapters* (strict core/I/O seam).
 3. **Pick the winner**: choose **one owner per piece of state, one way to do each task, and the least for callers to know**—scored on **Depth** (high capability-to-interface ratio; reject shallow wrappers), **Locality** (co-locate what changes together), and **Seam** quality (testable, swappable boundary).
-4. **Route large or contested designs** to [`patpat-arena`](../patpat-arena/SKILL.md). Keep smaller local changes on `patpat-change`.
+4. **Route large or contested designs** to [`patpat-arena`](../patpat-arena/SKILL.md). Keep smaller local changes on the bounded-change path.
 
 **Prototype first:** when an observable experiment can settle a fork (latency, integration, failure mode, ergonomics), run the [prototype playbook](../patpat-loop/playbooks/prototype.md) in an isolated disposable scratch area and recommend from evidence instead of guessing. Escalate to the user only for product preferences, authority boundaries, or irreversible trade-offs.
 
