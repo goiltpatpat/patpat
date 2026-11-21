@@ -74,12 +74,12 @@ After an approved edit, `VERIFY` advances the evidence epoch and invalidates pri
 
 ## Phase-Boundary Hygiene
 
-At every phase or slice boundary, pick the first `YES` in this five-option fresh-context tree:
+Use this 5-step **Phase-Boundary Context Tree** at phase boundaries only (never mid-phase), taking the first `YES`:
 
-1. **Continue** — staying in the same unbroken design phase or active slice within the working smart zone (~150k tokens) where primary-source context still helps.
+1. **Continue** — inside the ~100–150k token smart zone where primary-source context beats any lossy summary; stay in the same unbroken design phase or active slice.
 2. **`/clear`** — current slice/ticket is complete and disposable (state is persisted in git, spec/tickets, or durable run store); start fresh.
-3. **Handoff** — state must transfer across harness, directory, colleague, or side-fork without dragging transcript noise.
-4. **Subagent** — work is an isolated, bounded, or AFK slice; spawn a **fresh (non-forked) subagent** with a **pointer-only brief** (spec, ticket/slice, commits, out-of-repo exploration notes, and exact proof bar—never rely on inherited transcript history).
-5. **`/compact`** — last resort only; compaction produces a lossy secondary source.
+3. **`/handoff`** — narrow use only: state must transfer across harness, directory, colleague, or side-fork without dragging transcript noise.
+4. **Subagent** — isolated, bounded, or AFK slice; spawn a **fresh (non-forked) subagent** with a **pointer-only brief** (spec, ticket/slice, commits, out-of-repo exploration notes, and exact proof bar—never rely on inherited transcript history).
+5. **`/compact`** — last-resort fallback, not first reach; compaction produces a lossy secondary source.
 
 Keep pre-build design phases (`FRAME -> INSPECT -> DESIGN GATE`, or grill -> spec -> tickets) in one unbroken context window so domain decisions stay primary-source. Between independent execution slices or fix retries, prefer `/clear` or fresh non-forked subagents with pointer-only briefs over resuming stale transcripts.

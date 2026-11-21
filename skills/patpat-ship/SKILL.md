@@ -22,11 +22,15 @@ Patpat prescribes no CI system, job list, or duration. CI belongs to the project
 
 For CI monitoring or PR readiness work, use [PR Readiness Handoff](../patpat-loop/playbooks/pr-handoff.md). It is the canonical source for GitHub observation, native stack discovery, watcher budgets, stale handling, and authority boundaries.
 
+When explicitly asked to design, harden, or audit CI/CD or release pipelines (or after the user accepts a surfaced gap suggestion), follow [CI/CD Pipeline Design](references/cicd-design.md) and run [`scripts/verify_cicd.py`](scripts/verify_cicd.py) (`python3 <loaded-skill-directory>/scripts/verify_cicd.py --root <workspace-root>`).
+
 Consume durable state when it exists. [Delivery proof](../patpat-run/references/delivery-proof.md) defines what binds a commit, which gate each delivered head uses, and how slices and whole programs differ. A failed gate stops delivery; a passed gate grants no authority.
 
 Inspect version-control state, unrelated dirty files, and secrets before any git write. Workers never ship. Re-check the remote revision after the action.
 
 Pause for production deploy, package publish, force-push, secret rotation, and risky auth, billing, or permission changes. Explain blast radius, rollback, and verification before continuing.
+
+Lead every pull request description and delivery summary with a **Merge-Danger Callout** (`Door: one-way | two-way` and `Blast Radius`) so human reviewers triage by merge danger before reading line-by-line.
 
 ## Proof closure
 

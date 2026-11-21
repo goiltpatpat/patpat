@@ -48,6 +48,12 @@ Rule numbers are stable: retired rules leave gaps and are never renumbered so cr
 19. **Keep high-value invariants; cut structural bloat.** Keep comments encoding non-obvious *why*, domain invariants, concurrency fences, upstream bug URLs/RFCs, or legal notices. Cut single-caller pass-through wrappers, silent broad catches (`except Exception: pass`), speculative fallback flags, and duplicate helpers.
 20. **Anti-reward-hacking and verifier integrity.** Reject test skips (`@pytest.mark.skip`, `test.skip(`, `it.skip(`, `[Fact(Skip=...)]`), linter/warning suppressions (`# noqa`, `// eslint-disable`, `#pragma warning disable`, `// @ts-ignore`), and arbitrary sleeps (`time.sleep(`, `Task.Delay(`) added to force green builds. Fix the defect, never silence the oracle.
 
+## Diataxis mode rule
+
+- One document, one mode: keep `tutorial`, `how-to`, `reference`, and `explanation` separate when pruning or rewriting docs.
+- Match tone to mode: keep `reference` dry and factual; let `explanation` state a clear point of view.
+- Name exact symbols, flags, and commands throughout so canonical domain terms stay consistent.
+
 ## Deterministic AST and comment check
 
 Run [`scripts/unslop_ast_check.py`](scripts/unslop_ast_check.py) for deterministic checking across Rules 12/16 (`ai-conversational-slop`), 19 (`broad-exception-swallowing`, `single-caller-wrapper`), and 20 (`test-skipping-annotation`, `test-skipping-call`, `linter-suppression`), supporting whole paths and `--diff` filtering.

@@ -2,51 +2,52 @@
 
 Read this catalog only when the common routes in `patpat-loop` do not settle the workflow.
 
-**Two-Load & Composable Primitives:** Balance *context load* (always-loaded descriptions and steering files) against *cognitive load* (commands humans must recall). User-invoked workflows set `disable-model-invocation: true` (zero ambient context load, concise human-facing description) and are invoked explicitly or read directly by orchestrators. Composable primitives are small, reusable methodology/vocabulary skills composed along declared `metadata.patpat.ontology` state-graph edges by `patpat-loop` or `patpat-run`, avoiding monolithic rule duplication.
+**Two-Load & Composable Primitives:** User-invoked workflows set `disable-model-invocation: true` (zero ambient load) and are called explicitly or read by orchestrators. Composable primitives chain along declared `metadata.patpat.ontology` state-graph edges in `patpat-loop` or `patpat-run`.
 
-When one request requires outputs from more than one specialized row, keep `patpat-loop` as the orchestrator and run each relevant workflow; do not choose one specialist and drop another explicit deliverable. Use `patpat-plan` when dependent phases need a separate execution plan.
+When one request needs outputs from multiple rows, keep `patpat-loop` as orchestrator and run each relevant workflow rather than dropping an explicit deliverable. Use `patpat-plan` when dependent phases need a separate execution plan.
 
 | Intent | Workflow | Playbook |
 | --- | --- | --- |
-| Map an unfamiliar workspace into a compact, evidence-backed context graph | [`00-workspace-mapper`](../../00-workspace-mapper/SKILL.md) | Use only when explicitly requested; no current skill declares the map as a hard prerequisite |
-| Design repository-native changes before implementation or run architecture-opportunity scans | [`patpat-architect`](../../patpat-architect/SKILL.md) | Use the workflow directly |
-| Why the code reached this shape | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [Rationale forensics](../playbooks/rationale-forensics.md) |
-| Build or extend a playable game from a concrete brief | [`patpat-game-builder`](../../patpat-game-builder/SKILL.md) | [Build slice](../../patpat-game-builder/playbooks/build-playable-slice.md); [diagnose](../../patpat-game-builder/playbooks/diagnose-gameplay.md), [verify playthrough](../../patpat-game-builder/playbooks/verify-playthrough.md), and [visual iteration](../../patpat-game-builder/playbooks/visual-iteration.md) when applicable |
-| Turn an idea, plan, or codebase into an interactive visual | [`patpat-repository-diagram`](../../patpat-repository-diagram/SKILL.md) | Use only for an explicit diagram or visual request; brief-only and repository-backed evidence are both supported |
-| Blast-radius or downstream-regression analysis | [`patpat-impact`](../../patpat-impact/SKILL.md) | [Blast radius](../playbooks/blast-radius.md) |
-| Cheap deterministic regression target exists | [`patpat-debug`](../../patpat-debug/SKILL.md) | [Regression first](../playbooks/regression-first.md) |
-| Latency, CPU, memory, throughput, or one-off resource regression | [`patpat-perf`](../../patpat-perf/SKILL.md) | [Performance](../playbooks/performance.md) |
-| Sustained improvement of one metric | [`patpat-perf`](../../patpat-perf/SKILL.md) | [Metric hillclimb](../playbooks/metric-hillclimb.md) |
-| Live leak, idle spin, or glitch | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [Runtime forensics](../playbooks/runtime-forensics.md) |
-| Captured profile, trace, or heap snapshot | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [Trace forensics](../playbooks/trace-forensics.md) |
-| Isolated bounded implementation worker driving small diffs under coordinate supervision | [`patpat-engineer`](../../patpat-engineer/SKILL.md) | Use the workflow directly |
-| Behavior-preserving refactor | [`patpat-change`](../../patpat-change/SKILL.md) | [Behavior-preserving refactor](../playbooks/behavior-preserving-refactor.md) |
-| Throwaway sketch to settle a design fork | [`patpat-change`](../../patpat-change/SKILL.md) | [Prototype](../playbooks/prototype.md) |
-| Pixel-level UI parity | [`patpat-verify`](../../patpat-verify/SKILL.md) | [Visual equivalence](../playbooks/visual-equivalence.md) |
-| Competing attempts at the same brief | [`patpat-arena`](../../patpat-arena/SKILL.md) | [Arena](../playbooks/arena.md) |
-| Parallel slices, races, or coverage | [`patpat-swarm`](../../patpat-swarm/SKILL.md) | [Swarm](../playbooks/swarm.md) |
-| PR or stack status/topology (read-only) | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [PR Drive](../playbooks/pr-drive.md); native stack discovery is in [PR Handoff](../playbooks/pr-handoff.md) |
-| Implement or coordinate work across a PR queue or verified stack | [`patpat-run`](../../patpat-run/SKILL.md) | [Autopilot](../playbooks/autopilot.md) |
-| Named issue-source triage and reproduce loop | [`patpat-automation`](../../patpat-automation/SKILL.md) | [Issue loop](../playbooks/issue-loop.md) |
+| Map an unfamiliar workspace into a context graph | [`00-workspace-mapper`](../../00-workspace-mapper/SKILL.md) | Explicit request only; optional |
+| Design architecture changes or run an opportunity scan | [`patpat-architect`](../../patpat-architect/SKILL.md) | Direct |
+| Explain why code reached its current shape | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [Rationale forensics](../playbooks/rationale-forensics.md) |
+| Build or extend a playable game | [`patpat-game-builder`](../../patpat-game-builder/SKILL.md) | [Build slice](../../patpat-game-builder/playbooks/build-playable-slice.md); [diagnose](../../patpat-game-builder/playbooks/diagnose-gameplay.md), [verify playthrough](../../patpat-game-builder/playbooks/verify-playthrough.md), [visual iteration](../../patpat-game-builder/playbooks/visual-iteration.md) |
+| Draw an interactive architecture or workflow visual | [`patpat-repository-diagram`](../../patpat-repository-diagram/SKILL.md) | Explicit request only; brief-only or repo-backed |
+| Analyze blast radius or downstream regressions | [`patpat-impact`](../../patpat-impact/SKILL.md) | [Blast radius](../playbooks/blast-radius.md) |
+| Fix a defect with a cheap deterministic reproducer | [`patpat-debug`](../../patpat-debug/SKILL.md) | [Regression first](../playbooks/regression-first.md) |
+| Fix a one-off latency, CPU, memory, or throughput regression | [`patpat-perf`](../../patpat-perf/SKILL.md) | [Performance](../playbooks/performance.md) |
+| Drive sustained improvement on one numeric metric | [`patpat-perf`](../../patpat-perf/SKILL.md) | [Metric hillclimb](../playbooks/metric-hillclimb.md) |
+| Diagnose a live leak, idle spin, or runtime glitch | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [Runtime forensics](../playbooks/runtime-forensics.md) |
+| Analyze a captured profile, trace, or heap snapshot | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [Trace forensics](../playbooks/trace-forensics.md) |
+| Execute one delegated implementation slice | [`patpat-engineer`](../../patpat-engineer/SKILL.md) | Direct |
+| Refactor without changing external behavior | [`patpat-change`](../../patpat-change/SKILL.md) | [Behavior-preserving refactor](../playbooks/behavior-preserving-refactor.md) |
+| Build a throwaway prototype to settle a design fork | [`patpat-change`](../../patpat-change/SKILL.md) | [Prototype](../playbooks/prototype.md) |
+| Verify pixel-level UI parity | [`patpat-verify`](../../patpat-verify/SKILL.md) | [Visual equivalence](../playbooks/visual-equivalence.md) |
+| Compete isolated attempts at the same brief | [`patpat-arena`](../../patpat-arena/SKILL.md) | [Arena](../playbooks/arena.md) |
+| Fan out parallel slices, races, or coverage | [`patpat-swarm`](../../patpat-swarm/SKILL.md) | [Swarm](../playbooks/swarm.md) |
+| Inspect PR or stack status/topology (read-only) | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [PR Drive](../playbooks/pr-drive.md); stack discovery in [PR Handoff](../playbooks/pr-handoff.md) |
+| Coordinate work across a PR queue or verified stack | [`patpat-run`](../../patpat-run/SKILL.md) | [Autopilot](../playbooks/autopilot.md) |
+| Run a named issue-source triage and repro loop | [`patpat-automation`](../../patpat-automation/SKILL.md) | [Issue loop](../playbooks/issue-loop.md) |
 | Pause in-flight work or go offline | [`patpat-run`](../../patpat-run/SKILL.md) | [Pause safely](../playbooks/pause-safely.md) |
-| Resume or take over in-flight work with no valid run store | [`patpat-run`](../../patpat-run/SKILL.md) | [Session takeover](../playbooks/session-takeover.md) |
-| Catch the user up on what changed and every call waiting on them (read-only) | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [Catch-up](../playbooks/catch-up.md) |
-| Rapid session pickup with active run store or clean working tree | [`patpat-run`](../../patpat-run/SKILL.md) | [Session pickup](../playbooks/session-pickup.md) |
-| Move a PR to verified merge-ready status or resolve review threads | [`patpat-change`](../../patpat-change/SKILL.md) | [PR Readiness Handoff](../playbooks/pr-handoff.md) |
-| Prune merged or abandoned Git worktrees | Use the playbook directly | [Worktree cleanup](../playbooks/worktree-cleanup.md) |
-| End of mutating work with delivery intent, or named commit or pull request | [`patpat-ship`](../../patpat-ship/SKILL.md) | [Default delivery](../playbooks/default-delivery.md); on mutating work without delivery intent, stop at `REPORT` |
+| Resume in-flight work without a valid run store | [`patpat-run`](../../patpat-run/SKILL.md) | [Session takeover](../playbooks/session-takeover.md) |
+| Summarize recent changes and pending decisions (read-only) | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [Catch-up](../playbooks/catch-up.md) |
+| Pick up a session with an active run store or clean tree | [`patpat-run`](../../patpat-run/SKILL.md) | [Session pickup](../playbooks/session-pickup.md) |
+| Drive a PR to merge-ready status or resolve review threads | [`patpat-change`](../../patpat-change/SKILL.md) | [PR Readiness Handoff](../playbooks/pr-handoff.md) |
+| Prune merged or abandoned Git worktrees | Direct | [Worktree cleanup](../playbooks/worktree-cleanup.md) |
+| Design, harden, or audit CI/CD and release pipelines | [`patpat-ship`](../../patpat-ship/SKILL.md) | [CI/CD Pipeline Design](../../patpat-ship/references/cicd-design.md); explicit request or accepted gap suggestion only |
+| Commit or open a PR with delivery intent | [`patpat-ship`](../../patpat-ship/SKILL.md) | [Default delivery](../playbooks/default-delivery.md); without delivery intent, stop at `REPORT` |
 | Create or revise a reusable agent skill | [`patpat-skill`](../../patpat-skill/SKILL.md) | [Skill change](../playbooks/skill-change.md) |
-| Test whether a skill triggers and behaves correctly | [`patpat-eval`](../../patpat-eval/SKILL.md) | [Behavioral evaluation](../playbooks/behavioral-eval.md) |
-| Create or maintain a real-app or user-surface verification skill | [`patpat-verifier`](../../patpat-verifier/SKILL.md) | [Project verifier](../playbooks/project-verifier.md) |
-| Chart how a product flow, protocol, service, or business process moves between states; ask whether it can get stuck or break; show a bug as a path; or render a saved model-check receipt | [`patpat-statechart`](../../patpat-statechart/SKILL.md) | The reader's rules become invariants; a broken rule is a model finding until replayed against the real code or process |
-| Create or maintain a formal verification skill or check a bounded TLA+/TLC model that later changes must rerun | [`patpat-formal-verify`](../../patpat-formal-verify/SKILL.md) | Hand charts to `patpat-statechart`; keep bounds, mutant identity, static mapping, and runtime replay separate |
-| Encode a recurring failure or correction into a durable constraint | [`patpat-learn`](../../patpat-learn/SKILL.md) | [Learning](../playbooks/learning.md) |
-| Ask why agents keep making the same mistake here, or which repository rules nothing enforces | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [Learning](../playbooks/learning.md) repository history pass and correction ledger; approved rows land through `patpat-change` |
-| Design or scaffold an external automation for a concrete integration | [`patpat-automation`](../../patpat-automation/SKILL.md) | [Automation design](../playbooks/automation-design.md) |
-| Multi-phase sequencing or several contracts | [`patpat-plan`](../../patpat-plan/SKILL.md) | [Bespoke workflow](../playbooks/bespoke-workflow.md) |
-| Install, update, remove, or validate Patpat on an agent host | [`patpat-setup`](../../patpat-setup/SKILL.md) | Use the workflow directly |
-| Cut AI patterns, fluff, and superficial writing | [`patpat-unslop`](../../patpat-unslop/SKILL.md) | Use the workflow directly |
-| Independent verification and diff challenge before delivery (mandatory delivery gate) | [`patpat-review`](../../patpat-review/SKILL.md) | Use the workflow directly |
-| Adversarial deep skeptical probe across logic, edge cases, and hidden assumptions (distinct from mandatory delivery gate patpat-review) | [`patpat-interrogate`](../../patpat-interrogate/SKILL.md) | Use the workflow directly |
+| Evaluate skill triggering and behavior | [`patpat-eval`](../../patpat-eval/SKILL.md) | [Behavioral evaluation](../playbooks/behavioral-eval.md) |
+| Create or maintain a project-local real-surface verifier | [`patpat-verifier`](../../patpat-verifier/SKILL.md) | [Project verifier](../playbooks/project-verifier.md) |
+| Model a state flow, check invariants, or render a model-check receipt | [`patpat-statechart`](../../patpat-statechart/SKILL.md) | Broken model rules require runtime replay before claiming a code bug |
+| Create or maintain a TLA+/TLC formal verification suite | [`patpat-formal-verify`](../../patpat-formal-verify/SKILL.md) | Hand charts to `patpat-statechart`; keep bounds, mutants, mapping, and replay separate |
+| Encode a recurring mistake into a durable constraint | [`patpat-learn`](../../patpat-learn/SKILL.md) | [Learning](../playbooks/learning.md) |
+| Audit recurring mistakes or unenforced repo rules (read-only) | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [Learning](../playbooks/learning.md) history pass; approved rows land via `patpat-change` |
+| Design or scaffold an external automation | [`patpat-automation`](../../patpat-automation/SKILL.md) | [Automation design](../playbooks/automation-design.md) |
+| Sequence multi-phase work or multiple contracts | [`patpat-plan`](../../patpat-plan/SKILL.md) | [Bespoke workflow](../playbooks/bespoke-workflow.md) |
+| Install, update, remove, or validate Patpat on a host | [`patpat-setup`](../../patpat-setup/SKILL.md) | Direct |
+| Cut AI tropes and filler from docs, PRs, or diffs | [`patpat-unslop`](../../patpat-unslop/SKILL.md) | Direct |
+| Independent diff and evidence review (mandatory delivery gate) | [`patpat-review`](../../patpat-review/SKILL.md) | Direct |
+| Adversarial skeptical probe of logic, edge cases, and assumptions | [`patpat-interrogate`](../../patpat-interrogate/SKILL.md) | Direct (distinct from `patpat-review`) |
 
-Resolve overlaps by the earliest unsettled decision. Architect first when the target contract is unsettled. Plan when the remaining problem is sequencing. Impact assesses downstream risk without designing the replacement. A prototype settles an empirical fork instead of asking the human to choose.
+Resolve overlaps by the earliest unsettled decision: architect settles the contract, plan sequences phases, impact assesses downstream risk without redesigning, and prototype settles an empirical fork.

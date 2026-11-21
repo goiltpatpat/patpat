@@ -20,7 +20,7 @@ import uuid
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Sequence
 
 SCRIPT_DIRECTORY = str(Path(__file__).resolve().parent)
 if SCRIPT_DIRECTORY not in sys.path:
@@ -92,6 +92,9 @@ STATE_KEYS = {
     "created_at",
     "updated_at",
 }
+DECISION_TRAIL_COLUMNS = ("ts", "phase", "decision", "why", "evidence", "result")
+DECISION_TRAIL_HEADER = "\t".join(DECISION_TRAIL_COLUMNS) + "\n"
+TSV_FORMULA_PREFIXES = ("=", "+", "-", "@")
 
 
 class RunStateError(ValueError):
@@ -417,6 +420,172 @@ def _append_trajectory_events(root: Path, run_id: str, events: list[dict[str, An
         handle.flush()
         os.fsync(handle.fileno())
     fsync_directory(traj.parent)
+
+
+def decision_trail_path(root: Path, run_id: str) -> Path:
+    return run_directory(root, run_id) / "decisions.tsv"
+
+
+def sanitize_tsv_cell(value: Any) -> str:
+    """Strip tabs/CR/LF and neutralise leading spreadsheet formula triggers."""
+    text = "" if value is None else str(value)
+    cleaned = re.sub(r"[\t\r\n]+", " ", text).strip()
+    if cleaned and cleaned[0] in TSV_FORMULA_PREFIXES:
+        return "'" + cleaned
+    return cleaned
+
+
+def format_tsv_row(cells: Sequence[Any]) -> str:
+    """Format a sequence of cells as a single sanitized TSV line without a trailing newline."""
+    return "\t".join(sanitize_tsv_cell(cell) for cell in cells)
+
+
+def _decision_trail_ts_range(path: Path) -> tuple[str | None, str | None, int]:
+    if path.is_symlink():
+        raise RunStateError(f"decision trail must not be a symlink: {path}")
+    if not path.exists():
+        return None, None, 0
+    if not path.is_file():
+        raise RunStateError(f"decision trail must be a regular file: {path}")
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise RunStateError(f"could not read decision trail: {error}") from error
+    try:
+        handle = os.fdopen(descriptor, "rb")
+    except OSError as error:
+        os.close(descriptor)
+        raise RunStateError(f"could not open decision trail: {error}") from error
+    try:
+        with handle:
+            raw = handle.read()
+        header = DECISION_TRAIL_HEADER.rstrip("\n")
+        first_ts: str | None = None
+        last_ts: str | None = None
+        count = 0
+        for line in raw.decode("utf-8").splitlines():
+            if not line.strip() or line == header:
+                continue
+            ts_cell = line.split("\t", 1)[0]
+            if first_ts is None:
+                first_ts = ts_cell
+            last_ts = ts_cell
+            count += 1
+        return first_ts, last_ts, count
+    except (OSError, UnicodeDecodeError) as error:
+        raise RunStateError(f"decision trail is invalid: {error}") from error
+
+
+def _write_decision_trail_row(
+    root: Path,
+    run_id: str,
+    phase: str,
+    decision: str,
+    why: str,
+    evidence: str,
+    result: str,
+    *,
+    ts: str | None = None,
+) -> dict[str, Any]:
+    path = decision_trail_path(root, run_id)
+    if path.is_symlink():
+        raise RunStateError(f"decision trail must not be a symlink: {path}")
+    if path.exists() and not path.is_file():
+        raise RunStateError(f"decision trail must be a regular file: {path}")
+    raw_cells = (ts or now(), phase, decision, why, evidence, result)
+    sanitized = [sanitize_tsv_cell(cell) for cell in raw_cells]
+    line = "\t".join(sanitized)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_BINARY", 0)
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags, 0o600)
+    except OSError as error:
+        raise RunStateError(f"could not open decision trail for append: {error}") from error
+    try:
+        needs_header = os.fstat(descriptor).st_size == 0
+        handle = os.fdopen(descriptor, "ab")
+    except OSError as error:
+        os.close(descriptor)
+        raise RunStateError(f"could not write decision trail: {error}") from error
+    payload = ((DECISION_TRAIL_HEADER if needs_header else "") + line + "\n").encode("utf-8")
+    with handle:
+        handle.write(payload)
+        handle.flush()
+        os.fsync(handle.fileno())
+    fsync_directory(path.parent)
+    return {
+        "store": str(run_directory(root, run_id)),
+        "path": str(path),
+        "row": dict(zip(DECISION_TRAIL_COLUMNS, sanitized)),
+        "line": line,
+    }
+
+
+def append_decision_trail_row(
+    root: Path,
+    run_id: str,
+    phase: str,
+    decision: str,
+    why: str,
+    evidence: str,
+    result: str,
+    *,
+    ts: str | None = None,
+) -> dict[str, Any]:
+    with run_lock(root, run_id):
+        load_state(root, run_id)
+        return _write_decision_trail_row(
+            root,
+            run_id,
+            phase,
+            decision,
+            why,
+            evidence,
+            result,
+            ts=ts,
+        )
+
+
+def append_decision_trail_start(
+    root: Path,
+    run_id: str,
+    actor: str,
+    *,
+    reason: str = "session pickup",
+    evidence: str | None = None,
+    ts: str | None = None,
+) -> dict[str, Any]:
+    canonical_identity(actor, "decision-trail actor")
+    with run_lock(root, run_id):
+        load_state(root, run_id)
+        path = decision_trail_path(root, run_id)
+        first_ts, last_ts, count = _decision_trail_ts_range(path)
+        decision = f"pickup run={run_id} actor={actor}"
+        if count > 0:
+            why = f"{reason}; prior rows ({count}) span {first_ts}..{last_ts} (not authored by {actor})"
+        else:
+            why = f"{reason}; new trail"
+        evidence_cell = evidence or f"run:{run_id}"
+        written = _write_decision_trail_row(
+            root,
+            run_id,
+            "start",
+            decision,
+            why,
+            evidence_cell,
+            "START",
+            ts=ts,
+        )
+        written["prior_range"] = {
+            "first_ts": first_ts,
+            "last_ts": last_ts,
+            "count": count,
+        }
+        return written
 
 
 def provider_receipt_path(root: Path, run_id: str) -> Path:
@@ -2990,6 +3159,158 @@ def run_self_test() -> bool:
         finally:
             trajectory_path(root, dir_traj_run).rmdir()
 
+        # Decision trail TSV sanitization and cross-run start provenance boundary rows
+        if sanitize_tsv_cell("=SUM(A1:A2)") != "'=SUM(A1:A2)":
+            raise AssertionError("failed to neutralize '=' formula prefix")
+        if sanitize_tsv_cell("+cmd|' /C calc'!A0") != "'+cmd|' /C calc'!A0":
+            raise AssertionError("failed to neutralize '+' formula prefix")
+        if sanitize_tsv_cell("-2+3") != "'-2+3":
+            raise AssertionError("failed to neutralize '-' formula prefix")
+        if sanitize_tsv_cell("@SUM(1+1)") != "'@SUM(1+1)":
+            raise AssertionError("failed to neutralize '@' formula prefix")
+        if sanitize_tsv_cell(" \t\r\n=1+1\n") != "'=1+1":
+            raise AssertionError("failed to strip leading whitespace/control chars before formula prefix")
+        if sanitize_tsv_cell("'=1+1") != "'=1+1":
+            raise AssertionError("sanitize_tsv_cell must be idempotent on already-escaped formulas")
+        if sanitize_tsv_cell("line1\tcol2\r\nline2\nline3\rline4") != "line1 col2 line2 line3 line4":
+            raise AssertionError("failed to strip tabs, CR, and LF from TSV cell")
+        if sanitize_tsv_cell(None) != "" or sanitize_tsv_cell("   \t\n ") != "":
+            raise AssertionError("empty/None TSV cells did not sanitize to empty string")
+
+        formatted = format_tsv_row(
+            ["2026-01-01T00:00:00Z", "ACT", "=1+1", "a\tb\nc\r\nd", "+file:1", "@VERIFIED"]
+        )
+        if "\r" in formatted or "\n" in formatted or formatted.count("\t") != 5:
+            raise AssertionError(f"format_tsv_row produced malformed TSV line: {formatted!r}")
+        if formatted != "2026-01-01T00:00:00Z\tACT\t'=1+1\ta b c d\t'+file:1\t'@VERIFIED":
+            raise AssertionError(f"unexpected formatted TSV row: {formatted!r}")
+
+        trail_run = "decision-trail-run"
+        initialize(root, trail_run, "Verify decision trail TSV", "owner", [], [], [], [])
+        start_empty = append_decision_trail_start(
+            root,
+            trail_run,
+            "agent-alpha",
+            reason="initial session",
+            ts="2026-01-01T00:00:00+00:00",
+        )
+        if start_empty["prior_range"] != {"first_ts": None, "last_ts": None, "count": 0}:
+            raise AssertionError(f"unexpected empty start prior_range: {start_empty['prior_range']}")
+        if start_empty["row"]["phase"] != "start" or start_empty["row"]["result"] != "START":
+            raise AssertionError(f"unexpected start row: {start_empty['row']}")
+        if "new trail" not in start_empty["row"]["why"]:
+            raise AssertionError(f"expected new trail provenance note: {start_empty['row']['why']}")
+
+        append_decision_trail_row(
+            root,
+            trail_run,
+            "VERIFY",
+            "=HYPERLINK(\"http://evil\",\"click\")",
+            "checked\tartifact\nwith newline",
+            "src/app.py:42",
+            "VERIFIED",
+            ts="2026-01-01T00:05:00+00:00",
+        )
+        pickup = append_decision_trail_start(
+            root,
+            trail_run,
+            "agent-beta",
+            reason="handoff pickup",
+            evidence="commit:abc1234",
+            ts="2026-01-01T01:00:00+00:00",
+        )
+        if pickup["prior_range"] != {
+            "first_ts": "2026-01-01T00:00:00+00:00",
+            "last_ts": "2026-01-01T00:05:00+00:00",
+            "count": 2,
+        }:
+            raise AssertionError(f"unexpected pickup prior_range: {pickup['prior_range']}")
+        if "2026-01-01T00:00:00+00:00..2026-01-01T00:05:00+00:00" not in pickup["row"]["why"]:
+            raise AssertionError(f"pickup row missing prior ts range: {pickup['row']['why']}")
+        if "agent-beta" not in pickup["row"]["decision"]:
+            raise AssertionError(f"pickup row missing actor id: {pickup['row']['decision']}")
+
+        cli_buffer = io.StringIO()
+        with contextlib.redirect_stdout(cli_buffer):
+            cli_rc = main(
+                [
+                    "decision-trail",
+                    "--root",
+                    str(root),
+                    "--run-id",
+                    trail_run,
+                    "--phase",
+                    "ACT",
+                    "--decision",
+                    "-remove legacy shim",
+                    "--why",
+                    "dead\tcode\r\nverified",
+                    "--evidence",
+                    "file:10",
+                    "--result",
+                    "VERIFIED",
+                    "--ts",
+                    "2026-01-01T01:10:00+00:00",
+                ]
+            )
+        if cli_rc != 0:
+            raise AssertionError(f"decision-trail CLI failed with rc={cli_rc}")
+        cli_payload = json.loads(cli_buffer.getvalue())
+        if cli_payload["row"]["decision"] != "'-remove legacy shim":
+            raise AssertionError(f"CLI did not sanitize '-' formula prefix: {cli_payload}")
+
+        cli_start_buffer = io.StringIO()
+        with contextlib.redirect_stdout(cli_start_buffer):
+            cli_start_rc = main(
+                [
+                    "decision-trail",
+                    "--root",
+                    str(root),
+                    "--run-id",
+                    trail_run,
+                    "--start",
+                    "--actor",
+                    "agent-gamma",
+                    "--ts",
+                    "2026-01-01T02:00:00+00:00",
+                ]
+            )
+        if cli_start_rc != 0:
+            raise AssertionError(f"decision-trail --start CLI failed with rc={cli_start_rc}")
+        cli_start_payload = json.loads(cli_start_buffer.getvalue())
+        if cli_start_payload["prior_range"]["count"] != 4:
+            raise AssertionError(f"CLI start row missed prior rows: {cli_start_payload}")
+
+        trail_lines = decision_trail_path(root, trail_run).read_text(encoding="utf-8").splitlines()
+        if len(trail_lines) != 6:
+            raise AssertionError(f"expected header + 5 rows in decisions.tsv, got {len(trail_lines)}")
+        if trail_lines[0] != DECISION_TRAIL_HEADER.rstrip("\n"):
+            raise AssertionError(f"unexpected decisions.tsv header: {trail_lines[0]!r}")
+        for trail_line in trail_lines[1:]:
+            if trail_line.count("\t") != 5:
+                raise AssertionError(f"malformed column count in decisions.tsv: {trail_line!r}")
+
+        if symlink_supported:
+            sym_trail_run = "sym-trail-run"
+            initialize(root, sym_trail_run, "Verify decision trail symlink rejection", "owner", [], [], [], [])
+            sym_target = root / "outside-trail.tsv"
+            sym_target.write_text("", encoding="utf-8")
+            decision_trail_path(root, sym_trail_run).symlink_to(sym_target)
+            try:
+                append_decision_trail_row(
+                    root,
+                    sym_trail_run,
+                    "ACT",
+                    "should fail",
+                    "symlinked trail",
+                    "file:1",
+                    "NOT VERIFIED",
+                )
+            except RunStateError:
+                pass
+            else:
+                raise AssertionError("append_decision_trail_row succeeded through symlink")
+
         return symlink_supported
 
 
@@ -3012,6 +3333,7 @@ def build_parser() -> argparse.ArgumentParser:
     for command in (
         "transition",
         "record",
+        "decision-trail",
         "checkpoint",
         "status",
         "validate",
@@ -3057,6 +3379,19 @@ def build_parser() -> argparse.ArgumentParser:
             command_parser.add_argument("--value")
             command_parser.add_argument("--unit")
             command_parser.add_argument("--next-decision")
+        elif command == "decision-trail":
+            command_parser.add_argument(
+                "--start",
+                action="store_true",
+                help="Append a cross-run start provenance boundary row on session handoff/pickup",
+            )
+            command_parser.add_argument("--actor", help="Actor or agent identity for --start boundary rows")
+            command_parser.add_argument("--phase")
+            command_parser.add_argument("--decision")
+            command_parser.add_argument("--why")
+            command_parser.add_argument("--evidence")
+            command_parser.add_argument("--result")
+            command_parser.add_argument("--ts", help="Optional explicit ISO-8601 timestamp")
         if command in {"transition", "record"}:
             command_parser.add_argument("--full", action="store_true", help="Print the complete state ledger")
     return parser
@@ -3157,6 +3492,34 @@ def main(argv: list[str] | None = None) -> int:
                     raise RunStateError("decision requires summary")
                 state = record_decision(root, args.run_id, args.summary)
             print_state_result(root, state, f"record:{args.kind}", args.full)
+        elif args.command == "decision-trail":
+            if args.start:
+                if not args.actor:
+                    raise RunStateError("decision-trail --start requires --actor")
+                written = append_decision_trail_start(
+                    root,
+                    args.run_id,
+                    args.actor,
+                    reason=args.why or "session pickup",
+                    evidence=args.evidence,
+                    ts=args.ts,
+                )
+            else:
+                if not all((args.phase, args.decision, args.why, args.evidence, args.result)):
+                    raise RunStateError(
+                        "decision-trail requires --phase, --decision, --why, --evidence, and --result (or --start --actor)"
+                    )
+                written = append_decision_trail_row(
+                    root,
+                    args.run_id,
+                    args.phase,
+                    args.decision,
+                    args.why,
+                    args.evidence,
+                    args.result,
+                    ts=args.ts,
+                )
+            print(json.dumps(written, indent=2))
         elif args.command == "checkpoint":
             path = checkpoint(root, args.run_id)
             print(json.dumps({"store": str(run_directory(root, args.run_id)), "checkpoint": str(path)}, indent=2))

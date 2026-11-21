@@ -21,7 +21,8 @@ Run adversarial multi-perspective review to stress-test designs, code changes, a
    - Concurrency & State angle: Look for race conditions, cache incoherence, re-entrancy, and non-idempotent side effects.
    - Epistemic & Evidence angle: Look for proxy testing, mock theater, unverified assertions, and missing failure-mode tests.
    - Maintainability & Anti-Slop angle: Look for commentary replacing design clarity, duplicate abstractions, and unnecessary complexity.
-4. Synthesize Findings: Back every finding with a reproducible command or test execution when the target is runnable, or a concrete `file:line` failure trace when execution is impossible; drop speculative style or hypothetical-future nitpicks. Order findings strictly by severity (`blocker`, `high`, `medium`, `low`). State `no findings` only when all skeptical angles are demonstrably cleared. Do not auto-apply edits.
+4. Coordinator Re-Execution Gate: Independently re-execute every adversary's repro command before reporting, dropping any finding that fails to reproduce or violate the stated intent. Merge findings that share a root cause into one canonical finding, and emit an explicit `Dropped` count and reason per angle.
+5. Synthesize Findings: Back every surviving finding with its re-executed command or test receipt when the target is runnable, or a concrete `file:line` failure trace when execution is impossible; drop speculative style or hypothetical-future nitpicks. Order findings strictly by severity (`blocker`, `high`, `medium`, `low`). State `no findings` only when all skeptical angles are demonstrably cleared. Do not auto-apply edits.
 
 ## Mutation boundary
 
