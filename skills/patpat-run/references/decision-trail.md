@@ -11,6 +11,8 @@ ts, phase, decision, why, evidence, result
 - `evidence` is a pointer: commit, PR, `file:line`, or artifact path. Never a paragraph.
 - A wrong call gets a new row. Do not edit prior rows.
 - One row per decision or unit checkpoint, not every action.
+- **Mechanical cell sanitization**: write rows through `run_state.py decision-trail` (`sanitize_tsv_cell` / `format_tsv_row`), which strips tabs, CR, and LF from every cell and prefixes cells starting with `=`, `+`, `-`, or `@` with `'` to block spreadsheet formula injection.
+- **Cross-run `start` provenance boundary**: when a pickup or replacement agent appends to an existing `decisions.tsv`, emit a `start` boundary row first (`run_state.py decision-trail --root <repo> --run-id <run-id> --start --actor <agent-id>`) recording its run/actor identity and the prior `ts` range it did not author.
 
 Each unit: hypothesis, then smallest change, then measure on the real artifact, then keep or revert. Inspect the artifact, not a self-report.
 

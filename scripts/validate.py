@@ -179,6 +179,7 @@ LEARN_VERIFIER = Path("skills/patpat-learn/scripts/verify_corrections.py")
 LEARN_VERIFY_COMMAND = (
     "python3 <loaded-skill-directory>/scripts/verify_corrections.py --root <workspace-root>"
 )
+CICD_VERIFIER = Path("skills/patpat-ship/scripts/verify_cicd.py")
 FORMAL_VERIFY_COMMAND = (
     "python3 skills/patpat-run/scripts/check_assignment_model.py --pure-python"
 )
@@ -817,6 +818,7 @@ def validate_workspace_mapper_resource(root: Path, errors: list[str]) -> None:
         (REVIEW_VERIFIER, "review"),
         (DELIVERY_VERIFIER, "delivery"),
         (LEARN_VERIFIER, "correction ledger"),
+        (CICD_VERIFIER, "cicd"),
     ):
         verifier = root / verifier_path
         if not verifier.is_file() or verifier.is_symlink():

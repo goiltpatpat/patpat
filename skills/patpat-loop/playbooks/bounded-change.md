@@ -6,7 +6,7 @@ Read [repository truth](../principles/repository-truth.md), [shape before logic]
 2. Inspect repository rules, current state, nearby implementation, callers, and focused tests.
    If a target may have changed since inspection, re-read its current contents before a write that could replace them. Reconcile the intended edit with intervening changes using an unambiguous target; do not guess from repeated text. Preserve both sets of changes when safe. Stop and report when the current contents cannot be read or the changes cannot be reconciled safely. A re-read alone is not an atomic write guarantee.
 3. Identify the smallest safe change and its blast radius.
-4. Implement one coherent patch without unrelated refactoring.
+4. Implement one coherent patch without unrelated refactoring. When tests accompany behavior changes, use **TDD tracer-bullet seams**: pre-agree seams (1-line catches/misses), iterate vertically (1 seam → 1 red test → 1 minimal green implementation; skip horizontal all-tests-first batching), derive expected values from independent literals or specs (no tautological tests), and prefer SDK-style boundary mocks over generic fetchers. For wide mechanical refactors (high call-site blast radius), switch to **expand → batched green migrate → contract**.
 5. Run targeted checks, then exercise the authoritative artifact or surface.
 6. Audit the final diff for safety, regressions, generated noise, and unrequested scope.
 7. Update durable documentation only when project truth changed.

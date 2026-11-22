@@ -154,7 +154,7 @@ Skill ทั้งหมดจัดเก็บแบบแบน (flat) ภา
 
 | Skill | การเรียกใช้ | วัตถุประสงค์ |
 | --- | --- | --- |
-| [`patpat-ship`](skills/patpat-ship/SKILL.md) | Explicit-only | Commit และเปิดหรืออัปเดต PR เมื่อมีเจตนาส่งมอบ; merge เฉพาะเมื่อระบุชัดเจน |
+| [`patpat-ship`](skills/patpat-ship/SKILL.md) | Explicit-only | Commit และเปิดหรืออัปเดต PR เมื่อมีเจตนาส่งมอบ; merge เฉพาะเมื่อระบุชัดเจน; ออกแบบ ปรับความแข็งแกร่ง และตรวจสอบ CI/CD pipeline (`verify_cicd.py`) |
 | [`patpat-learn`](skills/patpat-learn/SKILL.md) | Explicit-only | แปลงความล้มเหลวหรือข้อแก้ไขที่เกิดซ้ำให้เป็นข้อจำกัดเชิงโครงสร้างที่เล็กที่สุด |
 
 #### Diagrams, Statecharts & Meta (แผนภาพ, Statechart และเมตา)

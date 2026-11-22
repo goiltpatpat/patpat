@@ -14,9 +14,9 @@ For clear, bounded, reversible local work without delivery intent, use this skil
 
 Read [smallest safe change](../patpat-loop/principles/smallest-safe-change.md), [preserve safety](../patpat-loop/principles/preserve-safety.md), and [proof over proxy](../patpat-loop/principles/proof-over-proxy.md). Apply the [bounded change playbook](../patpat-loop/playbooks/bounded-change.md).
 
-For a behavior-preserving rename, move, extraction, inline, or deduplication, apply the [behavior-preserving refactor playbook](../patpat-loop/playbooks/behavior-preserving-refactor.md). When the user requests test-first work or a cheap deterministic regression target exists, apply [regression first](../patpat-loop/playbooks/regression-first.md).
+For a behavior-preserving rename, move, extraction, inline, or deduplication, apply the [behavior-preserving refactor playbook](../patpat-loop/playbooks/behavior-preserving-refactor.md); switch wide mechanical refactors (high call-site blast radius) to **expand → batched green migrate → contract**. When the user requests test-first work or a cheap deterministic regression target exists, apply [regression first](../patpat-loop/playbooks/regression-first.md).
 
-When regression-first applies, observe fail-before (or an explicit why-not) and report fail-before and pass-after on the same check; do not silently skip.
+When regression-first applies, observe fail-before (or an explicit why-not) and report fail-before and pass-after on the same check; do not silently skip. For test-driven behavior changes, use **TDD tracer-bullet seams**: pre-agree seams (1-line catches/misses), iterate vertically (1 seam → 1 red test → 1 minimal green implementation; skip horizontal all-tests-first batching), source expected values from independent literals or specs (no tautological tests), and prefer SDK-style boundary mocks over generic fetchers.
 
 For an explicit visual migration or pixel-equivalence claim, apply the [visual equivalence playbook](../patpat-loop/playbooks/visual-equivalence.md) without weakening its baseline or comparison harness.
 

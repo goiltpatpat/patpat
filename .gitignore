@@ -1,52 +1,36 @@
-# Local agent continuity
+# Local secrets and environment files (keep example templates trackable)
+.env
+.env.*
+!.env.example
+!.env.template
+!.env.sample
+
+# Local agent continuity and host-local overrides (preserve tracked plugin manifests)
 memory-bank/
 /.codex-attachments/
+/.agents/*
+!/.agents/plugins/
+.claude/settings.local.json
+CLAUDE.local.md
+/PROJECT.md
+/TEST_INFRA.md
 
-# Python runtime and tooling
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-env/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-.coverage.*
-htmlcov/
-
-# Local diagram renders, Playwright and browser inspection artifacts
+# Patpat local runtime state, diagram renders, and browser inspection artifacts
+.patpat/context-graph.json
+.patpat/plan.json
+.patpat/review-receipt.json
+.patpat/delivery-receipt.json
+.patpat-diagram.lock
+.patpat-diagram-tx-*/
+.patpat-update.lock
 /docs/diagrams/
 /.playwright-cli/
 test-results/
 playwright-report/
-.patpat-diagram.lock
-.patpat/context-graph.json
-.patpat/review-receipt.json
-.patpat/delivery-receipt.json
 
 # Local assignment-generation model-check receipts
 /assignment-generation-receipts-*/
 /assignment-generation-runtime-replay-*.json
-
-# Local JS dependencies for rendering and tooling
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# Operating system and editor metadata
-.DS_Store
-._*
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
 
 # Private evaluation receipts and raw output. Keep global: the publish gate rejects them at every depth.
 # Sanitized attestation output belongs outside the worktree; leave misplaced copies visible.
@@ -54,8 +38,52 @@ receipt.json
 *.jsonl
 *.stderr.txt
 
-# Local multi-agent run artifacts (preserve tracked plugin manifests)
-/.agents/*
-!/.agents/plugins/
-/PROJECT.md
-/TEST_INFRA.md
+# Python runtime, packaging, and tooling
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.egg-info/
+.eggs/
+
+# Local JS/TS dependencies and caches for rendering and tooling
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tsbuildinfo
+.npm/
+.eslintcache
+
+# TLA+ / TLC and Java verification artifacts
+*.class
+states/
+*_TTrace_*.tla
+*_TTrace_*.bin
+
+# Operating system and editor metadata
+.DS_Store
+.AppleDouble
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

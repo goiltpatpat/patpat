@@ -154,7 +154,7 @@ Skills stay flat under [`skills/`](skills/) for host discovery. Every row below 
 
 | Skill | Invocation | Purpose |
 | --- | --- | --- |
-| [`patpat-ship`](skills/patpat-ship/SKILL.md) | Explicit-only | Commit and open or update a ready PR with delivery intent; merge only when named. |
+| [`patpat-ship`](skills/patpat-ship/SKILL.md) | Explicit-only | Commit and open or update a ready PR with delivery intent; merge only when named; design, harden, and statically verify CI/CD pipelines (`verify_cicd.py`). |
 | [`patpat-learn`](skills/patpat-learn/SKILL.md) | Explicit-only | Convert a recurring failure or correction into the smallest durable constraint. |
 
 #### Diagrams, Statecharts & Meta

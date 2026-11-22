@@ -10,9 +10,7 @@ metadata:
 
 Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
-For a bounded local proof, use this skill and its relevant references. Read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full for uncertainty, security, auth, billing, secrets, architecture, cross-cutting work, or delivery intent. Do not load the router or reread unchanged instructions already loaded in this session.
-
-Read [proof over proxy](../patpat-loop/principles/proof-over-proxy.md) and [preserve safety](../patpat-loop/principles/preserve-safety.md).
+For a bounded local proof, use this skill and its references; read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full for uncertainty, security, auth, billing, secrets, architecture, cross-cutting work, or delivery intent without loading the router. Read [proof over proxy](../patpat-loop/principles/proof-over-proxy.md) and [preserve safety](../patpat-loop/principles/preserve-safety.md).
 
 ## The Iron Law of Verification
 
@@ -20,56 +18,42 @@ Read [proof over proxy](../patpat-loop/principles/proof-over-proxy.md) and [pres
 NO COMPLETION CLAIMS WITHOUT FRESH, CANDIDATE-BOUND EVIDENCE
 ```
 
-For work outside a durable `patpat-run`, execute the authoritative check in the current turn. Within a durable run, prior evidence may be reused only when `patpat-run check-gate` passes for the gate it serves, which proves the receipt fresh for the current candidate, proof contract, evidence epoch, and repository snapshot or identical proven tree, and the bound evidence content still matches. Never describe reused evidence as executed in the current turn. The run snapshot does not cover ignored files, external inputs, or the process and dependency environment; bind task-relevant non-secret inputs separately or rerun the check.
+Execute the authoritative check in the current turn. Inside a durable `patpat-run`, reuse prior evidence only when `patpat-run check-gate` passes for that gate (proving freshness for the current candidate, proof contract, evidence epoch, and snapshot/tree) and always report reused evidence as reused. Bind ignored files, external inputs, and process/dependency state separately or rerun.
 
 ### The 5-Step Gate Function
 
-1. **IDENTIFY**: Specify the authoritative command or check that proves the claim.
-2. **RUN**: Execute the full command freshly on the authoritative surface, or validate a durable-run receipt against the current candidate and all material bindings.
-3. **READ**: Inspect raw stdout, stderr, and exit code directly when executing; for a reused receipt, inspect its bound evidence and validator result (sanitizing tokens and secrets via available sanitizers or inline credential masking).
-4. **VERIFY**: Confirm the observed output strictly satisfies the expected criteria.
-5. **ONLY THEN**: Make the claim and attach the raw evidence.
+1. **IDENTIFY**: Name the authoritative command or check proving the claim.
+2. **RUN**: Execute freshly on the authoritative surface, or validate a durable-run receipt against the current candidate and bindings.
+3. **READ**: Inspect raw stdout, stderr, and exit code directly (or the reused receipt's bound evidence and validator output), masking any tokens/secrets.
+4. **VERIFY**: Confirm observed output strictly satisfies the expected criteria.
+5. **ONLY THEN**: Make the claim and attach raw evidence.
 
 ## Build the proof
 
-1. Reconcile the requested outcomes with the proof contract using proof over proxy; name missing requirements before running checks.
-2. Identify the authoritative artifact or user surface.
-3. Capture a baseline or reproduce the prior state when relevant.
-4. Run the smallest targeted automated check. When a broader existing suite also runs, classify its failures this way. A broader-suite failure counts as pre-existing only when the same test fails with the same signature on the pinned base SHA, using an equivalent environment in a temporary worktree outside the repository that you remove with `git worktree remove`; that worktree is diagnostic, never part of the candidate, and needs no proof-contract revision. If the base run cannot be made equivalent, report the failure as unclassified; otherwise report it as new. A new or unclassified failure blocks `verified`; a pre-existing one may accompany it only when listed and when it does not exercise the changed behavior.
-5. For behavioral claims, exercise the changed logic through the authoritative interface under representative conditions when safe and practical. For static claims, use the strongest deterministic check on the authoritative artifact.
-6. Observe visible output and material side effects directly.
-7. Inspect the final diff and version-control state for unrelated changes.
-8. Record the command or action, observed result, cleanup, and limitation for each material claim; do not mark the whole request verified with uncovered outcomes.
+1. Reconcile requested outcomes with the proof contract via [proof over proxy](../patpat-loop/principles/proof-over-proxy.md); name gaps before running checks.
+2. Identify the authoritative artifact or user surface and capture a baseline/repro when relevant.
+3. Run the smallest targeted automated check; isolate live servers, browsers, or databases per [runtime isolation](references/verification-standards.md#runtime-isolation).
+4. When a broader suite runs, classify failures as `pre-existing` (same test and signature on pinned base SHA in a clean temporary worktree removed via `git worktree remove`), `new`, or `unclassified` per [broader-suite failure classification](references/verification-standards.md#broader-suite-failure-classification). Any `new` or `unclassified` failure blocks `verified`.
+5. Exercise changed behavioral logic through the authoritative interface under representative conditions (or run the strongest deterministic check for static claims) using a concrete observable oracle—never mock counts, copied constants, or self-referential expected values.
+6. Observe visible output and material side effects directly, and inspect the final diff and VCS status for unrelated changes.
+7. Record command/action, observed result, cleanup, and limitations per material claim; never mark uncovered outcomes `verified`.
 
-### Runtime isolation
+## Claim-adaptive verification and outcomes
 
-When verifying live servers, browsers, or databases, bind isolated ports, use temporary data and profile directories (`mktemp`), and keep all runtime state ephemeral. Never reuse default user ports, shared browser profiles, or persistent databases so parallel workers and verification runs never clobber live user sessions. Clean up all temporary processes and directories afterward.
+Apply claim-adaptive depth, mutation-resilience checks, proxy rejection, and committed-head fresh binding per [claim-adaptive verification](references/verification-standards.md#claim-adaptive-verification-and-fresh-binding). Inspect artifacts directly rather than trusting an implementing agent's summary.
 
-For every test or evaluator used as evidence, apply the behavioral oracle from [proof over proxy](../patpat-loop/principles/proof-over-proxy.md). A mock-call assertion, copied constant, self-referential expected value, or fixture-only agreement cannot prove user-observed behavior; use a concrete input and observed output/effect. If a behavioral claim has no observable oracle, report `INCONCLUSIVE`; use static evidence only for requirements that are static from the outset.
+Classify the outcome with exactly one label:
 
-## Claim-adaptive verification and proxy rejection
+- `verified`: Claimed behavior observed on the authoritative surface and required checks passed.
+- `partially verified`: Some required evidence passed, with a named unchecked surface or condition.
+- `implemented but not verified`: Change exists without meaningful behavioral proof.
+- `not implemented`: No implementation change made.
 
-Match verification depth to the claim and risk:
-
-- **Behavioral claims**: Vary material inputs, relevant error branches, or state transitions when safe and practical. Call the subject through the authoritative interface and assert the literal observed result or material effect. A mock interaction, call count, truthiness check, copied constant, or clean compilation does not prove the behavior by itself. When a new test is the primary behavioral proof for changed logic, confirm mutation resilience with a one-line scratch fault check (verify the test fails if the changed condition is inverted or early-returned, then revert the scratch fault immediately).
-- **Static claims**: Use deterministic structure, schema, type, or content checks when that is the authoritative surface. Do not manufacture runtime theater for a non-runtime claim.
-- **Proxy evidence**: Fixtures and mocks may isolate a contract, but they do not replace the real system when the claim concerns that system. Reject narrative summaries, hardcoded fixture answers, and clean compilation as sole behavioral proof.
-- **Fresh binding**: Bind evidence to the exact candidate revision or a reproducible working-tree snapshot, plus material inputs, environment, and oracle. Require the committed head for push-, PR-, or delivery-bound claims: run the check at that head, or use the durable gate from [delivery proof](../patpat-run/references/delivery-proof.md), which accepts a receipt only when the proven tree equals that head's tree and the checkout is clean. Report such a receipt as reused. When a check depends on commit identity, such as Git history or a derived version, it must run at the head. Reject stale, cached, or transferred logs.
-
-Do not accept an implementing agent's report as evidence. Inspect the artifact and results directly. For high-risk boundaries, obtain an independent review without leaking the intended conclusion.
-
-Classify the outcome using exactly one label:
-
-- `verified`: The claimed behavior was observed on the authoritative surface and relevant checks passed.
-- `partially verified`: Some required evidence passed, but a named surface or condition could not be checked.
-- `implemented but not verified`: The change exists, but no meaningful behavioral proof ran.
-- `not implemented`: No implementation change was made.
-
-If a check fails, classify the failure before retrying. Change the hypothesis, implementation, verifier, or environment; never loop the same attempt.
+On failure, classify the failure and change hypothesis, implementation, verifier, or environment before retrying.
 
 ## Proof contract runner
 
-Run [`scripts/eval_proof_contract.py`](scripts/eval_proof_contract.py) to execute 5-field proof contracts (`Claim`, `Surface`, `Action`, `Expect`, `Cleanup`) deterministically with guaranteed cleanup and emit `patpat-proof-receipt/v1` JSON containing 7 typed boolean `diagnostics`, `failing_diagnostics`, and `remediation_hint`.
+Run [`scripts/eval_proof_contract.py`](scripts/eval_proof_contract.py) to execute 5-field proof contracts (`Claim`, `Surface`, `Action`, `Expect`, `Cleanup`) deterministically with guaranteed cleanup and `patpat-proof-receipt/v1` JSON output.
 
 ## Mutation boundary
 
