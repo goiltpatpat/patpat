@@ -54,6 +54,22 @@ def main() -> int:
     if len(set(windows_commands)) != 1:
         raise SmokeError("Codex hook events must share one Windows launcher")
 
+    pre_tool_commands: list[str] = []
+    pre_tool_groups = manifest.get("hooks", {}).get("PreToolUse")
+    if not isinstance(pre_tool_groups, list) or not pre_tool_groups:
+        raise SmokeError("manifest has no PreToolUse hook groups")
+    for group in pre_tool_groups:
+        entries = group.get("hooks") if isinstance(group, dict) else None
+        if not isinstance(entries, list) or not entries:
+            raise SmokeError("manifest has no PreToolUse commands")
+        for entry in entries:
+            cmd = entry.get("commandWindows") if isinstance(entry, dict) else None
+            if not isinstance(cmd, str) or not cmd:
+                raise SmokeError("manifest has no Windows command for PreToolUse")
+            pre_tool_commands.append(cmd)
+    if len(set(pre_tool_commands)) != 1:
+        raise SmokeError("PreToolUse hook groups must share one Windows safety-guard launcher")
+
     comspec = os.environ.get("COMSPEC")
     if not comspec or not Path(comspec).is_file():
         raise SmokeError("COMSPEC is unavailable")
@@ -68,6 +84,8 @@ def main() -> int:
         shutil.copy2(source / "hooks" / "scripts" / "patpat_loop_state.py", hook_scripts)
         staged_script = hook_scripts / "patpat_loop_state.py"
         shutil.copy2(source / "hooks" / "scripts" / "patpat_loop_state.cmd", hook_scripts)
+        shutil.copy2(source / "hooks" / "scripts" / "patpat_safety_guard.py", hook_scripts)
+        shutil.copy2(source / "hooks" / "scripts" / "patpat_safety_guard.cmd", hook_scripts)
         project = base / "Test User" / "My Project" / "โปรเจกต์ Patpat"
         project.mkdir(parents=True)
         system_root = Path(os.environ.get("SystemRoot", r"C:\Windows"))
@@ -81,6 +99,9 @@ def main() -> int:
         command = windows_commands[0].replace("${PLUGIN_ROOT}", str(plugin_root))
         if "${PLUGIN_ROOT}" in command or not command.startswith('"') or not command.endswith('"'):
             raise SmokeError("PLUGIN_ROOT did not resolve to one quoted launcher path")
+        safety_command = pre_tool_commands[0].replace("${PLUGIN_ROOT}", str(plugin_root))
+        if "${PLUGIN_ROOT}" in safety_command or not safety_command.startswith('"') or not safety_command.endswith('"'):
+            raise SmokeError("PLUGIN_ROOT did not resolve to one quoted PreToolUse launcher path")
 
         environment = os.environ.copy()
         for key in (
@@ -331,6 +352,60 @@ def main() -> int:
         malformed = invoke(None, raw_input=b"not-json\n")
         if malformed.returncode == 0 or b"JSON object" not in malformed.stderr:
             raise SmokeError("malformed hook input was hidden as success")
+
+        def invoke_safety(
+            request: dict[str, Any],
+            *,
+            env: dict[str, str] | None = None,
+        ) -> subprocess.CompletedProcess[bytes]:
+            command_line = f'"{comspec}" /C "{safety_command}"'
+            return subprocess.run(
+                command_line,
+                input=json.dumps(request, ensure_ascii=False).encode("utf-8"),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=project,
+                env=environment if env is None else env,
+                timeout=LAUNCHER_TIMEOUT_SECONDS,
+                check=False,
+            )
+
+        safe_bash = invoke_safety({"tool_name": "Bash", "tool_input": {"command": "git status"}})
+        if safe_bash.returncode != 0:
+            raise SmokeError(
+                f"PreToolUse safety guard blocked benign git status ({safe_bash.returncode}): "
+                f"{safe_bash.stderr.decode('utf-8', errors='replace')}"
+            )
+        blocked_push = invoke_safety(
+            {"tool_name": "Bash", "tool_input": {"command": "git push --force origin main"}}
+        )
+        if blocked_push.returncode != 2 or b"Patpat safety guard" not in blocked_push.stderr:
+            raise SmokeError("PreToolUse safety guard did not block git push --force on Windows")
+        blocked_attr = invoke_safety(
+            {"tool_name": "Bash", "tool_input": {"command": "git commit -m 'fix\\n\\nCo-Authored-By: Claude'"}}
+        )
+        if blocked_attr.returncode != 2 or b"Patpat safety guard" not in blocked_attr.stderr:
+            raise SmokeError("PreToolUse safety guard did not block P1 AI attribution on Windows")
+        blocked_cache = invoke_safety(
+            {
+                "tool_name": "Write",
+                "tool_input": {"file_path": r"C:\Users\alice\.claude\plugins\cache\patpat\SKILL.md"},
+            }
+        )
+        if blocked_cache.returncode != 2 or b"Patpat safety guard" not in blocked_cache.stderr:
+            raise SmokeError("PreToolUse safety guard did not block plugin-cache write on Windows")
+        for fallback_key in ("GROK_PLUGIN_ROOT", "CLAUDE_PLUGIN_ROOT"):
+            fallback_root_env = environment.copy()
+            fallback_root_env.pop("PLUGIN_ROOT", None)
+            fallback_root_env[fallback_key] = str(plugin_root)
+            fallback_blocked = invoke_safety(
+                {"tool_name": "Bash", "tool_input": {"command": "gh pr merge 42 --auto"}},
+                env=fallback_root_env,
+            )
+            if fallback_blocked.returncode != 2 or b"Patpat safety guard" not in fallback_blocked.stderr:
+                raise SmokeError(
+                    f"PreToolUse safety guard launcher failed with {fallback_key} fallback on Windows"
+                )
 
         staged_script.write_text("raise SystemExit(37)\n", encoding="utf-8", newline="\n")
         propagated = invoke(payload("UserPromptSubmit", "exit-code", prompt="continue"))

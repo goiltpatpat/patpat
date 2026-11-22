@@ -95,8 +95,9 @@ def check_hook_status(hook_root: Path) -> dict[str, Any]:
     """Inspect hook files. Does not prove hook execution."""
     hooks_config = hook_root / "hooks" / "hooks.json"
     hook_script = hook_root / "hooks" / "scripts" / "patpat_loop_state.py"
+    safety_script = hook_root / "hooks" / "scripts" / "patpat_safety_guard.py"
     has_config = hooks_config.is_file()
-    has_script = hook_script.is_file()
+    has_script = hook_script.is_file() and safety_script.is_file()
     status = "configured" if has_config and has_script else "none"
     return {
         "status": status,

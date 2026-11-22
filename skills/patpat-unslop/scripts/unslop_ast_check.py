@@ -34,6 +34,8 @@ from typing import Sequence
 PYTHON_EXTENSIONS = frozenset({".py"})
 JS_TS_EXTENSIONS = frozenset({".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"})
 SUPPORTED_EXTENSIONS = PYTHON_EXTENSIONS | JS_TS_EXTENSIONS
+STRAY_SCRATCH_DIRS = frozenset({"_work", "tmp"})
+STRAY_SCRATCH_SUFFIXES = frozenset({".bak", ".orig"})
 
 
 @dataclass(frozen=True)
@@ -85,19 +87,28 @@ AI_SLOP_COMMENT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 JS_SUPPRESSION_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"^pragma\s+warning\s+disable\b", re.IGNORECASE), "pragma warning disable"),
     (re.compile(r"^eslint-disable\b", re.IGNORECASE), "eslint-disable"),
-    (re.compile(r"^@ts-(?:ignore|nocheck)\b", re.IGNORECASE), "@ts-ignore/nocheck"),
+    (re.compile(r"^@ts-(?:ignore|nocheck|expect-error)\b", re.IGNORECASE), "@ts-ignore/nocheck/expect-error"),
+]
+
+# Rule 20 JS/TS /* ... */ block suppression patterns (matched against body after '/*')
+JS_BLOCK_SUPPRESSION_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"^eslint-disable\b", re.IGNORECASE), "eslint-disable"),
 ]
 
 # Rule 20 suppression comment patterns (matched against # comments via tokenize)
 SUPPRESSION_COMMENT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"^#+\s*noqa\b", re.IGNORECASE), "noqa"),
+    (re.compile(r"^#+\s*ruff:\s*noqa\b", re.IGNORECASE), "ruff: noqa"),
+    (re.compile(r"^#+\s*flake8:\s*noqa\b", re.IGNORECASE), "flake8: noqa"),
     (re.compile(r"^#+\s*type:\s*ignore\b", re.IGNORECASE), "type: ignore"),
     (re.compile(r"^#+\s*pylint:\s*disable\b", re.IGNORECASE), "pylint: disable"),
     (re.compile(r"^#+\s*pyright:\s*ignore\b", re.IGNORECASE), "pyright: ignore"),
     (re.compile(r"^#+\s*mypy:\s*ignore\b", re.IGNORECASE), "mypy: ignore"),
+    (re.compile(r"^#+\s*nosec\b", re.IGNORECASE), "nosec"),
+    (re.compile(r"^#+\s*pragma:\s*no\s+cover\b", re.IGNORECASE), "pragma: no cover"),
     (re.compile(r"^(?:#+|//)\s*(?://\s*)?pragma\s+warning\s+disable\b", re.IGNORECASE), "pragma warning disable"),
-    (re.compile(r"^(?:#+|//)\s*(?://\s*)?eslint-disable\b", re.IGNORECASE), "eslint-disable"),
-    (re.compile(r"^(?:#+|//)\s*(?://\s*)?@ts-(?:ignore|nocheck)\b", re.IGNORECASE), "@ts-ignore/nocheck"),
+    (re.compile(r"^(?:#+|//|/\*)\s*(?://\s*)?eslint-disable\b", re.IGNORECASE), "eslint-disable"),
+    (re.compile(r"^(?:#+|//)\s*(?://\s*)?@ts-(?:ignore|nocheck|expect-error)\b", re.IGNORECASE), "@ts-ignore/nocheck/expect-error"),
     (re.compile(r"^#+\s*nosemgrep\b", re.IGNORECASE), "nosemgrep"),
 ]
 
@@ -119,6 +130,8 @@ TEST_SKIP_CALL_NAMES = {
     "test.skip",
     "it.skip",
 }
+
+JS_TEST_SKIP_CALL_RE = re.compile(r"(?<![\w$.])(test\.skip|it\.skip)\s*\(")
 
 
 def get_decorator_name(dec: ast.expr) -> str:
@@ -526,6 +539,174 @@ def extract_js_line_comments(source_text: str) -> list[tuple[int, int, str]]:
     return comments
 
 
+def extract_js_block_comments(source_text: str) -> list[tuple[int, int, str]]:
+    """Extract /* ... */ block comments as (1-based line, 1-based col, stripped body) skipping strings and //."""
+    comments: list[tuple[int, int, str]] = []
+    n = len(source_text)
+    i = 0
+    line = 1
+    col = 1
+    state = "NORMAL"
+
+    while i < n:
+        ch = source_text[i]
+        nxt = source_text[i + 1] if i + 1 < n else ""
+
+        if state == "NORMAL":
+            if ch == "/" and nxt == "/":
+                end = source_text.find("\n", i + 2)
+                if end == -1:
+                    break
+                i = end + 1
+                line += 1
+                col = 1
+                continue
+            if ch == "/" and nxt == "*":
+                start_line = line
+                start_col = col
+                body_start = i + 2
+                end = source_text.find("*/", body_start)
+                if end == -1:
+                    body = source_text[body_start:].strip()
+                    comments.append((start_line, start_col, body))
+                    break
+                body = source_text[body_start:end].strip()
+                comments.append((start_line, start_col, body))
+                span = source_text[i : end + 2]
+                nl_count = span.count("\n")
+                if nl_count:
+                    line += nl_count
+                    col = len(span) - span.rfind("\n")
+                else:
+                    col += len(span)
+                i = end + 2
+                continue
+            if ch == "'":
+                state = "SINGLE"
+            elif ch == '"':
+                state = "DOUBLE"
+            elif ch == "`":
+                state = "TEMPLATE"
+        elif state in ("SINGLE", "DOUBLE", "TEMPLATE"):
+            if ch == "\\":
+                if i + 1 < n and source_text[i + 1] == "\n":
+                    line += 1
+                    col = 1
+                    i += 2
+                    continue
+                i += 2
+                col += 2
+                continue
+            if (
+                (state == "SINGLE" and ch == "'")
+                or (state == "DOUBLE" and ch == '"')
+                or (state == "TEMPLATE" and ch == "`")
+            ):
+                state = "NORMAL"
+
+        if ch == "\n":
+            line += 1
+            col = 1
+        else:
+            col += 1
+        i += 1
+
+    return comments
+
+
+def _mask_js_non_code(source_text: str) -> str:
+    """Replace JS/TS comments and string literals with spaces while preserving newlines and columns."""
+    out: list[str] = []
+    n = len(source_text)
+    i = 0
+    state = "NORMAL"
+
+    while i < n:
+        ch = source_text[i]
+        nxt = source_text[i + 1] if i + 1 < n else ""
+
+        if state == "NORMAL":
+            if ch == "/" and nxt == "/":
+                out.append("  ")
+                i += 2
+                state = "LINE"
+                continue
+            if ch == "/" and nxt == "*":
+                out.append("  ")
+                i += 2
+                state = "BLOCK"
+                continue
+            if ch == "'":
+                out.append(" ")
+                state = "SINGLE"
+                i += 1
+                continue
+            if ch == '"':
+                out.append(" ")
+                state = "DOUBLE"
+                i += 1
+                continue
+            if ch == "`":
+                out.append(" ")
+                state = "TEMPLATE"
+                i += 1
+                continue
+            out.append(ch)
+        elif state == "LINE":
+            if ch == "\n":
+                out.append("\n")
+                state = "NORMAL"
+            else:
+                out.append(" ")
+        elif state == "BLOCK":
+            if ch == "*" and nxt == "/":
+                out.append("  ")
+                i += 2
+                state = "NORMAL"
+                continue
+            out.append("\n" if ch == "\n" else " ")
+        elif state in ("SINGLE", "DOUBLE", "TEMPLATE"):
+            if ch == "\\":
+                out.append(" ")
+                if i + 1 < n:
+                    out.append("\n" if source_text[i + 1] == "\n" else " ")
+                    i += 2
+                    continue
+                i += 1
+                continue
+            out.append("\n" if ch == "\n" else " ")
+            if (
+                (state == "SINGLE" and ch == "'")
+                or (state == "DOUBLE" and ch == '"')
+                or (state == "TEMPLATE" and ch == "`")
+            ):
+                state = "NORMAL"
+        i += 1
+
+    return "".join(out)
+
+
+def check_js_test_skipping(source_text: str, file_path: str) -> list[Violation]:
+    """Rule 20: detect test.skip(...) / it.skip(...) calls in JS/TS outside comments and strings."""
+    violations: list[Violation] = []
+    masked = _mask_js_non_code(source_text)
+    for line_no, line in enumerate(masked.splitlines(), start=1):
+        for match in JS_TEST_SKIP_CALL_RE.finditer(line):
+            call_name = match.group(1)
+            violations.append(
+                Violation(
+                    file_path=file_path,
+                    line=line_no,
+                    col=match.start(1) + 1,
+                    rule="Rule 20",
+                    category="test-skipping-call",
+                    message=f"test-skipping call '{call_name}(...)' silences verifier integrity",
+                    end_line=line_no,
+                )
+            )
+    return violations
+
+
 def _pos_in_ranges(
     line_no: int, col0: int, ranges: Sequence[tuple[tuple[int, int], tuple[int, int]]]
 ) -> bool:
@@ -572,12 +753,35 @@ def _iter_comments(source_bytes: bytes, file_path: str) -> list[tuple[int, int, 
 
 
 def check_suppression_comments(source_bytes: bytes, file_path: str) -> list[Violation]:
-    """Rule 20: detect warning and linter suppression comments in # and // comments."""
+    """Rule 20: detect warning and linter suppression comments in #, //, and /* ... */ comments."""
     violations: list[Violation] = []
     for line_no, col_1, text, is_js in _iter_comments(source_bytes, file_path):
         patterns = JS_SUPPRESSION_PATTERNS if is_js else SUPPRESSION_COMMENT_PATTERNS
         for pattern, label in patterns:
             if pattern.search(text):
+                violations.append(
+                    Violation(
+                        file_path=file_path,
+                        line=line_no,
+                        col=col_1,
+                        rule="Rule 20",
+                        category="linter-suppression",
+                        message=f"linter/warning suppression '{label}' silences checker integrity",
+                        end_line=line_no,
+                    )
+                )
+                break
+
+    source_text = source_bytes.decode("utf-8", errors="replace")
+    is_js_ts = Path(file_path).suffix.lower() in JS_TS_EXTENSIONS
+    protected_ranges: list[tuple[tuple[int, int], tuple[int, int]]] = []
+    if not is_js_ts:
+        protected_ranges, _, _ = _collect_python_token_ranges(source_bytes)
+    for line_no, col_1, body in extract_js_block_comments(source_text):
+        if not is_js_ts and _pos_in_ranges(line_no, col_1 - 1, protected_ranges):
+            continue
+        for pattern, label in JS_BLOCK_SUPPRESSION_PATTERNS:
+            if pattern.search(body):
                 violations.append(
                     Violation(
                         file_path=file_path,
@@ -686,6 +890,7 @@ def check_source_code(
     violations.extend(check_ai_slop_comments(source_bytes, file_path))
 
     if Path(file_path).suffix.lower() in JS_TS_EXTENSIONS:
+        violations.extend(check_js_test_skipping(source, file_path))
         return _finalize_violations(violations, allowed_lines)
 
     try:
@@ -740,6 +945,81 @@ def collect_target_files(
     return results
 
 
+def is_stray_scratch_path(rel_path: str | Path) -> str | None:
+    """Return a reason if a relative path is a stray scratch artifact (_work/, tmp/, *.bak, *.orig)."""
+    norm = str(rel_path).replace("\\", "/").lstrip("/")
+    if not norm:
+        return None
+    parts = [p for p in norm.split("/") if p not in ("", ".")]
+    if not parts:
+        return None
+    for seg in parts[:-1]:
+        if seg.lower() in STRAY_SCRATCH_DIRS:
+            return f"stray scratch directory '{seg}/'"
+    filename = parts[-1]
+    if filename.lower() in STRAY_SCRATCH_DIRS and norm.endswith("/"):
+        return f"stray scratch directory '{filename}/'"
+    lower_name = filename.lower()
+    for suffix in sorted(STRAY_SCRATCH_SUFFIXES):
+        if lower_name.endswith(suffix):
+            return f"stray backup artifact '*{suffix}'"
+    return None
+
+
+def check_stray_scratch_paths(paths: Sequence[str | Path]) -> list[Violation]:
+    """Rule 20: detect stray scratch artifacts (_work/, tmp/, *.bak, *.orig) in relative paths."""
+    violations: list[Violation] = []
+    seen: set[str] = set()
+    for raw_path in paths:
+        norm = str(raw_path).replace("\\", "/").lstrip("/")
+        if norm in seen:
+            continue
+        reason = is_stray_scratch_path(norm)
+        if reason is not None:
+            seen.add(norm)
+            violations.append(
+                Violation(
+                    file_path=norm,
+                    line=1,
+                    col=1,
+                    rule="Rule 20",
+                    category="stray-scratch-artifact",
+                    message=f"{reason} should not be left in the workspace or diff",
+                    end_line=1,
+                )
+            )
+    return violations
+
+
+def check_stray_scratch_tree(paths: Sequence[Path], root: Path | None = None) -> list[Violation]:
+    """Scan filesystem paths for stray scratch artifacts relative to root or each target dir."""
+    ignore_dirs = {".git", ".venv", "venv", "__pycache__", ".tox", ".eggs", "build", "dist", "node_modules"}
+    rel_candidates: list[str] = []
+    resolved_root = root.resolve() if root is not None else None
+    for path in paths:
+        if path.is_file():
+            if resolved_root is not None:
+                try:
+                    rel = path.resolve().relative_to(resolved_root).as_posix()
+                except ValueError:
+                    rel = path.name
+            else:
+                rel = path.name
+            rel_candidates.append(rel)
+        elif path.is_dir():
+            base = resolved_root if resolved_root is not None else path.resolve()
+            for walk_root, dirs, files in os.walk(path):
+                dirs[:] = [d for d in sorted(dirs) if d not in ignore_dirs and not d.startswith(".")]
+                for f in sorted(files):
+                    full = Path(walk_root) / f
+                    try:
+                        rel = full.resolve().relative_to(base).as_posix()
+                    except ValueError:
+                        rel = full.name
+                    rel_candidates.append(rel)
+    return check_stray_scratch_paths(rel_candidates)
+
+
 def check_diff_content(diff_text: str, root: Path | None = None) -> list[Violation]:
     """Run linter against files and line numbers specified in unified diff."""
     base_root = root or Path.cwd()
@@ -747,6 +1027,7 @@ def check_diff_content(diff_text: str, root: Path | None = None) -> list[Violati
     violations: list[Violation] = []
 
     for rel_path, added_lines in sorted(added_lines_map.items()):
+        violations.extend(check_stray_scratch_paths([rel_path]))
         if Path(rel_path).suffix.lower() not in SUPPORTED_EXTENSIONS:
             continue
         file_path = base_root / rel_path
@@ -814,6 +1095,7 @@ def run_checks(
             sys.stderr.write(f"Warning: could not read {f}: {err}\n")
 
     violations: list[Violation] = []
+    violations.extend(check_stray_scratch_tree(paths, root=root))
     for file_path, content in file_contents:
         all_src = all_python_sources if file_path.suffix.lower() in PYTHON_EXTENSIONS else None
         violations.extend(
@@ -1234,6 +1516,103 @@ def run_self_test() -> int:
         assert_test(ts_file in collected and js_file in collected, "collect_target_files includes .ts and .mjs")
         cli_hits = run_checks([tmp_root])
         assert_test(len(cli_hits) == 2, "run_checks scans JS/TS files collected from directory")
+
+    # 60. Stray scratch artifact detection (_work/, tmp/, *.bak, *.orig)
+    stray_hits = check_stray_scratch_paths([
+        "_work/notes.md",
+        "tmp/scratch.py",
+        "src/module.py.bak",
+        "src/config.json.orig",
+        "src/template.py",
+        "src/worker.py",
+        "docs/bakery.md",
+    ])
+    assert_test(
+        len(stray_hits) == 4
+        and all(v.category == "stray-scratch-artifact" for v in stray_hits)
+        and {v.file_path for v in stray_hits}
+        == {"_work/notes.md", "tmp/scratch.py", "src/module.py.bak", "src/config.json.orig"},
+        "check_stray_scratch_paths flags _work/, tmp/, *.bak, *.orig and ignores clean paths",
+    )
+    stray_diff = (
+        "--- /dev/null\n"
+        "+++ b/_work/debug.txt\n"
+        "@@ -0,0 +1,1 @@\n"
+        "+temp\n"
+        "--- /dev/null\n"
+        "+++ b/src/app.py.bak\n"
+        "@@ -0,0 +1,1 @@\n"
+        "+old\n"
+    )
+    v_stray_diff = check_diff_content(stray_diff)
+    assert_test(
+        len(v_stray_diff) == 2 and all(v.category == "stray-scratch-artifact" for v in v_stray_diff),
+        "check_diff_content flags stray scratch artifacts even for non-source extensions",
+    )
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_root = Path(tmp_dir)
+        (tmp_root / "src").mkdir(parents=True)
+        (tmp_root / "src" / "clean.py").write_text("x = 1\n", encoding="utf-8")
+        assert_test(
+            len(run_checks([tmp_root])) == 0,
+            "run_checks does not false-positive on system /tmp ancestor of workspace",
+        )
+        (tmp_root / "tmp").mkdir()
+        (tmp_root / "tmp" / "draft.txt").write_text("draft\n", encoding="utf-8")
+        (tmp_root / "src" / "old.orig").write_text("orig\n", encoding="utf-8")
+        tree_hits = run_checks([tmp_root])
+        assert_test(
+            len(tree_hits) == 2 and all(v.category == "stray-scratch-artifact" for v in tree_hits),
+            "run_checks flags stray scratch files inside scanned workspace",
+        )
+
+    # 61. JS/TS test.skip / it.skip detection across .js/.ts/.jsx/.tsx + string/comment immunity
+    for ext in (".js", ".ts", ".jsx", ".tsx"):
+        js_skip_src = "test.skip('flaky', () => {});\nit.skip('pending', () => {});\n"
+        v_js_skip = check_source_code(js_skip_src, f"spec{ext}")
+        assert_test(
+            len(v_js_skip) == 2
+            and all(v.category == "test-skipping-call" for v in v_js_skip)
+            and [v.line for v in v_js_skip] == [1, 2],
+            f"JS/TS test.skip and it.skip flagged for {ext}",
+        )
+    js_skip_neg = (
+        "// test.skip('commented')\n"
+        "/* it.skip('block') */\n"
+        "const s = \"test.skip('str')\";\n"
+        "const t = `it.skip('tpl')`;\n"
+        "mytest.skip('unrelated');\n"
+    )
+    assert_test(
+        len(check_source_code(js_skip_neg, "clean.ts")) == 0,
+        "JS/TS test.skip/it.skip inside comments, strings, or other identifiers not flagged",
+    )
+
+    # 62. Expanded Rule 20 suppression patterns (# ruff: noqa, # flake8: noqa, # nosec, # pragma: no cover, /* eslint-disable, // @ts-expect-error)
+    for py_supp in (
+        "x = 1  # ruff: noqa\n",
+        "x = 1  # ruff: noqa: F401\n",
+        "x = 1  # flake8: noqa\n",
+        "x = 1  # nosec B101\n",
+        "if False:  # pragma: no cover\n    pass\n",
+    ):
+        v_ps = check_source_code(py_supp, "test.py")
+        assert_test(
+            len(v_ps) == 1 and v_ps[0].category == "linter-suppression",
+            f"Python suppression flagged: {py_supp.strip()}",
+        )
+    v_es_block = check_source_code("/* eslint-disable no-console */\nconsole.log(1);\n", "app.ts")
+    assert_test(
+        len(v_es_block) == 1 and v_es_block[0].category == "linter-suppression" and v_es_block[0].line == 1,
+        "/* eslint-disable */ block comment flagged in JS/TS",
+    )
+    v_es_str = check_source_code('const s = "/* eslint-disable */";\n', "app.ts")
+    assert_test(len(v_es_str) == 0, "/* eslint-disable */ inside JS string not flagged")
+    v_ts_exp = check_source_code("// @ts-expect-error temporary\nconst x: number = 'a';\n", "app.ts")
+    assert_test(
+        len(v_ts_exp) == 1 and v_ts_exp[0].category == "linter-suppression" and v_ts_exp[0].line == 1,
+        "// @ts-expect-error flagged in TS",
+    )
 
     print(f"unslop_ast_check self-test passed: {test_cases_run} test cases.")
     return 0

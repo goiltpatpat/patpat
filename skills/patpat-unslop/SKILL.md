@@ -3,7 +3,7 @@ name: patpat-unslop
 description: Cut superficial patterns and fluff from engineering docs, PR text, and code diffs.
 disable-model-invocation: true
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Artifact","requires_state":["bounded-change-staged"],"produces_state":["prose-code-unslopped"],"verification_cmd":"git diff --check"}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Artifact","requires_state":["workspace-root-open"],"produces_state":["prose-code-unslopped"],"verification_cmd":"git diff | python3 <loaded-skill-directory>/scripts/unslop_ast_check.py --diff"}'
 ---
 
 # Patpat Unslop

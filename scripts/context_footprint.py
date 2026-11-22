@@ -17,6 +17,9 @@ from pathlib import Path
 
 LINK = re.compile(r"\]\(([^)\s#]+\.md)(?:#[^)]*)?\)")
 BYTES_PER_TOKEN = 4
+# Baseline ceiling over current max skill closure (~33.3k tokens for patpat-loop)
+# with modest headroom for small protocol updates while catching bloat regressions.
+DEFAULT_MAX_TOKENS = 35000
 
 
 def linked_markdown(path: Path) -> list[Path]:
@@ -82,6 +85,27 @@ def render(rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def check_budget(
+    rows: list[dict],
+    *,
+    max_bytes: int | None = None,
+    max_tokens: int | None = None,
+) -> list[str]:
+    """Return budget violation lines for rows exceeding max_bytes or max_tokens."""
+    violations: list[str] = []
+    if max_bytes is not None:
+        for r in rows:
+            if r["bytes"] > max_bytes:
+                violations.append(f"over budget: {r['entry']} {r['bytes']} > {max_bytes} bytes")
+    if max_tokens is not None:
+        for r in rows:
+            if r["approx_tokens"] > max_tokens:
+                violations.append(
+                    f"over token budget: {r['entry']} {r['approx_tokens']} > {max_tokens} ~tokens"
+                )
+    return violations
+
+
 def check(condition: bool, message: str) -> None:
     if not condition:
         raise SystemExit(f"context_footprint self-test failed: {message}")
@@ -109,6 +133,23 @@ def self_test() -> int:
         check(deep["approx_tokens"] == expected // BYTES_PER_TOKEN, "tokens are bytes / 4")
         rows = report(root, 1)
         check([r["entry"] for r in rows] == ["skills/demo/SKILL.md"], "entries are repo-relative POSIX paths")
+        check(
+            check_budget(rows, max_tokens=rows[0]["approx_tokens"]) == [],
+            "check_budget passes when approx_tokens == max_tokens",
+        )
+        over_tokens = check_budget(rows, max_tokens=max(0, rows[0]["approx_tokens"] - 1))
+        check(
+            len(over_tokens) == 1 and "over token budget:" in over_tokens[0],
+            "check_budget flags rows exceeding max_tokens",
+        )
+        check(
+            main(["--root", str(root), "--check-budget"]) == 0,
+            "--check-budget passes on fixture under default token ceiling",
+        )
+        check(
+            main(["--root", str(root), "--max-tokens", "1"]) == 1,
+            "--max-tokens exits 1 when closure exceeds ceiling",
+        )
     print("context_footprint self-test: ok")
     return 0
 
@@ -120,6 +161,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--depth", type=int, default=1, help="relative-link depth to follow (default 1)")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--max-bytes", type=int, help="exit 1 when the measured closure exceeds this many bytes")
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        help="exit 1 when the measured closure exceeds this many approximate tokens",
+    )
+    parser.add_argument(
+        "--check-budget",
+        action="store_true",
+        help=f"enforce the CI token-budget ceiling (default: {DEFAULT_MAX_TOKENS} ~tokens unless --max-tokens is set)",
+    )
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args(argv)
 
@@ -127,6 +178,10 @@ def main(argv: list[str] | None = None) -> int:
         return self_test()
     if args.depth < 0:
         parser.error("--depth must be >= 0")
+    if args.max_bytes is not None and args.max_bytes < 0:
+        parser.error("--max-bytes must be >= 0")
+    if args.max_tokens is not None and args.max_tokens < 0:
+        parser.error("--max-tokens must be >= 0")
 
     root = args.root.resolve()
     if args.entry:
@@ -137,12 +192,14 @@ def main(argv: list[str] | None = None) -> int:
         rows = report(root, args.depth)
 
     print(json.dumps(rows, indent=2) if args.json else render(rows))
-    if args.max_bytes is not None:
-        over = [r for r in rows if r["bytes"] > args.max_bytes]
-        for r in over:
-            print(f"over budget: {r['entry']} {r['bytes']} > {args.max_bytes}", file=sys.stderr)
-        return 1 if over else 0
-    return 0
+    effective_max_tokens = args.max_tokens
+    if args.check_budget and effective_max_tokens is None:
+        effective_max_tokens = DEFAULT_MAX_TOKENS
+
+    violations = check_budget(rows, max_bytes=args.max_bytes, max_tokens=effective_max_tokens)
+    for line in violations:
+        print(line, file=sys.stderr)
+    return 1 if violations else 0
 
 
 if __name__ == "__main__":
