@@ -9,7 +9,7 @@
 
 **A little more proof. A lot less guesswork.**
 
-Patpat is a set of evidence-driven skills that sharpens the agent you already use. It does not wrap, replace, or run your agent, and it does not take over your process: the host stays the runtime, you stay in control, and each skill is a plain Markdown entry point you can read and adapt, some with small deterministic scripts. On hosts whose session hook the [capability map](docs/guide/capability-map.md#sticky-mode-hook-status) records (partially verified on Codex, unverified on Claude Code), an optional hook keeps Patpat on for later turns until you type `disable patpat` or the session state expires after 30 days; it adds context and grants no authority. It gives an agent the judgment of a careful senior engineer: understand the real problem, choose the right depth of work, make a focused change, prove the result on the surface that matters, and say plainly what is still unverified. It covers code and repository work, other deliverables such as documents and analyses, and mixed work, and it runs on Codex, Claude Code, Grok CLI, Antigravity, Cursor, and other Agent Skills hosts.
+Patpat is a set of evidence-driven skills that sharpens the agent you already use. It does not wrap, replace, or run your agent, and it does not take over your process: the host stays the runtime, you stay in control, and each skill is a plain Markdown entry point you can read and adapt, some with small deterministic scripts. On hosts whose session hook the [capability map](docs/guide/capability-map.md#sticky-mode-hook-status) records (partially verified on Codex and Claude Code), an optional hook keeps Patpat on for later turns until you type `disable patpat` or the session state expires after 30 days; it adds context and grants no authority. It gives an agent the judgment of a careful senior engineer: understand the real problem, choose the right depth of work, make a focused change, prove the result on the surface that matters, and say plainly what is still unverified. It covers code and repository work, other deliverables such as documents and analyses, and mixed work, and it runs on Codex, Claude Code, Grok CLI, Antigravity, Cursor, and other Agent Skills hosts.
 
 The mascot is friendly. The questions are quite persistent.
 
@@ -63,10 +63,72 @@ $patpat can our checkout charge a customer twice? show me the path
 
 ## Getting the best results
 
-- **Match depth to the task (Proportionality):** For simple questions, audits, or exploration, call [`patpat-inspect`](skills/patpat-inspect/SKILL.md) directly to stay read-only. Reserve the full `/patpat` loop for changes that need root-cause proof and verification.
-- **Name the verification surface upfront:** Tell the agent how you expect the claim to be proven (e.g. `$patpat fix the timeout and verify with existing integration tests`).
-- **Use safety modifiers:** Keep work sandboxed by adding `local only` (prevents Git push/PR creation), or ask to `plan first` before touching any code.
-- **Direct-call specialized skills:** When you know the exact output you want (such as [`patpat-repository-diagram`](skills/patpat-repository-diagram/SKILL.md) for architecture maps, or [`patpat-statechart`](skills/patpat-statechart/SKILL.md) to model check race conditions), invoke that skill directly instead of routing through the loop.
+Patpat does not make an agent smarter in the abstract: it turns an agent's capability into work you can verify and trust.
+
+```text
+Typical agent:  "Fixed it! Tests pass."
+With Patpat:    "Confirmed root cause in auth.ts:42. Verified on live checkout at 390px. Risk: staging cache TTL untested."
+```
+
+Use it at the depth your task actually needs:
+
+### Match the workflow to your level and task
+
+| Audience / Task | Start with | What you get |
+| --- | --- | --- |
+| **Everyday & non-code tasks** (docs, research, analysis, planning) | `/patpat` (or `$patpat`) + plain outcome + `plan first` | Structured framing, source-checked claims (`confirmed` / `inferred` / `unknown`), and zero Git ceremony via [general task judgment](skills/patpat-loop/references/general-task-judgment.md). |
+| **Daily engineering** (bugs, features, refactors, UI/API work) | `patpat-inspect` for read-only questions; `/patpat` + verification surface + `local only` for edits | Root-cause proof before patching, minimal scoped diffs, and evidence on the real app or test surface. |
+| **Staff / Principal & high-risk systems** (migrations, auth, concurrency, multi-layer builds) | `/patpat` + `patpat-architect` / `patpat-statechart` / `patpat-run` / `patpat-review` | Formal invariants (TLA+/TLC), durable Git-backed checkpoints, independent read-only review, and explicit blast-radius control. |
+
+### Five practical habits
+
+- **Match depth to the task (Proportionality):** For simple questions, audits, or exploration, call [`patpat-inspect`](skills/patpat-inspect/SKILL.md) directly to stay read-only. Reserve the full `/patpat` loop for changes that need root-cause proof and verification, and let Patpat fast-track small, reversible edits automatically without heavy ceremony.
+- **Name the authoritative proof surface upfront:** Tell the agent what real surface settles the claim (for example, live browser behavior, integration tests, or an HTTP contract check), not just "make sure it builds."
+- **Steer with safety modifiers:** Keep work off remotes with `local only`, gate edits with `plan first`, or turn Patpat off with `disable /patpat`.
+- **Direct-call specialists when you know the artifact:** Jump straight to [`patpat-repository-diagram`](skills/patpat-repository-diagram/SKILL.md) for architecture maps, [`patpat-statechart`](skills/patpat-statechart/SKILL.md) to model-check race conditions, [`patpat-review`](skills/patpat-review/SKILL.md) for skeptical review, or [`patpat-unslop`](skills/patpat-unslop/SKILL.md) to strip filler from docs and diffs.
+- **Isolate parallel writes:** Concurrent writers require separate Git worktrees or host-enforced sandboxes. Disjoint file paths in one shared workspace are not isolation; when isolation is unavailable, keep read-only investigation parallel if needed and run writes serially.
+
+## Using Patpat on Antigravity
+
+Where your **Google Antigravity** setup exposes slash commands, browser tools, and multi-agent swarms, Patpat pairs with them cleanly. Use `/patpat` when exposed as a slash command, or invoke it from the host UI (see [Antigravity invocation](docs/guide/installing.md#invocation)).
+
+### The `/swarm + /patpat` combo
+
+A swarm without guardrails is five fast chefs sharing one cutting board. Pairing `/swarm` with `/patpat` gives each writer an isolated station, a proof contract, and an independent critic before anything ships:
+
+- **`/swarm`** splits work across parallel specialists (UI, backend, security, verification), which otherwise risks colliding edits and unverified "looks done" summaries.
+- **`/patpat`** adds structural discipline: Phase 1 read-only inspection before edits, isolated worktrees or host sandboxes (falling back to serial writes if isolation is missing), a 5-field proof contract per slice, and an independent verification gate before reporting done.
+
+| Task shape | Recommended setup | Why |
+| --- | --- | --- |
+| **Multi-layer or high-stakes work** (UI + Backend + Security + Data, large refactors, live checks) | **`/swarm` + `/patpat`** (with isolated worktrees or sandboxes) | Parallel specialists divide independent slices while Patpat's proof contract and independent review gate the integrated result. |
+| **Small fixes, single-file edits, or quick Q&A** | **Single-agent `/patpat`** (or `patpat-inspect`) | Swarm multiplies quota by worker count; staying single-agent is simpler, cheaper, and keeps context tight. |
+
+### Common Antigravity pairings
+
+Use these host-provided workflows where available in your Antigravity build:
+
+| Pairing | Best used for |
+| --- | --- |
+| `/swarm` + `/patpat` | Cross-stack changes and multi-perspective audits (design, security, verification) with isolated worktrees or sandboxes. |
+| `/plan` + `/patpat` | Settling ambiguous requirements, schemas, or tradeoffs before editing a single file. |
+| `/browser` + `/patpat` | Enforcing **Proof over Proxy**: checking live pixels, layout, contrast, and interactive flows in a real browser instead of relying on unit tests alone. |
+| `/goal` + `/patpat` | Long-running or overnight multi-phase work (`patpat-run`) that checkpoints progress and stops at merge-ready. |
+| `/compact` + `/patpat` | Keeping long sessions lean; re-invoke `/patpat` after compaction or a restart if needed. |
+
+### Practical Antigravity tips
+
+- **Brief swarm workers leanly:** Let the coordinator hold the overall protocol and give each worker only its owned slice, invariants, and 5-field proof contract instead of having every worker reload every reference file.
+- **Use the bundled `patpat-reviewer` subagent:** Antigravity loads Patpat's read-only reviewer adapter ([`agents/patpat-reviewer.md`](agents/patpat-reviewer.md)) so you can challenge diffs and proof receipts in a fresh context without mutating the workspace.
+- **Know the hook boundary:** Sticky-mode hooks are currently `UNSUPPORTED` on Antigravity (see [sticky-mode hook status](docs/guide/capability-map.md#sticky-mode-hook-status)), so re-invoke `/patpat` when you start a fresh session.
+
+### Starter prompts for Antigravity
+
+```text
+/patpat inspect how auth tokens are refreshed and list every bypass path. local only
+/browser /patpat fix the mobile checkout overflow and verify the rendered layout at 390px and 1280px. local only
+/swarm /patpat run Phase 1 read-only audit across UI, API contracts, and security, isolate writable slices in separate worktrees or sandboxes, implement fixes, and prove every change on the live app. local only
+```
 
 ## How it works
 
