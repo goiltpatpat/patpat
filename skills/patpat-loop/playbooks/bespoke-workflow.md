@@ -1,6 +1,6 @@
 # Bespoke Workflow Playbook
 
-Read [repository truth](../principles/repository-truth.md), [sequence verifiable units](../principles/sequence-verifiable-units.md), and [preserve safety](../principles/preserve-safety.md).
+Read repository truth, [sequence verifiable units](../principles/sequence-verifiable-units.md), and preserve safety.
 
 1. Define one falsifiable completion predicate and the authoritative surfaces that prove it.
 2. Inspect the contracts, dependencies, current state, and irreversible boundaries.

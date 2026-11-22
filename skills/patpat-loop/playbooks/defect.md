@@ -1,6 +1,6 @@
 # Defect Playbook
 
-Read [repository truth](../principles/repository-truth.md), [proof over proxy](../principles/proof-over-proxy.md), [smallest safe change](../principles/smallest-safe-change.md), and [preserve safety](../principles/preserve-safety.md).
+Read repository truth, [proof over proxy](../principles/proof-over-proxy.md), smallest safe change, and preserve safety.
 
 1. Reproduce the symptom on the same surface and capture the baseline when safe and practical. Otherwise trace the contract or code path, or use an isolated non-harmful surrogate, and record the missing runtime proof.
 2. Trace the failing path until evidence identifies the earliest incorrect state.

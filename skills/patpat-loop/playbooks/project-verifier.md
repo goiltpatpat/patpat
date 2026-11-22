@@ -1,6 +1,6 @@
 # Project Verifier Playbook
 
-Read [proof over proxy](../principles/proof-over-proxy.md), [preserve safety](../principles/preserve-safety.md), and [smallest safe change](../principles/smallest-safe-change.md).
+Read [proof over proxy](../principles/proof-over-proxy.md), preserve safety, and smallest safe change.
 
 1. Identify the product claim, authoritative surface, launch path, readiness signal, and cleanup boundary.
 2. Inspect existing tests, scripts, logs, browser or API tools, and project-local skills before adding anything.

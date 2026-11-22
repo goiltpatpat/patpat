@@ -1,6 +1,6 @@
 # Learning Playbook
 
-Read [encode lessons](../principles/encode-lessons.md), [repository truth](../principles/repository-truth.md), and [smallest safe change](../principles/smallest-safe-change.md).
+Read encode lessons, repository truth, and smallest safe change.
 
 1. Cite the active-task evidence that exposed the failure mode.
 2. Confirm it is recurring and actionable; skip one-offs.

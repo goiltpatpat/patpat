@@ -1,6 +1,6 @@
 # Session Takeover Playbook
 
-Read [repository truth](../principles/repository-truth.md), [boundary discipline](../principles/boundary-discipline.md), and [sequence verifiable units](../principles/sequence-verifiable-units.md).
+Read repository truth, boundary discipline, and [sequence verifiable units](../principles/sequence-verifiable-units.md).
 
 Use this playbook only when inheriting work that has no valid Patpat run store. When a valid run store or clean working tree exists, use [session pickup](session-pickup.md) instead.
 

@@ -10,7 +10,7 @@ metadata:
 
 Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
-Read the [worker contract](references/worker-contract.md) first, then read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full before acting. Do not load the router. Read [smallest safe change](../patpat-loop/principles/smallest-safe-change.md), [minimize reader load](../patpat-loop/principles/minimize-reader-load.md), and [subtract before you add](../patpat-loop/principles/subtract-before-you-add.md). Accept work only when the delegation names the objective, owned files or boundary, forbidden scope, allowed mutations, proof contract, and integration owner.
+Read the [worker contract](references/worker-contract.md) first, then read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full before acting. Do not load the router. Read smallest safe change, minimize reader load, and subtract before you add. Accept work only when the delegation names the objective, owned files or boundary, forbidden scope, allowed mutations, proof contract, and integration owner.
 
 Do not spawn another worker. Do not touch shared or out-of-scope files. Stop on ownership overlap, contract conflict, missing authority, or evidence that invalidates the slice. Never commit, push, publish, merge, deploy, or communicate externally.
 

@@ -1,6 +1,6 @@
 # Autopilot Playbook
 
-Read [earned parallelism](../principles/earned-parallelism.md), [sequence verifiable units](../principles/sequence-verifiable-units.md), [preserve safety](../principles/preserve-safety.md), and the [operating protocol](../references/operating-protocol.md). Use [`patpat-run`](../../patpat-run/SKILL.md) for the durable graph.
+Read [earned parallelism](../principles/earned-parallelism.md), [sequence verifiable units](../principles/sequence-verifiable-units.md), preserve safety, and the [operating protocol](../references/operating-protocol.md). Use [`patpat-run`](../../patpat-run/SKILL.md) for the durable graph.
 
 Mode: **Queue** (independent items, one owner each, root verifies every merge-ready head) or **Stack** (linear chain; operator lands unless request names merge).
 

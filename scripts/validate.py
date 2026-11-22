@@ -255,27 +255,12 @@ PINNED_BOUNDARY_SENTENCES = (
         "test-behavior contract",
     ),
     (
-        Path("skills/patpat-loop/references/operating-protocol.md"),
-        ("Retrigger an infrastructure flake at most once, only within existing delivery authority for that pull request, and never by pushing an empty commit or rerunning a job that deploys, publishes, or writes externally. A repeated failure earns no further retrigger; inspect its job logs and reclassify.",),
-        "CI flake classification contract",
-    ),
-    (
-        Path("skills/patpat-loop/playbooks/authorized-delivery.md"),
-        ("Retrigger an infrastructure flake at most once, only within existing delivery authority for that pull request, and never by pushing an empty commit or rerunning a job that deploys, publishes, or writes externally. A repeated failure earns no further retrigger; inspect its job logs and reclassify.",),
-        "CI flake classification contract",
-    ),
-    (
-        Path("skills/patpat-loop/playbooks/default-delivery.md"),
+        Path("skills/patpat-loop/references/git-and-ship.md"),
         ("Retrigger an infrastructure flake at most once, only within existing delivery authority for that pull request, and never by pushing an empty commit or rerunning a job that deploys, publishes, or writes externally. A repeated failure earns no further retrigger; inspect its job logs and reclassify.",),
         "CI flake classification contract",
     ),
     (
         Path("skills/patpat-ship/SKILL.md"),
-        ("Retrigger an infrastructure flake at most once, only within existing delivery authority for that pull request, and never by pushing an empty commit or rerunning a job that deploys, publishes, or writes externally. A repeated failure earns no further retrigger; inspect its job logs and reclassify.",),
-        "CI flake classification contract",
-    ),
-    (
-        Path("skills/patpat-loop/playbooks/pr-handoff.md"),
         ("Retrigger an infrastructure flake at most once, only within existing delivery authority for that pull request, and never by pushing an empty commit or rerunning a job that deploys, publishes, or writes externally. A repeated failure earns no further retrigger; inspect its job logs and reclassify.",),
         "CI flake classification contract",
     ),

@@ -1,6 +1,6 @@
 # Benchmark Checklist
 
-Use this checklist whenever producing or reporting a performance number: before-and-after PR comparisons, regression diagnoses, metric hillclimbs, or dependency choices. Read [explain the number](../principles/explain-the-number.md) for the foundational principle. Answer each question below with empirical evidence from a run, not from code inspection alone.
+Use this checklist whenever producing or reporting a performance number: before-and-after PR comparisons, regression diagnoses, metric hillclimbs, or dependency choices. Read explain the number for the foundational principle. Answer each question below with empirical evidence from a run, not from code inspection alone.
 
 ## Before running
 

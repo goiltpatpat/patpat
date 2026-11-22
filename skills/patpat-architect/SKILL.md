@@ -12,7 +12,7 @@ Before following this skill, apply the [skill state and mutation gate](../patpat
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 
-Read [repository truth](../patpat-loop/principles/repository-truth.md), [smallest safe change](../patpat-loop/principles/smallest-safe-change.md), [preserve safety](../patpat-loop/principles/preserve-safety.md), [subtract before you add](../patpat-loop/principles/subtract-before-you-add.md), [attack the premise](../patpat-loop/principles/attack-the-premise.md), and [redesign from first principles](../patpat-loop/principles/redesign-from-first-principles.md). Apply the [architecture change playbook](../patpat-loop/playbooks/architecture-change.md).
+Read repository truth, smallest safe change, preserve safety, subtract before you add, attack the premise, and redesign from first principles. Apply the [architecture change playbook](../patpat-loop/playbooks/architecture-change.md).
 
 ## Core Selection Flow
 

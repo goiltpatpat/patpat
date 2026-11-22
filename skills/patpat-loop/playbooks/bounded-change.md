@@ -1,6 +1,6 @@
 # Bounded Change Playbook
 
-Read [repository truth](../principles/repository-truth.md), [shape before logic](../principles/shape-before-logic.md), [smallest safe change](../principles/smallest-safe-change.md), [preserve safety](../principles/preserve-safety.md), and [proof over proxy](../principles/proof-over-proxy.md).
+Read repository truth, shape before logic, smallest safe change, preserve safety, and [proof over proxy](../principles/proof-over-proxy.md).
 
 1. Name the behavior, affected contract, and proof contract.
 2. Inspect repository rules, current state, nearby implementation, callers, and focused tests.

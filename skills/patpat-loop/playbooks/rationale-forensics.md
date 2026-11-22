@@ -1,6 +1,6 @@
 # Rationale Forensics Playbook
 
-Read [repository truth](../principles/repository-truth.md) and [boundary discipline](../principles/boundary-discipline.md).
+Read repository truth and boundary discipline.
 
 Use this playbook when the question is why code or a contract reached its current shape. Questions about current behavior or placement stay on [investigation](investigation.md). Stay read-only. Do not mutate or open a pull request. Do not call unrelated external connectors to fill an evidence list.
 

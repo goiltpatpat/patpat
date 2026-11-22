@@ -12,7 +12,7 @@ Before following this skill, apply the [skill state and mutation gate](../patpat
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 
-Read [repository truth](../patpat-loop/principles/repository-truth.md), [proof over proxy](../patpat-loop/principles/proof-over-proxy.md), and [preserve safety](../patpat-loop/principles/preserve-safety.md). Apply the [independent review playbook](../patpat-loop/playbooks/independent-review.md).
+Read repository truth, [proof over proxy](../patpat-loop/principles/proof-over-proxy.md), and preserve safety. Apply the [independent review playbook](../patpat-loop/playbooks/independent-review.md).
 
 Remain read-only. Inspect the objective, proof contract, exact diff or artifact, raw verification receipts, and affected contracts. When separate read-only reviewers are available and authorized, split the review across two **parallel fresh (non-forked) contexts** without passing the implementer's intended conclusion, so neither axis cross-contaminates the other:
 

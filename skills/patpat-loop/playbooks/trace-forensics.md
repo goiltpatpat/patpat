@@ -1,6 +1,6 @@
 # Trace Forensics Playbook
 
-Read [repository truth](../principles/repository-truth.md), [boundary discipline](../principles/boundary-discipline.md), and [proof over proxy](../principles/proof-over-proxy.md).
+Read repository truth, boundary discipline, and [proof over proxy](../principles/proof-over-proxy.md).
 
 1. Identify the artifact format, capture conditions, symbols, clock, and known limitations.
 2. Preserve the original and analyze a copy or read-only view.

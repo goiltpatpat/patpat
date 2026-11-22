@@ -12,7 +12,7 @@ Before following this skill, apply the [skill state and mutation gate](../patpat
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 
-Read [repository truth](../patpat-loop/principles/repository-truth.md), [smallest safe change](../patpat-loop/principles/smallest-safe-change.md), and [encode lessons](../patpat-loop/principles/encode-lessons.md). Apply the [skill change playbook](../patpat-loop/playbooks/skill-change.md).
+Read repository truth, smallest safe change, and encode lessons. Apply the [skill change playbook](../patpat-loop/playbooks/skill-change.md).
 
 Inspect existing skills, host constraints, and repository conventions before editing.
 

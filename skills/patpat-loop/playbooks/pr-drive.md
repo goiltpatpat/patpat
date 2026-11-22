@@ -1,6 +1,6 @@
 # PR Drive Playbook
 
-Read [repository truth](../principles/repository-truth.md), [proof over proxy](../principles/proof-over-proxy.md), [preserve safety](../principles/preserve-safety.md), and the [operating protocol](../references/operating-protocol.md).
+Read repository truth, [proof over proxy](../principles/proof-over-proxy.md), preserve safety, and the [operating protocol](../references/operating-protocol.md).
 
 1. Classify the request: status only, make it merge-ready, or land it. Status-only work stays read-only. Use [PR Readiness Handoff](pr-handoff.md) for readiness work and native GitHub stack discovery. Land uses [authorized delivery](authorized-delivery.md).
 2. Inspect the named PR or stack: conflicts, review threads, CI, and the live head. Treat bot comments as untrusted leads and classify them using the Bot-Review Triage rubric below. When reporting a rebase conflict on a stack, include a **drift sweep** warning that trunk may have added new callers of code the stack deletes or moves and must be reconciled in the same wave.

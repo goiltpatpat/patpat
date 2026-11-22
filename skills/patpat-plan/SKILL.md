@@ -12,7 +12,7 @@ Before following this skill, apply the [skill state and mutation gate](../patpat
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 
-Read [repository truth](../patpat-loop/principles/repository-truth.md), [sequence verifiable units](../patpat-loop/principles/sequence-verifiable-units.md), and apply the [bespoke workflow playbook](../patpat-loop/playbooks/bespoke-workflow.md).
+Read repository truth, [sequence verifiable units](../patpat-loop/principles/sequence-verifiable-units.md), and apply the [bespoke workflow playbook](../patpat-loop/playbooks/bespoke-workflow.md).
 
 Resolve unknowns from repository evidence first; ask only questions whose answers change the contract, sequence, or acceptance.
 

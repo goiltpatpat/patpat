@@ -1,6 +1,6 @@
 # Skill Change Playbook
 
-Read [repository truth](../principles/repository-truth.md), [smallest safe change](../principles/smallest-safe-change.md), and [encode lessons](../principles/encode-lessons.md).
+Read repository truth, smallest safe change, and encode lessons.
 
 1. Name the skill's single responsibility and the prompts it must accept and reject.
 2. Inspect nearby skills, host constraints, validation scripts, and repository conventions.

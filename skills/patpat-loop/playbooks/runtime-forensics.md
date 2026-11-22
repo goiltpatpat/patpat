@@ -1,6 +1,6 @@
 # Runtime Forensics Playbook
 
-Read [repository truth](../principles/repository-truth.md), [boundary discipline](../principles/boundary-discipline.md), and [proof over proxy](../principles/proof-over-proxy.md).
+Read repository truth, boundary discipline, and [proof over proxy](../principles/proof-over-proxy.md).
 
 1. Define the live symptom, time window, workload, and expected idle or steady state.
 2. Capture passive runtime evidence with bounded overhead and preserve raw artifacts.

@@ -12,7 +12,7 @@ Before following this skill, apply the [skill state and mutation gate](../patpat
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 
-Read [repository truth](../patpat-loop/principles/repository-truth.md), [boundary discipline](../patpat-loop/principles/boundary-discipline.md), and [proof over proxy](../patpat-loop/principles/proof-over-proxy.md). Apply the [blast-radius playbook](../patpat-loop/playbooks/blast-radius.md).
+Read repository truth, boundary discipline, and [proof over proxy](../patpat-loop/principles/proof-over-proxy.md). Apply the [blast-radius playbook](../patpat-loop/playbooks/blast-radius.md).
 
 The job is the one-safety-fact the change depends on, not a caller list. Grep callers is not the deliverable. Climb the certainty ladder for that fact and say where it stopped: (1) said so (worthless alone) (2) pointed at `file:line` (3) walked the failure and it does not reach (4) ran real code (a script or test that calls the shipped function and fails loud if wrong) (5) reproduced in the running app. Any fact that does not reach ladder step 4 is `unproven`. Do not write it as settled.
 

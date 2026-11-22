@@ -1,6 +1,6 @@
 # Independent Review Playbook
 
-Read [repository truth](../principles/repository-truth.md), [proof over proxy](../principles/proof-over-proxy.md), and [preserve safety](../principles/preserve-safety.md).
+Read repository truth, [proof over proxy](../principles/proof-over-proxy.md), and preserve safety.
 
 ## Review steps
 

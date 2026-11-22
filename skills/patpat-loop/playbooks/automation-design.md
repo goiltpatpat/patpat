@@ -1,6 +1,6 @@
 # Automation Design Playbook
 
-Read [boundary discipline](../principles/boundary-discipline.md), [idempotent effects](../principles/idempotent-effects.md), and [preserve safety](../principles/preserve-safety.md).
+Read boundary discipline, idempotent effects, and preserve safety.
 
 1. Name the provider, immutable trigger identity, trusted coordinator, and exact allowed writes.
 2. Define external secret sources and keep credentials out of workers, prompts, logs, and repository files.

@@ -1,6 +1,6 @@
 # Investigation Playbook
 
-Read [repository truth](../principles/repository-truth.md), [proof over proxy](../principles/proof-over-proxy.md), and [earned parallelism](../principles/earned-parallelism.md).
+Read repository truth, [proof over proxy](../principles/proof-over-proxy.md), and [earned parallelism](../principles/earned-parallelism.md).
 
 Use this playbook for how-does-X-work, placement, ownership, layering, and "are we sure" questions. It is the how-equivalent. There is no `/how` slash skill. Why-shaped historical questions ("why was this shaped this way?") stay on [rationale-forensics](rationale-forensics.md). Stay read-only. Do not mutate. Do not open a PR from inspect.
 

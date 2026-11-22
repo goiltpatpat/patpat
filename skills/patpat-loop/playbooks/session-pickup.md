@@ -1,6 +1,6 @@
 # Session Pickup Playbook
 
-Read [repository truth](../principles/repository-truth.md), [guard the context window](../principles/guard-the-context-window.md), and [smallest safe change](../principles/smallest-safe-change.md).
+Read repository truth, guard the context window, and smallest safe change.
 
 Use this playbook when picking up or continuing in-flight work in an active workspace with minimal latency and zero friction.
 

@@ -1,6 +1,6 @@
 # Catch-Up Playbook
 
-Read [repository truth](../principles/repository-truth.md) and [guard the context window](../principles/guard-the-context-window.md).
+Read repository truth and guard the context window.
 
 Use this playbook when the user asks to be caught up on what happened since their last message, or on where the work stands. [Session pickup](session-pickup.md) resynchronizes the agent; this playbook briefs the human. Stay read-only: do not change code, start jobs, or post anything.
 

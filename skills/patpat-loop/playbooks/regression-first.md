@@ -1,6 +1,6 @@
 # Regression-First Playbook
 
-Read [fix root causes](../principles/fix-root-causes.md), [proof over proxy](../principles/proof-over-proxy.md), and [smallest safe change](../principles/smallest-safe-change.md).
+Read fix root causes, [proof over proxy](../principles/proof-over-proxy.md), and smallest safe change.
 
 Apply this playbook when the user requests test-first work or a cheap deterministic regression target already exists.
 
