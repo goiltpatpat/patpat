@@ -1,6 +1,6 @@
 # Arena Playbook
 
-Read [earned parallelism](../principles/earned-parallelism.md), [smallest safe change](../principles/smallest-safe-change.md), [shape before logic](../principles/shape-before-logic.md), [proof over proxy](../principles/proof-over-proxy.md), and the [operating protocol](../references/operating-protocol.md).
+Read [earned parallelism](../principles/earned-parallelism.md), smallest safe change, shape before logic, [proof over proxy](../principles/proof-over-proxy.md), and the [operating protocol](../references/operating-protocol.md).
 
 1. Name the artifact and a rubric of 3-6 gradeable criteria. Run `patpat-run/scripts/team_shape.py`; its explicit budget and observed capacity replace a preset candidate count. Candidates receive the same brief. They do not receive the rubric.
 2. If any [earned parallelism](../principles/earned-parallelism.md) writable gate fails, run one serial attempt. Do not fake parallel coverage.

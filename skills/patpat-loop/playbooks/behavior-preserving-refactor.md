@@ -1,6 +1,6 @@
 # Behavior-Preserving Refactor Playbook
 
-Read [repository truth](../principles/repository-truth.md), [shape before logic](../principles/shape-before-logic.md), [sequence verifiable units](../principles/sequence-verifiable-units.md), and [smallest safe change](../principles/smallest-safe-change.md).
+Read repository truth, shape before logic, [sequence verifiable units](../principles/sequence-verifiable-units.md), and smallest safe change.
 
 1. Name the structure to change and the behavior that must remain invariant.
 2. Capture characterization, contract, or equivalence evidence and record the baseline executed test or assertion count before editing.

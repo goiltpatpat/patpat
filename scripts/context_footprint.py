@@ -17,9 +17,40 @@ from pathlib import Path
 
 LINK = re.compile(r"\]\(([^)\s#]+\.md)(?:#[^)]*)?\)")
 BYTES_PER_TOKEN = 4
-# Baseline ceiling over current max skill closure (~33.3k tokens for patpat-loop)
-# with modest headroom for small protocol updates while catching bloat regressions.
-DEFAULT_MAX_TOKENS = 35000
+# Tiered depth-1 closure token ceilings (~tokens = closure bytes // 4):
+# - orchestrators (patpat-loop, patpat-run): <= 20,000 ~tokens
+# - domain-contract specialists (ship, diagram, statechart, formal-verify, game-builder): <= 16,000 ~tokens
+# - leaf skills (all other skills): <= 10,000 ~tokens
+ORCHESTRATOR_SKILLS = frozenset({"patpat-loop", "patpat-run"})
+HEAVY_SPECIALIST_SKILLS = frozenset(
+    {
+        "patpat-formal-verify",
+        "patpat-game-builder",
+        "patpat-repository-diagram",
+        "patpat-ship",
+        "patpat-statechart",
+    }
+)
+ORCHESTRATOR_MAX_TOKENS = 20000
+HEAVY_SPECIALIST_MAX_TOKENS = 16000
+LEAF_MAX_TOKENS = 10000
+DEFAULT_MAX_TOKENS = ORCHESTRATOR_MAX_TOKENS
+
+
+def skill_name_from_entry(entry: str) -> str:
+    parts = Path(entry).parts
+    if len(parts) >= 2 and parts[-1] == "SKILL.md":
+        return parts[-2]
+    return Path(entry).stem
+
+
+def tier_max_tokens(entry: str) -> tuple[str, int]:
+    name = skill_name_from_entry(entry)
+    if name in ORCHESTRATOR_SKILLS:
+        return ("orchestrator", ORCHESTRATOR_MAX_TOKENS)
+    if name in HEAVY_SPECIALIST_SKILLS:
+        return ("specialist", HEAVY_SPECIALIST_MAX_TOKENS)
+    return ("leaf", LEAF_MAX_TOKENS)
 
 
 def linked_markdown(path: Path) -> list[Path]:
@@ -90,8 +121,9 @@ def check_budget(
     *,
     max_bytes: int | None = None,
     max_tokens: int | None = None,
+    use_tiers: bool = False,
 ) -> list[str]:
-    """Return budget violation lines for rows exceeding max_bytes or max_tokens."""
+    """Return budget violation lines for rows exceeding byte, flat token, or tiered token limits."""
     violations: list[str] = []
     if max_bytes is not None:
         for r in rows:
@@ -102,6 +134,13 @@ def check_budget(
             if r["approx_tokens"] > max_tokens:
                 violations.append(
                     f"over token budget: {r['entry']} {r['approx_tokens']} > {max_tokens} ~tokens"
+                )
+    elif use_tiers:
+        for r in rows:
+            tier, limit = tier_max_tokens(r["entry"])
+            if r["approx_tokens"] > limit:
+                violations.append(
+                    f"over {tier} token budget: {r['entry']} {r['approx_tokens']} > {limit} ~tokens"
                 )
     return violations
 
@@ -144,11 +183,48 @@ def self_test() -> int:
         )
         check(
             main(["--root", str(root), "--check-budget"]) == 0,
-            "--check-budget passes on fixture under default token ceiling",
+            "--check-budget passes on fixture under tiered token ceiling",
         )
         check(
             main(["--root", str(root), "--max-tokens", "1"]) == 1,
             "--max-tokens exits 1 when closure exceeds ceiling",
+        )
+        # Tiered budget checks: orchestrator <= 20k, specialist <= 16k, leaf <= 10k
+        check(
+            tier_max_tokens("skills/patpat-loop/SKILL.md") == ("orchestrator", ORCHESTRATOR_MAX_TOKENS),
+            "patpat-loop maps to orchestrator tier",
+        )
+        check(
+            tier_max_tokens("skills/patpat-ship/SKILL.md") == ("specialist", HEAVY_SPECIALIST_MAX_TOKENS),
+            "patpat-ship maps to specialist tier",
+        )
+        check(
+            tier_max_tokens("skills/demo/SKILL.md") == ("leaf", LEAF_MAX_TOKENS),
+            "unlisted skill maps to leaf tier",
+        )
+        synthetic = [
+            {"entry": "skills/patpat-loop/SKILL.md", "bytes": 0, "approx_tokens": ORCHESTRATOR_MAX_TOKENS},
+            {"entry": "skills/patpat-ship/SKILL.md", "bytes": 0, "approx_tokens": HEAVY_SPECIALIST_MAX_TOKENS},
+            {"entry": "skills/demo/SKILL.md", "bytes": 0, "approx_tokens": LEAF_MAX_TOKENS},
+        ]
+        check(check_budget(synthetic, use_tiers=True) == [], "exact tier ceilings pass")
+        over_leaf = [{"entry": "skills/demo/SKILL.md", "bytes": 0, "approx_tokens": LEAF_MAX_TOKENS + 1}]
+        leaf_violations = check_budget(over_leaf, use_tiers=True)
+        check(
+            len(leaf_violations) == 1 and "over leaf token budget:" in leaf_violations[0],
+            "leaf skill exceeding LEAF_MAX_TOKENS is flagged even when under ORCHESTRATOR_MAX_TOKENS",
+        )
+        over_spec = [{"entry": "skills/patpat-ship/SKILL.md", "bytes": 0, "approx_tokens": HEAVY_SPECIALIST_MAX_TOKENS + 1}]
+        spec_violations = check_budget(over_spec, use_tiers=True)
+        check(
+            len(spec_violations) == 1 and "over specialist token budget:" in spec_violations[0],
+            "specialist skill exceeding HEAVY_SPECIALIST_MAX_TOKENS is flagged",
+        )
+        over_orch = [{"entry": "skills/patpat-loop/SKILL.md", "bytes": 0, "approx_tokens": ORCHESTRATOR_MAX_TOKENS + 1}]
+        orch_violations = check_budget(over_orch, use_tiers=True)
+        check(
+            len(orch_violations) == 1 and "over orchestrator token budget:" in orch_violations[0],
+            "orchestrator skill exceeding ORCHESTRATOR_MAX_TOKENS is flagged",
         )
     print("context_footprint self-test: ok")
     return 0
@@ -169,7 +245,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--check-budget",
         action="store_true",
-        help=f"enforce the CI token-budget ceiling (default: {DEFAULT_MAX_TOKENS} ~tokens unless --max-tokens is set)",
+        help=(
+            f"enforce tiered CI token-budget ceilings "
+            f"(orchestrator <= {ORCHESTRATOR_MAX_TOKENS}, specialist <= {HEAVY_SPECIALIST_MAX_TOKENS}, "
+            f"leaf <= {LEAF_MAX_TOKENS} ~tokens unless --max-tokens is set)"
+        ),
     )
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args(argv)
@@ -192,11 +272,12 @@ def main(argv: list[str] | None = None) -> int:
         rows = report(root, args.depth)
 
     print(json.dumps(rows, indent=2) if args.json else render(rows))
-    effective_max_tokens = args.max_tokens
-    if args.check_budget and effective_max_tokens is None:
-        effective_max_tokens = DEFAULT_MAX_TOKENS
-
-    violations = check_budget(rows, max_bytes=args.max_bytes, max_tokens=effective_max_tokens)
+    violations = check_budget(
+        rows,
+        max_bytes=args.max_bytes,
+        max_tokens=args.max_tokens,
+        use_tiers=args.check_budget and args.max_tokens is None,
+    )
     for line in violations:
         print(line, file=sys.stderr)
     return 1 if violations else 0

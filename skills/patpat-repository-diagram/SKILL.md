@@ -28,7 +28,7 @@ Create diagrams only; route prose explanations to [patpat-inspect](../patpat-ins
 
 Choose the smallest fitting view and state why; ask only if the choice changes the story. Default destination: `docs/diagrams/<slug>` (or repo/request convention). Overwrite an existing artifact only on an explicit replacement request.
 
-For repository-backed diagrams, follow [repository truth](../patpat-loop/principles/repository-truth.md), [investigation playbook](../patpat-loop/playbooks/investigation.md), and [how-report contract](../patpat-inspect/references/how-report.md); read [operating protocol](../patpat-loop/references/operating-protocol.md) in full for security, cross-cutting, or material architecture questions without loading the router.
+For repository-backed diagrams, follow repository truth, [investigation playbook](../patpat-loop/playbooks/investigation.md), and [how-report contract](../patpat-inspect/references/how-report.md); read [operating protocol](../patpat-loop/references/operating-protocol.md) in full for security, cross-cutting, or material architecture questions without loading the router.
 
 ## Evidence and authoring
 

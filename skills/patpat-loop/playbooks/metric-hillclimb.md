@@ -1,6 +1,6 @@
 # Metric Hillclimb Playbook
 
-Read [proof over proxy](../principles/proof-over-proxy.md), [sequence verifiable units](../principles/sequence-verifiable-units.md), and [smallest safe change](../principles/smallest-safe-change.md).
+Read [proof over proxy](../principles/proof-over-proxy.md), [sequence verifiable units](../principles/sequence-verifiable-units.md), and smallest safe change.
 
 1. Freeze the metric definition, representative workload, environment, target, stop predicate, and cleanup before changing code.
 2. Measure enough baseline samples to identify variance and the minimum meaningful improvement.

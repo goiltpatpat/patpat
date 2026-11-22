@@ -12,7 +12,7 @@ Before following this skill, apply the [skill state and mutation gate](../patpat
 
 For clear, bounded, reversible local work without delivery intent, use this skill and its relevant references; when routed from `patpat-loop`, its inline gate and principle index satisfy the start gate without loading the full operating protocol or rereading unchanged principle files. Otherwise read the [operating protocol](../patpat-loop/references/operating-protocol.md) and [execution graph](../patpat-loop/references/execution-graph.md) in full before acting. Escalate on uncertainty, security, auth, billing, secrets, architecture, cross-cutting work, or delivery intent. Do not load the router or reread unchanged instructions already loaded in this session.
 
-Read [smallest safe change](../patpat-loop/principles/smallest-safe-change.md), [preserve safety](../patpat-loop/principles/preserve-safety.md), and [proof over proxy](../patpat-loop/principles/proof-over-proxy.md). Apply the [bounded change playbook](../patpat-loop/playbooks/bounded-change.md).
+Read smallest safe change, preserve safety, and [proof over proxy](../patpat-loop/principles/proof-over-proxy.md). Apply the [bounded change playbook](../patpat-loop/playbooks/bounded-change.md).
 
 For a behavior-preserving rename, move, extraction, inline, or deduplication, apply the [behavior-preserving refactor playbook](../patpat-loop/playbooks/behavior-preserving-refactor.md); switch wide mechanical refactors (high call-site blast radius) to **expand → batched green migrate → contract**. When the user requests test-first work or a cheap deterministic regression target exists, apply [regression first](../patpat-loop/playbooks/regression-first.md).
 

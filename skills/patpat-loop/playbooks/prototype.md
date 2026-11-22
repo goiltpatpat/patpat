@@ -1,6 +1,6 @@
 # Prototype Playbook
 
-Read [repository truth](../principles/repository-truth.md), [smallest safe change](../principles/smallest-safe-change.md), [proof over proxy](../principles/proof-over-proxy.md), and [attack the premise](../principles/attack-the-premise.md).
+Read repository truth, smallest safe change, [proof over proxy](../principles/proof-over-proxy.md), and attack the premise.
 
 ## Structured Spiking Protocol
 

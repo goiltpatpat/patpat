@@ -1,6 +1,6 @@
 # Worktree Cleanup Playbook
 
-Read [preserve safety](../principles/preserve-safety.md), [repository truth](../principles/repository-truth.md), and [encode lessons](../principles/encode-lessons.md).
+Read preserve safety, repository truth, and encode lessons.
 
 Use this playbook to prune merged or abandoned git worktrees and reclaim disk. Deletion is irreversible. This is the review. Simulator, DerivedData, and editor-cache deletion stay outside the core unless the live repo actually uses those surfaces.
 

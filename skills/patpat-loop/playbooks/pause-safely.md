@@ -1,6 +1,6 @@
 # Pause Safely Playbook
 
-Read [repository truth](../principles/repository-truth.md), [sequence verifiable units](../principles/sequence-verifiable-units.md), and [preserve safety](../principles/preserve-safety.md).
+Read repository truth, [sequence verifiable units](../principles/sequence-verifiable-units.md), and preserve safety.
 
 Use this playbook when the user asks to pause, go offline, restart the host, when context is about to compact, or when a diagnosed recovery requires scope or authority outside the approved task. Do not use it for "keep going", "going to bed, keep going", or "don't stop" unless the next safe action still crosses that boundary. Those requests otherwise continue through [multi-phase run](multi-phase-run.md). Resume is [session takeover](session-takeover.md) only when no valid Patpat run store exists; otherwise resume the named `patpat-run` node.
 

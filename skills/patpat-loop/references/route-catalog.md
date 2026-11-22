@@ -8,13 +8,15 @@ When one request needs outputs from multiple rows, keep `patpat-loop` as orchest
 
 | Intent | Workflow | Playbook |
 | --- | --- | --- |
+| Read-only question, audit, or diagnosis-only defect | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [Investigation](../playbooks/investigation.md) |
+| Defective behavior with fix requested | [`patpat-debug`](../../patpat-debug/SKILL.md) | [Defect](../playbooks/defect.md); [Regression first](../playbooks/regression-first.md) for cheap deterministic reproducers |
+| Bounded feature or localized edit | [`patpat-change`](../../patpat-change/SKILL.md) | [Bounded change](../playbooks/bounded-change.md) |
 | Map an unfamiliar workspace into a context graph | [`00-workspace-mapper`](../../00-workspace-mapper/SKILL.md) | Explicit request only; optional |
-| Design architecture changes or run an opportunity scan | [`patpat-architect`](../../patpat-architect/SKILL.md) | Direct |
+| Design architecture changes or run an opportunity scan | [`patpat-architect`](../../patpat-architect/SKILL.md) | [Architecture change](../playbooks/architecture-change.md) |
 | Explain why code reached its current shape | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [Rationale forensics](../playbooks/rationale-forensics.md) |
 | Build or extend a playable game | [`patpat-game-builder`](../../patpat-game-builder/SKILL.md) | [Build slice](../../patpat-game-builder/playbooks/build-playable-slice.md); [diagnose](../../patpat-game-builder/playbooks/diagnose-gameplay.md), [verify playthrough](../../patpat-game-builder/playbooks/verify-playthrough.md), [visual iteration](../../patpat-game-builder/playbooks/visual-iteration.md) |
 | Draw an interactive architecture or workflow visual | [`patpat-repository-diagram`](../../patpat-repository-diagram/SKILL.md) | Explicit request only; brief-only or repo-backed |
 | Analyze blast radius or downstream regressions | [`patpat-impact`](../../patpat-impact/SKILL.md) | [Blast radius](../playbooks/blast-radius.md) |
-| Fix a defect with a cheap deterministic reproducer | [`patpat-debug`](../../patpat-debug/SKILL.md) | [Regression first](../playbooks/regression-first.md) |
 | Fix a one-off latency, CPU, memory, or throughput regression | [`patpat-perf`](../../patpat-perf/SKILL.md) | [Performance](../playbooks/performance.md) |
 | Drive sustained improvement on one numeric metric | [`patpat-perf`](../../patpat-perf/SKILL.md) | [Metric hillclimb](../playbooks/metric-hillclimb.md) |
 | Diagnose a live leak, idle spin, or runtime glitch | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [Runtime forensics](../playbooks/runtime-forensics.md) |
@@ -26,7 +28,7 @@ When one request needs outputs from multiple rows, keep `patpat-loop` as orchest
 | Compete isolated attempts at the same brief | [`patpat-arena`](../../patpat-arena/SKILL.md) | [Arena](../playbooks/arena.md) |
 | Fan out parallel slices, races, or coverage | [`patpat-swarm`](../../patpat-swarm/SKILL.md) | [Swarm](../playbooks/swarm.md) |
 | Inspect PR or stack status/topology (read-only) | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [PR Drive](../playbooks/pr-drive.md); stack discovery in [PR Handoff](../playbooks/pr-handoff.md) |
-| Coordinate work across a PR queue or verified stack | [`patpat-run`](../../patpat-run/SKILL.md) | [Autopilot](../playbooks/autopilot.md) |
+| Durable multi-phase execution, PR stack, or overnight run | [`patpat-run`](../../patpat-run/SKILL.md) | [Multi-phase run](../playbooks/multi-phase-run.md); [Autopilot](../playbooks/autopilot.md) for PR queues |
 | Run a named issue-source triage and repro loop | [`patpat-automation`](../../patpat-automation/SKILL.md) | [Issue loop](../playbooks/issue-loop.md) |
 | Pause in-flight work or go offline | [`patpat-run`](../../patpat-run/SKILL.md) | [Pause safely](../playbooks/pause-safely.md) |
 | Resume in-flight work without a valid run store | [`patpat-run`](../../patpat-run/SKILL.md) | [Session takeover](../playbooks/session-takeover.md) |
@@ -35,7 +37,7 @@ When one request needs outputs from multiple rows, keep `patpat-loop` as orchest
 | Drive a PR to merge-ready status or resolve review threads | [`patpat-change`](../../patpat-change/SKILL.md) | [PR Readiness Handoff](../playbooks/pr-handoff.md) |
 | Prune merged or abandoned Git worktrees | Direct | [Worktree cleanup](../playbooks/worktree-cleanup.md) |
 | Design, harden, or audit CI/CD and release pipelines | [`patpat-ship`](../../patpat-ship/SKILL.md) | [CI/CD Pipeline Design](../../patpat-ship/references/cicd-design.md); explicit request or accepted gap suggestion only |
-| Commit or open a PR with delivery intent | [`patpat-ship`](../../patpat-ship/SKILL.md) | [Default delivery](../playbooks/default-delivery.md); without delivery intent, stop at `REPORT` |
+| Commit, PR update, merge, publish, or deploy | [`patpat-ship`](../../patpat-ship/SKILL.md) | [Default delivery](../playbooks/default-delivery.md); [Authorized delivery](../playbooks/authorized-delivery.md) for merge/publish/deploy |
 | Create or revise a reusable agent skill | [`patpat-skill`](../../patpat-skill/SKILL.md) | [Skill change](../playbooks/skill-change.md) |
 | Evaluate skill triggering and behavior | [`patpat-eval`](../../patpat-eval/SKILL.md) | [Behavioral evaluation](../playbooks/behavioral-eval.md) |
 | Create or maintain a project-local real-surface verifier | [`patpat-verifier`](../../patpat-verifier/SKILL.md) | [Project verifier](../playbooks/project-verifier.md) |
@@ -47,7 +49,7 @@ When one request needs outputs from multiple rows, keep `patpat-loop` as orchest
 | Sequence multi-phase work or multiple contracts | [`patpat-plan`](../../patpat-plan/SKILL.md) | [Bespoke workflow](../playbooks/bespoke-workflow.md) |
 | Install, update, remove, or validate Patpat on a host | [`patpat-setup`](../../patpat-setup/SKILL.md) | Direct |
 | Cut AI tropes and filler from docs, PRs, or diffs | [`patpat-unslop`](../../patpat-unslop/SKILL.md) | Direct |
-| Independent diff and evidence review (mandatory delivery gate) | [`patpat-review`](../../patpat-review/SKILL.md) | Direct |
+| Independent diff and evidence review (mandatory delivery gate) | [`patpat-review`](../../patpat-review/SKILL.md) | [Independent review](../playbooks/independent-review.md) |
 | Adversarial skeptical probe of logic, edge cases, and assumptions | [`patpat-interrogate`](../../patpat-interrogate/SKILL.md) | Direct (distinct from `patpat-review`) |
 
 Resolve overlaps by the earliest unsettled decision: architect settles the contract, plan sequences phases, impact assesses downstream risk without redesigning, and prototype settles an empirical fork.

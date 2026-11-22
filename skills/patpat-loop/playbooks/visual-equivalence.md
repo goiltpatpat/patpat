@@ -1,6 +1,6 @@
 # Visual Equivalence Playbook
 
-Read [proof over proxy](../principles/proof-over-proxy.md), [preserve safety](../principles/preserve-safety.md), and [boundary discipline](../principles/boundary-discipline.md).
+Read [proof over proxy](../principles/proof-over-proxy.md), preserve safety, and boundary discipline.
 
 1. Capture the immutable baseline before editing, including route, state, viewport, theme, data, fonts, motion state, and environment.
 2. Define allowed differences and the machine-readable comparison method. Require a pixel or image diff for a pixel-equivalence claim; use structural signals only for an explicitly structural-layout claim. Do not weaken the baseline, mask regions, or change thresholds after seeing the candidate.

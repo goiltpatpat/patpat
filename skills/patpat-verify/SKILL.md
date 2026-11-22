@@ -10,7 +10,7 @@ metadata:
 
 Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
-For a bounded local proof, use this skill and its references; read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full for uncertainty, security, auth, billing, secrets, architecture, cross-cutting work, or delivery intent without loading the router. Read [proof over proxy](../patpat-loop/principles/proof-over-proxy.md) and [preserve safety](../patpat-loop/principles/preserve-safety.md).
+For a bounded local proof, use this skill and its references; read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full for uncertainty, security, auth, billing, secrets, architecture, cross-cutting work, or delivery intent without loading the router. Read [proof over proxy](../patpat-loop/principles/proof-over-proxy.md) and preserve safety.
 
 ## The Iron Law of Verification
 

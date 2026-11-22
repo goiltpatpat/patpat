@@ -12,7 +12,7 @@ Before following this skill, apply the [skill state and mutation gate](../patpat
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) and [execution graph](../patpat-loop/references/execution-graph.md) in full. Do not load the router.
 
-Read [boundary discipline](../patpat-loop/principles/boundary-discipline.md), [idempotent effects](../patpat-loop/principles/idempotent-effects.md), and [preserve safety](../patpat-loop/principles/preserve-safety.md). Apply the [automation design playbook](../patpat-loop/playbooks/automation-design.md). For a named issue-source triage and reproduce loop, also apply the [issue loop playbook](../patpat-loop/playbooks/issue-loop.md). Do not copy a host automation pack or enable a scheduler.
+Read boundary discipline, idempotent effects, and preserve safety. Apply the [automation design playbook](../patpat-loop/playbooks/automation-design.md). For a named issue-source triage and reproduce loop, also apply the [issue loop playbook](../patpat-loop/playbooks/issue-loop.md). Do not copy a host automation pack or enable a scheduler.
 
 Require a concrete provider, immutable trigger identity, trusted coordinator, exact allowed writes, secret source outside the repository, idempotency key, dedupe behavior, immediate preflight, bounded retries and cost, safe test surface, verifier, and kill switch. Require compensation when reversal is possible; otherwise name the irreversible boundary and fail before it when state or authority is uncertain. Fail closed when any write-critical field is missing: return a configuration checklist and do not produce runnable or enabled automation.
 

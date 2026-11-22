@@ -12,7 +12,7 @@ Before following this skill, apply the [skill state and mutation gate](../patpat
 
 Work in the user's actual game project and conventions. For a new feature, guide the work from brief to runnable slice; for existing projects, load only the applicable playbooks. Verify requested rules and player-facing behavior on the target runtime when available; name any missing proof. Keep this entry point short: load the primary playbook and only the conditional workflows and matrix rows that apply.
 
-Read [gameplay contract](principles/gameplay-contract.md), [player feedback](principles/player-feedback.md), [smallest safe change](../patpat-loop/principles/smallest-safe-change.md), [preserve safety](../patpat-loop/principles/preserve-safety.md), and [proof over proxy](../patpat-loop/principles/proof-over-proxy.md). For architecture, security, persistence, cross-cutting, or delivery risk, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
+Read [gameplay contract](principles/gameplay-contract.md), [player feedback](principles/player-feedback.md), smallest safe change, preserve safety, and [proof over proxy](../patpat-loop/principles/proof-over-proxy.md). For architecture, security, persistence, cross-cutting, or delivery risk, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 
 ## Choose the workflow
 

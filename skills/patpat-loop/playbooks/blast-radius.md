@@ -1,6 +1,6 @@
 # Blast Radius Playbook
 
-Read [repository truth](../principles/repository-truth.md), [boundary discipline](../principles/boundary-discipline.md), and [proof over proxy](../principles/proof-over-proxy.md).
+Read repository truth, boundary discipline, and [proof over proxy](../principles/proof-over-proxy.md).
 
 The job is the one-safety-fact the change depends on, not a caller list. Grep callers is not the deliverable.
 

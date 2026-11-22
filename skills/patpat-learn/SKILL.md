@@ -12,7 +12,7 @@ Before following this skill, apply the [skill state and mutation gate](../patpat
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 
-Read [encode lessons](../patpat-loop/principles/encode-lessons.md), [repository truth](../patpat-loop/principles/repository-truth.md), and apply the [learning playbook](../patpat-loop/playbooks/learning.md).
+Read encode lessons, repository truth, and apply the [learning playbook](../patpat-loop/playbooks/learning.md).
 
 Use evidence from the active task: user corrections, failed verification, repeated retries, review findings, or verifier defects. Separate one-off facts from recurring failure modes. Encode only the latter.
 

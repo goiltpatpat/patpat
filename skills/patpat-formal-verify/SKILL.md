@@ -10,7 +10,7 @@ metadata:
 
 Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
-When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full without loading the router. Read [proof over proxy](../patpat-loop/principles/proof-over-proxy.md), [preserve safety](../patpat-loop/principles/preserve-safety.md), and [smallest safe change](../patpat-loop/principles/smallest-safe-change.md).
+When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full without loading the router. Read [proof over proxy](../patpat-loop/principles/proof-over-proxy.md), preserve safety, and smallest safe change.
 
 ## Choose the property and method
 

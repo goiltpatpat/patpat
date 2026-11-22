@@ -12,7 +12,7 @@ Before following this skill, apply the [skill state and mutation gate](../patpat
 
 When invoked directly, read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full. Do not load the router.
 
-Read [proof over proxy](../patpat-loop/principles/proof-over-proxy.md), [preserve safety](../patpat-loop/principles/preserve-safety.md), and apply the [project verifier playbook](../patpat-loop/playbooks/project-verifier.md).
+Read [proof over proxy](../patpat-loop/principles/proof-over-proxy.md), preserve safety, and apply the [project verifier playbook](../patpat-loop/playbooks/project-verifier.md).
 
 Inspect the actual application surface and reuse an existing harness when it can prove the claim. Otherwise create the smallest project-local verifier at `.agents/skills/verify-<app>/SKILL.md` with exact `Launch`, `Doctor`, `Exercise`, `Evidence`, and `Cleanup` procedures. Seed `features/README.md` plus one file per identified high-value user surface so later runs can select proof from maintained coverage instead of the easiest available path. Do not invent features to reach a quota.
 
