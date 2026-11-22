@@ -856,6 +856,15 @@ def verification_verdict(
     return "verified"
 
 
+def classify_diagnostic_delta(prev_failing: set[str], curr_failing: set[str]) -> str:
+    """Classify retry transition between consecutive proof-contract failure sets."""
+    if not curr_failing:
+        return "resolved"
+    if curr_failing == prev_failing:
+        return "stagnated"
+    return "progress" if curr_failing < prev_failing else "regressed"
+
+
 def verify_candidate_receipt(
     *,
     candidate_path: Path | str,
@@ -1599,6 +1608,13 @@ def run_self_test() -> None:
     assert verification_verdict(candidate_hash="abc", verified_hash="abc", behavioral_oracle_passed=False, proxy_passed=True) == "proxy-theater-rejected"
     assert verification_verdict(candidate_hash="abc", verified_hash="abc", behavioral_oracle_passed=False, proxy_passed=False) == "not-verified"
     assert verification_verdict(candidate_hash="abc", verified_hash="abc", behavioral_oracle_passed=False, has_observable_oracle=False) == "inconclusive"
+
+    # Diagnostic Delta strict-subset retry classification
+    assert classify_diagnostic_delta({"a", "b"}, set()) == "resolved"
+    assert classify_diagnostic_delta({"a", "b"}, {"a", "b"}) == "stagnated"
+    assert classify_diagnostic_delta({"a", "b"}, {"a"}) == "progress"
+    assert classify_diagnostic_delta({"a", "b"}, {"c"}) == "regressed"
+    assert classify_diagnostic_delta({"a"}, {"a", "b"}) == "regressed"
 
     # Architecture boundary enforcement
     assert design_boundary_decision(approved_signatures={"foo()"}, candidate_signatures={"foo()"}) == "proceed-to-implementation"

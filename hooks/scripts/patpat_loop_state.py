@@ -17,22 +17,36 @@ from typing import Any
 
 STATE_SCHEMA = 2
 DEFAULT_TTL_MS = 30 * 24 * 60 * 60 * 1000
+MAX_BACKWARD_CLOCK_SKEW_MS = 60 * 1000
 MAX_SESSION_ID_LENGTH = 512
 MAX_STATE_BYTES = 16 * 1024
 MAX_STDIN_BYTES = 256 * 1024
 ACTIVATION_ID = re.compile(r"^[0-9a-f]{64}$")
 STATE_FILENAME = re.compile(r"^[0-9a-f]{64}\.json$")
+_POLITE_PREFIX = (
+    r"(?:(?:hey|hi|hello|yo|ok|okay|alright|sure|thanks|thank\s+you)\b[\s,!:;-]*)*"
+    r"(?:(?:please|plz|pls)\b[\s,]*|"
+    r"(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?))*"
+)
 DIRECT_ACTIVATION = re.compile(
-    r"^\s*(?:/|\$)(?:patpat:)?patpat(?:-loop)?(?:$|\s+(?!(?:do\s+not|don't|dont|never|not|without)\b)\S)",
+    rf"^\s*{_POLITE_PREFIX}"
+    r"(?:/|\$)(?:patpat:)?patpat(?:-loop)?"
+    r"(?:[.!?]*\s*$|\s+(?!(?:do\s+not|don't|dont|never|not|without)\b)\S)",
     re.IGNORECASE,
 )
 USE_ACTIVATION = re.compile(
-    r"^\s*use\s+(?:(?:/|\$)?patpat(?:-loop)?)\s+(?:to|for)\s+"
+    rf"^\s*{_POLITE_PREFIX}"
+    r"use\s+(?:(?:/|\$)?patpat(?:-loop)?)\s+(?:to|for)\s+"
     r"(?!(?:not|never|avoid|without|docs?|document|documentation|examples?|quote)\b)\S",
     re.IGNORECASE,
 )
 DISABLE = re.compile(
-    r"^\s*(?:disable\s+(?:/|\$)?(?:patpat:)?patpat(?:-loop)?|opt\s+out(?:\s+of)?\s+patpat(?:-loop)?)\s*[.!?]?\s*$",
+    rf"^\s*{_POLITE_PREFIX}"
+    r"(?:(?:disable|deactivate|exit|leave)\s+|"
+    r"stop(?:\s+using)?\s+|"
+    r"(?:turn|switch)\s+off\s+|"
+    r"opt\s+out(?:\s+of)?\s+)"
+    r"(?:the\s+)?(?:/|\$)?(?:patpat:)?patpat(?:-loop)?(?=$|[\s.,!?;:])",
     re.IGNORECASE,
 )
 STICKY_CONTEXT = (
@@ -409,7 +423,7 @@ def state_pair_is_valid(
         and updated_ms is not None
         and created_ms is not None
         and receipt_ms is not None
-        and created_ms <= updated_ms == receipt_ms <= now_ms
+        and created_ms <= updated_ms == receipt_ms <= now_ms + MAX_BACKWARD_CLOCK_SKEW_MS
         and now_ms - updated_ms <= ttl_ms
     )
 
@@ -441,7 +455,7 @@ def collect_expired(plugin_data: str, now_ms: int, ttl_ms: int) -> None:
                 not value
                 or value.get("schema") != STATE_SCHEMA
                 or parsed is None
-                or parsed > now_ms
+                or parsed > now_ms + MAX_BACKWARD_CLOCK_SKEW_MS
                 or now_ms - parsed > ttl_ms
             ):
                 remove_state_path(path)
@@ -470,6 +484,15 @@ def read_active_state(
     return state
 
 
+def _monotonic_now_ms(current: dict[str, Any] | None, now_ms: int) -> int:
+    if not current:
+        return now_ms
+    prev_ms = timestamp_ms(current.get("updatedAt"))
+    if prev_ms is not None and prev_ms > now_ms:
+        return int(prev_ms)
+    return now_ms
+
+
 def persist(targets: dict[str, Path], state: dict[str, Any], receipt: dict[str, Any]) -> None:
     atomic_write(targets["state"], state)
     atomic_write(targets["receipt"], receipt)
@@ -495,16 +518,17 @@ def handle_hook(payload: dict[str, Any], plugin_data: str | None = None, now_ms:
         current = read_active_state(plugin_data, session_id, cwd, now_ms, ttl_ms)
         if current:
             activation_id = str(current["activationId"])
+            effective_ms = _monotonic_now_ms(current, now_ms)
             persist(
                 targets,
                 state_value(
                     fingerprint,
                     binding,
                     activation_id,
-                    now_ms,
+                    effective_ms,
                     str(current.get("createdAt")),
                 ),
-                receipt_value(fingerprint, binding, activation_id, event, now_ms),
+                receipt_value(fingerprint, binding, activation_id, event, effective_ms),
             )
         return None
     if event == "SessionStart":
@@ -515,16 +539,17 @@ def handle_hook(payload: dict[str, Any], plugin_data: str | None = None, now_ms:
         if not current:
             return None
         activation_id = str(current["activationId"])
+        effective_ms = _monotonic_now_ms(current, now_ms)
         persist(
             targets,
             state_value(
                 fingerprint,
                 binding,
                 activation_id,
-                now_ms,
+                effective_ms,
                 str(current.get("createdAt")),
             ),
-            receipt_value(fingerprint, binding, activation_id, event, now_ms),
+            receipt_value(fingerprint, binding, activation_id, event, effective_ms),
         )
         return context_output(event, STICKY_CONTEXT)
     if event != "UserPromptSubmit":
@@ -540,16 +565,17 @@ def handle_hook(payload: dict[str, Any], plugin_data: str | None = None, now_ms:
         collect_expired(plugin_data, now_ms, ttl_ms)
         current = read_active_state(plugin_data, session_id, cwd, now_ms, ttl_ms)
         activation_id = secrets.token_hex(32)
+        effective_ms = _monotonic_now_ms(current, now_ms)
         persist(
             targets,
             state_value(
                 fingerprint,
                 binding,
                 activation_id,
-                now_ms,
+                effective_ms,
                 None if not current else str(current.get("createdAt")),
             ),
-            receipt_value(fingerprint, binding, activation_id, event, now_ms),
+            receipt_value(fingerprint, binding, activation_id, event, effective_ms),
         )
         return context_output(
             event,
@@ -561,16 +587,17 @@ def handle_hook(payload: dict[str, Any], plugin_data: str | None = None, now_ms:
     if not current:
         return None
     activation_id = str(current["activationId"])
+    effective_ms = _monotonic_now_ms(current, now_ms)
     persist(
         targets,
         state_value(
             fingerprint,
             binding,
             activation_id,
-            now_ms,
+            effective_ms,
             str(current.get("createdAt")),
         ),
-        receipt_value(fingerprint, binding, activation_id, event, now_ms),
+        receipt_value(fingerprint, binding, activation_id, event, effective_ms),
     )
     return context_output(event, STICKY_CONTEXT)
 
@@ -585,6 +612,15 @@ def run_self_test() -> None:
         "/patpat:patpat-loop verify this",
         "Use patpat to inspect this repository",
         "use /patpat-loop for this engineering task",
+        "Hey, /patpat fix the auth bug",
+        "Hi /patpat fix this",
+        "Hello, $patpat verify the build",
+        "Please /patpat fix the auth bug",
+        "Please use patpat to debug X",
+        "Hey, please use patpat to fix the auth bug",
+        "Can you use patpat to inspect this repo?",
+        "Could you please use /patpat-loop for this refactor?",
+        "Ok, /patpat-loop ship this",
     )
     for prompt in affirmative:
         if classify_prompt(prompt) != "activate":
@@ -605,13 +641,34 @@ def run_self_test() -> None:
         "/patpat:patpat-setup on this host",
         "/patpat:patpat-inspect how does routing work",
         "do not use patpat to modify this repository",
+        "don't use patpat",
+        "don't use patpat to fix this",
+        "Please don't use patpat to modify this",
+        "Hey, don't use /patpat here",
+        "Hey, explain what /patpat does",
+        "Explain how to disable /patpat",
+        "Don't turn off patpat",
+        '"disable /patpat"',
     )
     for prompt in inactive:
         if classify_prompt(prompt) != "inactive":
             raise AssertionError(f"non-affirmative prompt activated Patpat: {prompt!r}")
-    for prompt in ("disable /patpat", "disable /patpat:patpat"):
+    disable_prompts = (
+        "disable /patpat",
+        "disable /patpat:patpat",
+        "stop using patpat",
+        "stop patpat",
+        "turn off patpat",
+        "exit patpat",
+        "disable /patpat for this question",
+        "Please turn off patpat for now.",
+        "Hey, stop using /patpat-loop and just explain X",
+        "Can you exit patpat?",
+        "opt out of patpat for now",
+    )
+    for prompt in disable_prompts:
         if classify_prompt(prompt) != "disable":
-            raise AssertionError(f"disable command was not preserved: {prompt!r}")
+            raise AssertionError(f"disable command was not recognized: {prompt!r}")
 
     with tempfile.TemporaryDirectory(prefix="patpat-hook-") as directory:
         plugin_data = str(Path(directory) / "plugin-data")
@@ -667,6 +724,34 @@ def run_self_test() -> None:
             requirement not in sticky_text for requirement in required_sticky_context
         ):
             raise AssertionError("sticky mode dropped an activation or delivery boundary")
+        # KV-cache prefix stability: repeated sticky renderings across turns and
+        # resume/compact events must emit byte-identical STICKY_CONTEXT with no dynamic state.
+        continued_again = handle_hook(
+            {**payload, "prompt": "run the next verification step"},
+            plugin_data=plugin_data,
+            now_ms=2_500,
+        )
+        resumed = handle_hook(
+            {
+                "hook_event_name": "SessionStart",
+                "source": "resume",
+                "session_id": payload["session_id"],
+                "cwd": payload["cwd"],
+            },
+            plugin_data=plugin_data,
+            now_ms=2_750,
+        )
+        if not continued_again or not resumed:
+            raise AssertionError("sticky context failed to render on repeated turn or resume")
+        turn1_bytes = json.dumps(continued, sort_keys=True).encode("utf-8")
+        turn2_bytes = json.dumps(continued_again, sort_keys=True).encode("utf-8")
+        if turn1_bytes != turn2_bytes:
+            raise AssertionError("sticky hook JSON output drifted across turns (KV-cache regression)")
+        ctx_bytes_1 = continued["hookSpecificOutput"]["additionalContext"].encode("utf-8")
+        ctx_bytes_2 = continued_again["hookSpecificOutput"]["additionalContext"].encode("utf-8")
+        ctx_bytes_resume = resumed["hookSpecificOutput"]["additionalContext"].encode("utf-8")
+        if not (ctx_bytes_1 == ctx_bytes_2 == ctx_bytes_resume == STICKY_CONTEXT.encode("utf-8")):
+            raise AssertionError("STICKY_CONTEXT bytes are not identical across turns and resume")
         setup = handle_hook(
             {**payload, "prompt": "use $patpat-setup on this host"},
             plugin_data=plugin_data,
@@ -922,6 +1007,37 @@ def run_self_test() -> None:
             raise AssertionError("expired sticky state was trusted")
         if expired_targets["state"].exists() or expired_targets["receipt"].exists():
             raise AssertionError("expired sticky state was not cleared")
+
+        skew_payload = {**payload, "session_id": "clock-skew-session"}
+        skew_activated = handle_hook(skew_payload, plugin_data=plugin_data, now_ms=200_000)
+        skew_targets = state_paths(plugin_data, "clock-skew-session")
+        if not skew_activated or not skew_targets:
+            raise AssertionError("clock-skew fixture could not be activated")
+        collect_expired(plugin_data, 170_000, DEFAULT_TTL_MS)
+        if not skew_targets["state"].exists() or not skew_targets["receipt"].exists():
+            raise AssertionError("collect_expired wiped state on bounded backward NTP skew")
+        skew_turn_1 = handle_hook(
+            {**skew_payload, "prompt": "continue under backward skew"},
+            plugin_data=plugin_data,
+            now_ms=170_000,
+        )
+        if not skew_turn_1 or "Patpat Loop is active" not in json.dumps(skew_turn_1):
+            raise AssertionError("bounded backward NTP skew (30s) wiped active sticky state")
+        skew_turn_2 = handle_hook(
+            {**skew_payload, "prompt": "continue again under backward skew"},
+            plugin_data=plugin_data,
+            now_ms=175_000,
+        )
+        if not skew_turn_2 or "Patpat Loop is active" not in json.dumps(skew_turn_2):
+            raise AssertionError("sticky state did not survive a second turn under backward NTP skew")
+        if handle_hook(
+            {**skew_payload, "prompt": "continue beyond skew limit"},
+            plugin_data=plugin_data,
+            now_ms=200_000 - MAX_BACKWARD_CLOCK_SKEW_MS - 1,
+        ):
+            raise AssertionError("backward clock skew exceeding tolerance was trusted")
+        if skew_targets["state"].exists() or skew_targets["receipt"].exists():
+            raise AssertionError("excessive backward clock skew state was not cleared")
     print("Patpat loop sticky-hook self-test passed.")
 
 

@@ -3,7 +3,7 @@ name: patpat-interrogate
 description: Challenge architecture, designs, and changes from adversarial independent perspectives without editing.
 disable-model-invocation: true
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Codebase","requires_state":["acceptance-verified"],"produces_state":["adversarial-scrutiny-passed"],"verification_cmd":"git diff --check"}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"READ_ONLY","target_entity":"Codebase","requires_state":["workspace-root-open"],"produces_state":["adversarial-scrutiny-passed"],"verification_cmd":"git diff --check"}'
 ---
 
 # Patpat Interrogate

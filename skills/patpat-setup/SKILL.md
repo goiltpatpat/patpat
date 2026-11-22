@@ -3,7 +3,7 @@ name: patpat-setup
 description: Inspect the active host and install, validate, update, or remove Patpat via its supported package route.
 disable-model-invocation: true
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"DESTRUCTIVE","target_entity":"AgentHost","requires_state":["workspace-root-open"],"produces_state":["host-environment-configured"],"verification_cmd":"python3 scripts/validate.py"}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"DESTRUCTIVE","target_entity":"AgentHost","requires_state":["workspace-root-open"],"produces_state":["host-environment-configured"],"verification_cmd":"git status --short"}'
 ---
 
 # Patpat Setup
@@ -34,7 +34,9 @@ For another agent, first prove that it supports the Agent Skills folder contract
 
 After install, invoke with the host form from the installation guide. Cursor uses `/patpat`. Codex uses `$patpat`. Portable hosts use `Use patpat to ...`.
 
-Report the detected host, selected scope, exact destination or marketplace, pre-existing conflicts, command receipts, discovered skill count, invocation result, and removal path. Classify package validation separately from prompt-time discovery.
+Before declaring setup clean, run a read-only trust-boundary audit of active host dotfiles (e.g., `~/.claude/settings.json`, `~/.codex/config.toml`, `.cursor/`, or host plugin config) and report any unexpected non-Patpat `SessionStart` routing hooks or unsolicited remote MCP endpoints. On hosts where Patpat hooks are absent or empty (such as Cursor without active hook adapters or Antigravity), emit the one-line degraded-enforcement disclosure `hooks: absent -> current-turn-only, prose P1`.
+
+Report the detected host, selected scope, exact destination or marketplace, pre-existing conflicts, trust-boundary audit findings, command receipts, discovered skill count, invocation result, and removal path. Classify package validation separately from prompt-time discovery.
 
 ## Model choice
 

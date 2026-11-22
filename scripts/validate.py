@@ -561,8 +561,8 @@ EXPECTED_HOOK_FILES = {
     Path("hooks/hooks.json"),
     Path("hooks/scripts/patpat_loop_state.py"),
     Path("hooks/scripts/patpat_loop_state.cmd"),
-    Path("hooks/scripts/patpat_attribution_guard.py"),
-    Path("hooks/scripts/patpat_attribution_guard.cmd"),
+    Path("hooks/scripts/patpat_safety_guard.py"),
+    Path("hooks/scripts/patpat_safety_guard.cmd"),
 }
 
 

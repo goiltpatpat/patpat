@@ -25,7 +25,7 @@ When only one reviewer or a serial pass is available, run both axes as distinct 
 
 On the standards axis, apply this Fowler code-smell baseline as labeled heuristics—explicitly **overridden by repository standards** when present—so reviews stay sharp even without a `CODING_STANDARDS.md`: *Mysterious Name, Duplicated Code, Long Function / Large Class, Feature Envy, Data Clumps, Primitive Obsession, Shotgun Surgery / Divergent Change, Speculative Generality, and Message Chains / Middle Man*. Raise a smell only when tied to concrete change impact; exclude speculative style preferences.
 
-Bind evidence to the exact candidate revision or reproducible working-tree snapshot; for push-, PR-, or delivery-bound claims, require the committed head or the durable gate in [delivery proof](../patpat-run/references/delivery-proof.md).
+Bind evidence to the exact candidate revision or reproducible working-tree snapshot; for push-, PR-, or delivery-bound claims, require the committed head or the durable gate in [delivery proof](../patpat-run/references/delivery-proof.md). When a delivery review receipt is required for `verify_review.py`, keep the worktree untouched and record the JSON receipt under Git metadata (`<git-dir>/patpat/review-receipt.json`, or an explicit `--receipt` path outside the repo) rather than dirtying `.patpat/` in the worktree.
 
 ## Findings and reporting
 

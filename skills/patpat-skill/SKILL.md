@@ -3,7 +3,7 @@ name: patpat-skill
 description: Create or revise a reusable agent skill with precise triggering, progressive disclosure, and behavioral proof.
 disable-model-invocation: true
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"AgentSkill","requires_state":["workspace-root-open"],"produces_state":["skill-definition-staged"],"verification_cmd":"python3 scripts/validate.py"}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"AgentSkill","requires_state":["workspace-root-open"],"produces_state":["skill-definition-staged"],"verification_cmd":"git diff --check"}'
 ---
 
 # Patpat Skill
@@ -35,7 +35,7 @@ metadata:
 - Give each skill one distinct responsibility. Add optional files only for an immediate, demonstrated need.
 - A learn pass requires approval and edits existing files only. Do not mint a new `SKILL.md` or personal `*-mode` skill from learn.
 
-Reuse repository-native scripts and patterns. Do not depend on undocumented host behavior, duplicate generic model knowledge, or add optional files without an immediate use.
+Reuse repository-native scripts and patterns. Author skills as concise anti-default nudges countering known model failure modes, never tutorials; do not add generic repository overviews or tours to `AGENTS.md` (restrict it to non-standard commands and invariants). Do not depend on undocumented host behavior, duplicate generic model knowledge, or add optional files without an immediate use.
 
 Run structural validation after every change. Apply [`patpat-eval`](../patpat-eval/SKILL.md) when behavior, routing, or a description changes. Do not promote a skill because its prose appears complete.
 

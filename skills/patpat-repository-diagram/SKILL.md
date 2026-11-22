@@ -3,7 +3,7 @@ name: patpat-repository-diagram
 description: Turn a brief, plan, or codebase into a self-contained interactive HTML/SVG diagram with typed views and stable IDs.
 disable-model-invocation: true
 metadata:
-  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Artifact","requires_state":["workspace-root-open"],"produces_state":["interactive-diagram-rendered"],"verification_cmd":"python3 scripts/validate.py"}'
+  patpat.ontology: '{"schema":"patpat-ontology/v1","mutation_level":"LOCAL_MUTATION","target_entity":"Artifact","requires_state":["workspace-root-open"],"produces_state":["interactive-diagram-rendered"],"verification_cmd":"python3 <loaded-skill-directory>/scripts/render.py check <diagram-html-path>"}'
 ---
 
 # Patpat Interactive Diagram

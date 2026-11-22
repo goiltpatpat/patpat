@@ -1,10 +1,13 @@
 @echo off
 setlocal DisableDelayedExpansion
-if not defined PLUGIN_ROOT (
+set "_PATPAT_ROOT=%PLUGIN_ROOT%"
+if not defined _PATPAT_ROOT set "_PATPAT_ROOT=%GROK_PLUGIN_ROOT%"
+if not defined _PATPAT_ROOT set "_PATPAT_ROOT=%CLAUDE_PLUGIN_ROOT%"
+if not defined _PATPAT_ROOT (
   echo Patpat hook error: PLUGIN_ROOT is missing. 1>&2
   exit /b 2
 )
-set "_PATPAT_SCRIPT=%PLUGIN_ROOT%\hooks\scripts\patpat_attribution_guard.py"
+set "_PATPAT_SCRIPT=%_PATPAT_ROOT%\hooks\scripts\patpat_safety_guard.py"
 if not exist "%_PATPAT_SCRIPT%" (
   echo Patpat hook error: hook script is missing under PLUGIN_ROOT. 1>&2
   exit /b 3
