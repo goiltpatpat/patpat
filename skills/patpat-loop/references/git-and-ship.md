@@ -24,6 +24,6 @@ A non-production deploy that Patpat starts, such as a preview, staging, or share
 
 ## Non-Git workspaces and ownership
 
-If the workspace is not a Git repository, state before the first edit that changes have no Git rollback, then either ask before `git init` or copy non-secret files (never `.env`) to a scratch snapshot named in Cleanup; `git status` verify and Git delivery routes stay unavailable.
+If the workspace is not a Git repository, state before the first edit that changes have no Git rollback, then either ask before `git init` or copy only in-scope non-secret target files (never `.env*`, private keys, certs, or credentials) to a scratch snapshot named in `Cleanup`. In non-Git workspaces, Git-only checks and workflows (`git status`/`git diff` verification commands, Git worktree isolation, Git delivery/PR routes, `patpat-run`, and `verify_review.py --root` HEAD binding) stay unavailable; use task-native authoritative verification, snapshot/SHA-256 diffing, and serial single-owner edits unless a host-enforced filesystem+process sandbox isolates workers.
 
 Read-only work never ships. Workers never ship. The parent ships.

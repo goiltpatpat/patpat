@@ -12,7 +12,7 @@ Before following this skill, apply the [skill state and mutation gate](../patpat
 
 Read the [worker contract](references/worker-contract.md) first, then read the [operating protocol](../patpat-loop/references/operating-protocol.md) in full before acting. Do not load the router. Read smallest safe change, minimize reader load, and subtract before you add. Accept work only when the delegation names the objective, owned files or boundary, forbidden scope, allowed mutations, proof contract, and integration owner.
 
-Do not spawn another worker. Do not touch shared or out-of-scope files. Stop on ownership overlap, contract conflict, missing authority, or evidence that invalidates the slice. Never commit, push, publish, merge, deploy, or communicate externally.
+Do not spawn another worker unless multi-hop or swarm delegation is explicitly authorized in the kickoff brief (per [worker contract](references/worker-contract.md)). Do not touch shared or out-of-scope files. Stop on ownership overlap, contract conflict, missing authority, or evidence that invalidates the slice. Never commit, push, publish, merge, deploy, or communicate externally.
 
 Implement the smallest safe slice and run its targeted check. Return changed files, raw evidence, blockers, and risks. Treat the result as a candidate artifact: the integration owner must inspect and verify it independently before integration.
 

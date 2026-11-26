@@ -21,17 +21,17 @@ Classify from signals: reversibility, uncertainty, blast radius, auth, security,
 
 For `/patpat <natural language>` in any language, classify silently; for non-trivial work, put goal and smallest move on line 1 (carry it into subagent briefs, PR `## Why`, and final report), then dispatch to the earliest unsettled specialist (chain via `metadata.patpat.ontology` for compound tasks; skip `route-catalog.md` and `execution-graph.md` for local Shape 0/1).
 
-Triggers: Code -> shape first · Cross-boundary -> `patpat-architect` · Contested -> `patpat-interrogate` · Measured delta -> explain-the-number + benchmark-checklist · Noisy/vague -> restate plainly first.
+Triggers: Code -> shape first · Cross-boundary -> `patpat-architect` · Contested -> `patpat-interrogate` · Measured delta -> explain-the-number + `references/benchmark-checklist.md` · Noisy/vague -> restate plainly first.
 
-| Shape | Signals | Execution |
+| Shape | Signals | Execution & Startup Read Matrix |
 | --- | --- | --- |
-| 0, fast-track | Single clear, reversible, non-behavioral artifact; no contract, runtime, security, permission, migration, or delivery effect | Cheapest useful observation; read matched playbook/principles only; bounded edit + narrowest static check. Do not open a mandatory todo list or require a numbered checklist. |
-| 1, bounded | Localized behavior/defect, understood callers, no high-risk boundary | Matched `change`/`debug` route, 5-field proof contract, targeted behavioral verification. |
-| 2, design-gated | Ambiguity, architecture, schema, migration, public contract, auth/security/billing/secret, cross-cutting behavior, or multi-step dependency | Resolve design via `patpat-architect` first; fuller protocol and checkpoints before edit (`patpat-run` when durable/resumable). |
+| 0, fast-track | Single clear, reversible, non-behavioral artifact; no contract, runtime, security, permission, migration, or delivery effect | Read `patpat-loop/SKILL.md` only (plus matched playbook if non-trivial); skip `operating-protocol.md`, `route-catalog.md`, `execution-graph.md`, `skill-state-gate.md`, `git-and-ship.md`, and `principles/*`. Cheapest useful observation; bounded edit + narrowest static check. Do not open a mandatory todo list or require a numbered checklist. |
+| 1, bounded | Localized behavior/defect, understood callers, no high-risk boundary | Read matched specialist + playbook in 1 parallel batch using the exact paths below; skip `operating-protocol.md`, `route-catalog.md`, `execution-graph.md`, `skill-state-gate.md`, and `git-and-ship.md` unless triggered (load `proof-over-proxy.md` only when writing/challenging behavioral checks). Matched `change`/`debug` route, 5-field proof contract, targeted behavioral verification. |
+| 2 (Tier 2), design-gated | Ambiguity, architecture, schema, migration, public contract, auth/security/billing/secret, cross-cutting behavior, or multi-step dependency | Read `operating-protocol.md` + matched specialist + playbook in 1 parallel batch; load leaf refs strictly on trigger (`git-and-ship.md` on Git delivery/non-Git rollback/pause gates; `execution-graph.md` on durable runs or ≥2nd retry; `skill-state-gate.md` on ontology chaining/context-graph; `earned-parallelism.md` on fan-out). Resolve design via `patpat-architect` first (`patpat-run` when durable/resumable). |
 
-Shape 2 triggers (even small fixes): add/remove/swap/major-bump direct runtime dependencies, SDKs, or external services (excluding lockfiles); edit auth, permissions, secrets, billing, persisted schemas, public contracts, CI, release, or deploy definitions.
+Never re-read a skill or reference file already loaded in the current session unless it changed. Shape 2 triggers (even small fixes): add/remove/swap/major-bump direct runtime dependencies, SDKs, or external services (excluding lockfiles); edit auth, permissions, secrets, billing, persisted schemas, public contracts, CI, release, or deploy definitions.
 
-These are internal routing shapes, not user-selectable modes. File count is weak evidence after callers and contracts are inspected: one security-sensitive file is design-gated, while prose-only edits may stay fast-track. Any Tier 2 signal overrides lower-tier hints. Delivery or external effects use specialist routes and fuller gates; externality alone does not imply `patpat-architect`. Every mutating shape emits the 5-field proof contract before editing and verifies on the authoritative surface. See [operating protocol](references/operating-protocol.md) for ask-vs-inspect rules.
+These are internal routing shapes, not user-selectable modes. File count is weak evidence after callers and contracts are inspected: one security-sensitive file is design-gated, while prose-only edits may stay fast-track. Any Tier 2 signal overrides lower-tier hints. Delivery or external effects use specialist routes and fuller gates; externality alone does not imply `patpat-architect`. Every mutating shape emits the 5-field proof contract before editing and verifies on the authoritative surface. In non-Git workspaces (no `.git`), disclose before the first edit that changes have no Git rollback, snapshot only in-scope non-secret target files named in `Cleanup`, skip Git-only `verification_cmd`s (use task-native checks + snapshot diff), and keep work local and serial unless a host-enforced filesystem sandbox isolates workers. See [operating protocol](references/operating-protocol.md) for ask-vs-inspect rules.
 
 ## Principle index
 
@@ -60,18 +60,18 @@ Apply when triggered; cite only when a principle changes a concrete choice (`[Pr
 
 Resolve `metadata.patpat.ontology` against live evidence before running (Shape 0/1 local work skips full [operating protocol](references/operating-protocol.md#skill-state-and-mutation-gate)). Read `disable-model-invocation: true` specialist `SKILL.md` files directly to compose them. On Claude Code, read [Claude Code host map](references/host-claude-code.md) once per session.
 
-Route to the earliest unresolved decision (exact paths in [route catalog](references/route-catalog.md)):
+Route to the earliest unresolved decision using the exact relative paths below (open [route catalog](references/route-catalog.md) only when these 8 routes do not cover the task):
 
 | Intent | Route | Primary Skill | Playbook |
 | --- | --- | --- | --- |
-| Read-only question, audit, or diagnosis-only defect | `inspect` | `patpat-inspect` | `playbooks/investigation.md` |
-| Defective behavior with fix requested | `debug` | `patpat-debug` | `playbooks/defect.md` |
-| Bounded feature or localized edit | `change` | `patpat-change` | `playbooks/bounded-change.md` |
-| Contract, architecture, migration, security, or cross-cutting design | `architect` | `patpat-architect` | `playbooks/architecture-change.md` |
-| Proof of an existing claim or artifact | `verify` | `patpat-verify` | Use workflow directly |
-| Independent challenge of diff or proof | `review` | `patpat-review` | `playbooks/independent-review.md` |
-| Named commit, PR update, publish, or deploy | `ship` | `patpat-ship` | `playbooks/authorized-delivery.md` |
-| Durable multi-phase execution, PR stack, or overnight run | `run` | `patpat-run` | `playbooks/multi-phase-run.md` |
+| Read-only question, audit, or diagnosis-only defect | `inspect` | `../patpat-inspect/SKILL.md` | `playbooks/investigation.md` |
+| Defective behavior with fix requested | `debug` | `../patpat-debug/SKILL.md` | `playbooks/defect.md` |
+| Bounded feature or localized edit | `change` | `../patpat-change/SKILL.md` | `playbooks/bounded-change.md` |
+| Contract, architecture, migration, security, or cross-cutting design | `architect` | `../patpat-architect/SKILL.md` | `playbooks/architecture-change.md` |
+| Proof of an existing claim or artifact | `verify` | `../patpat-verify/SKILL.md` | Use workflow directly |
+| Independent challenge of diff or proof | `review` | `../patpat-review/SKILL.md` | `playbooks/independent-review.md` |
+| Named commit, PR update, publish, or deploy | `ship` | `../patpat-ship/SKILL.md` | `playbooks/authorized-delivery.md` |
+| Durable multi-phase execution, PR stack, or overnight run | `run` | `../patpat-run/SKILL.md` | `playbooks/multi-phase-run.md` |
 
 See [route catalog](references/route-catalog.md) for other specialists (`arena`, `swarm`, `automation`, `eval`, `formal verification`, `perf`, `learn`, game-building, diagrams); default ambiguous multi-step work to `patpat-architect` or `patpat-run`.
 
@@ -102,7 +102,7 @@ Define the 5-field proof contract (`Claim`, `Surface`, `Action`, `Expect`, `Clea
 
 ## Earn parallelism
 
-One owner returning compact findings by default. Follow [phase-boundary hygiene](references/execution-graph.md#phase-boundary-hygiene) and [earned parallelism](principles/earned-parallelism.md): keep design in one window, isolate each writable slice in a worktree/sandbox, and use `patpat-engineer`. Workers MUST open line 1 with `Read <abs-path>/skills/patpat-engineer/references/worker-contract.md before anything else.` (resolved path).
+One owner returning compact findings by default. Only when fanning out or crossing a phase boundary, follow [phase-boundary hygiene](references/execution-graph.md#phase-boundary-hygiene) and [earned parallelism](principles/earned-parallelism.md): keep design in one window, isolate each writable slice in a worktree/sandbox, and use `patpat-engineer`. For filesystem-capable workers that can read the skill tree, line 1 of the kickoff MUST be `Read <abs-path>/skills/patpat-engineer/references/worker-contract.md before anything else.` (resolved path); for sandboxed or no-filesystem subagents (such as `browser` or workspace-jailed agents) that cannot read outside the sandbox, omit that `Read` line and inline the compact worker contract summary (operator = user, bounded scope, no ship/external writes, no unauthorized spawn, no `sleep`/polling loops, raw evidence only) at the top of the brief.
 
 ## Report evidence
 

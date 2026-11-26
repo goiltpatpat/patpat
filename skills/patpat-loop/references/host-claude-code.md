@@ -18,8 +18,8 @@ Read this once per session when the host is Claude Code (CLI, desktop, IDE, or `
 
 | Patpat term | Claude Code |
 | --- | --- |
-| Independent reviewer | `Agent` with `subagent_type: "patpat:patpat-reviewer"` (read-only `Read`, `Grep`, `Glob`). Brief it with the claim, the changed paths, and the evidence paths, not your transcript. |
-| Read-only investigator | `Agent` with `subagent_type: "Explore"`. The brief says "do not edit files". Check `git status` afterward. |
+| Independent reviewer | `Agent` with `subagent_type: "patpat:patpat-reviewer"` (read-only `Read`, `Grep`, `Glob`, no shell). Brief it with the objective, proof contract, exact diff (inline or patch file path), snapshot binding, and raw verification receipts—not your transcript or intended conclusion. The parent writes any delivery receipt. |
+| Read-only investigator | `Agent` with `subagent_type: "Explore"`. The brief says "do not edit files". Check `git status` afterward (or snapshot hashes in non-Git workspaces). |
 | Writable worker with its own worktree | `Agent` with `isolation: "worktree"`. This gives a separate checkout and Git index. Process, port, key, and external-resource isolation are not implied. Prove them before the earned-parallelism gate passes. |
 | Model per role | `model: "opus"`, `"sonnet"`, or `"haiku"`, following [patpat-setup](../../patpat-setup/SKILL.md) guidance. Omit `model` to inherit the session model. |
 

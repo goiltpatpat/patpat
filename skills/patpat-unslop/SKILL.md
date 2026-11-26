@@ -56,7 +56,7 @@ Rule numbers are stable: retired rules leave gaps and are never renumbered so cr
 
 ## Deterministic AST and comment check
 
-Run [`scripts/unslop_ast_check.py`](scripts/unslop_ast_check.py) for deterministic checking across Rules 12/16 (`ai-conversational-slop`), 19 (`broad-exception-swallowing`, `single-caller-wrapper`), and 20 (`test-skipping-annotation`, `test-skipping-call`, `linter-suppression`), supporting whole paths and `--diff` filtering.
+Run [`scripts/unslop_ast_check.py`](scripts/unslop_ast_check.py) for deterministic checking across Rules 12/16 (`ai-conversational-slop`), 19 (`broad-exception-swallowing`, `single-caller-wrapper`), and 20 (`test-skipping-annotation`, `test-skipping-call`, `linter-suppression`), supporting whole paths and `--diff` filtering. In Git repos with staged or untracked files, prefer `git diff HEAD | python3 <loaded-skill-directory>/scripts/unslop_ast_check.py --diff` plus passing new untracked paths directly; in non-Git workspaces, pass changed file paths directly (`python3 <loaded-skill-directory>/scripts/unslop_ast_check.py <paths>`) so an empty `git diff` pipe never produces a false-green exit `0`.
 
 ## Mutation boundary
 

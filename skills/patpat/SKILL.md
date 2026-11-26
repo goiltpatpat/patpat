@@ -11,4 +11,4 @@ metadata:
 
 Before following this skill, apply the [skill state and mutation gate](../patpat-loop/references/operating-protocol.md#skill-state-and-mutation-gate).
 
-Read and follow [`patpat-loop`](../patpat-loop/SKILL.md) in full. `/patpat` and `/patpat-loop` are the same entry point.
+Read and follow [`patpat-loop`](../patpat-loop/SKILL.md) first (its Start read matrix determines whether `operating-protocol.md` is needed for this turn). `/patpat` and `/patpat-loop` are the same entry point.

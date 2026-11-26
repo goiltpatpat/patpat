@@ -137,7 +137,7 @@ def process_is_alive(pid: int) -> bool:
 
 def read_lock_record(path: Path, max_bytes: int) -> tuple[dict[str, Any] | None, tuple[int, int] | None]:
     """Read bounded JSON from a unique regular lock file without following symlinks."""
-    flags = os.O_RDONLY
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     try:

@@ -4,7 +4,7 @@ Companion reference for [`patpat-verify`](../SKILL.md). Load when classifying br
 
 ## Broader-suite failure classification
 
-A broader-suite failure counts as `pre-existing` only when the exact same test fails with the same signature on the pinned base SHA in an equivalent environment inside a temporary worktree outside the repository, removed afterward with `git worktree remove`. That worktree is diagnostic only, never part of the candidate, and requires no proof-contract revision.
+A broader-suite failure counts as `pre-existing` only when the exact same test fails with the same signature on the pinned base SHA in an equivalent environment inside a temporary worktree outside the repository, removed afterward with `git worktree remove` (or, in a non-Git workspace, against an unmodified pre-edit snapshot in a clean temporary directory removed on cleanup; otherwise classify it as `unclassified`, never assumed `pre-existing`). That worktree or snapshot directory is diagnostic only, never part of the candidate, and requires no proof-contract revision.
 
 - If the base run cannot be made equivalent, classify the failure as `unclassified`; otherwise classify it as `new`.
 - Any `new` or `unclassified` failure blocks `verified`.

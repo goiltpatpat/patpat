@@ -55,7 +55,7 @@ Read [Git and ship rules](git-and-ship.md) before any commit, push, PR, merge, C
 3. **Ship**: On delivery intent, commit and open/update one ready PR after fresh verify and independent review covering the committed head per [delivery proof](../../patpat-run/references/delivery-proof.md).
 4. **Merge**: Land only on explicit `land` or `merge` with a passing provider gate per [authorized delivery](../playbooks/authorized-delivery.md).
 
-Durable runs enforce content-bound `file:` receipts via [`run_state.py check-gate`](../../patpat-run/scripts/run_state.py); ordinary turns rely on instruction gates unless a host hook blocks writes. Stop after 3 consecutive failures from the same unresolved blocker. For multi-owner or parallel work, read [parallelism rules](parallelism.md).
+Durable runs enforce content-bound `file:` receipts via [`run_state.py check-gate`](../../patpat-run/scripts/run_state.py); ordinary turns rely on instruction gates unless a host hook blocks writes. Stop after 3 consecutive failures from the same unresolved blocker. For multi-owner or parallel work, read [earned parallelism](../principles/earned-parallelism.md).
 
 ## Evidence
 
