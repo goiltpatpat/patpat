@@ -2103,7 +2103,27 @@ def copy_self_test_source(source_root: Path, destination: Path) -> None:
             raise RuntimeError(f"source file disappeared during self-test snapshot: {relative}")
 
 
-def run_self_test(root: Path, *, skip_subtests: bool = False) -> list[str]:
+def _parse_shard(raw: str) -> tuple[int, int]:
+    parts = raw.split("/")
+    if len(parts) != 2:
+        raise argparse.ArgumentTypeError(f"invalid shard {raw!r}; expected K/N (e.g. 1/4)")
+    try:
+        index = int(parts[0])
+        total = int(parts[1])
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(f"invalid shard {raw!r}; expected integers K/N") from error
+    if total < 1 or index < 1 or index > total:
+        raise argparse.ArgumentTypeError(f"invalid shard {raw!r}; require 1 <= K <= N")
+    return index, total
+
+
+def run_self_test(
+    root: Path,
+    *,
+    skip_subtests: bool = False,
+    shard: tuple[int, int] = (1, 1),
+) -> list[str]:
+    shard_index, shard_total = shard
     root = root.resolve()
     cases: list[tuple[str, Callable[[Path], None], str]] = []
     agent_plugin_cases: list[tuple[str, Callable[[Path], None], str]] = []
@@ -3322,185 +3342,205 @@ def run_self_test(root: Path, *, skip_subtests: bool = False) -> list[str]:
     cases.append(("broken heading anchor in markdown link", break_heading_anchor, "broken heading anchor"))
 
     failures: list[str] = []
-    with tempfile.TemporaryDirectory(prefix="patpat-validator-copy-test-") as temp_directory:
-        fixture_source = Path(temp_directory) / "source"
-        (fixture_source / "docs" / "guide").mkdir(parents=True)
-        (fixture_source / "docs" / "Diagrams").mkdir()
-        (fixture_source / ".agents" / "plugins").mkdir(parents=True)
-        (fixture_source / ".agents" / "teamwork_preview_fixture" / "external_cache" / "scripts").mkdir(parents=True)
-        (fixture_source / ".playwright-cli").mkdir()
-        (fixture_source / "docs" / "guide" / "installing.md").write_text("guide\n", encoding="utf-8")
-        (fixture_source / "docs" / "Diagrams" / "local.html").write_text("local render\n", encoding="utf-8")
-        (fixture_source / ".agents" / "plugins" / "marketplace.json").write_text("{}\n", encoding="utf-8")
-        (fixture_source / ".playwright-cli" / "capture.png").write_bytes(b"local screenshot")
-        (fixture_source / "PROJECT.md").write_text("local agent context\n", encoding="utf-8")
-        (fixture_source / "TEST_INFRA.md").write_text("local test context\n", encoding="utf-8")
-        (fixture_source / "receipt.json").write_text("private receipt\n", encoding="utf-8")
-        (fixture_source / "trial.jsonl").write_text("private trial\n", encoding="utf-8")
-        (fixture_source / "codex.stderr.txt").write_text("private stderr\n", encoding="utf-8")
-        (fixture_source / ".agents" / "teamwork_preview_fixture" / "external_cache" / "scripts" / "watch-pr").write_text(
-            "local run artifact\n",
-            encoding="utf-8",
-        )
-        fixture_copy = Path(temp_directory) / "fixture"
-        copy_self_test_source(fixture_source, fixture_copy)
-        if (
-            (fixture_copy / "docs" / "Diagrams").exists()
-            or not (fixture_copy / "docs" / "guide" / "installing.md").is_file()
-            or not (fixture_copy / ".agents" / "plugins" / "marketplace.json").is_file()
-            or (fixture_copy / ".agents" / "teamwork_preview_fixture").exists()
-            or (fixture_copy / ".playwright-cli").exists()
-            or (fixture_copy / "PROJECT.md").exists()
-            or (fixture_copy / "TEST_INFRA.md").exists()
-            or (fixture_copy / "receipt.json").exists()
-            or (fixture_copy / "trial.jsonl").exists()
-            or (fixture_copy / "codex.stderr.txt").exists()
-        ):
-            failures.append(
-                "self-test: fixture copy did not prune local artifacts while preserving package docs and marketplace"
+    if shard_index == 1:
+        with tempfile.TemporaryDirectory(prefix="patpat-validator-copy-test-") as temp_directory:
+            fixture_source = Path(temp_directory) / "source"
+            (fixture_source / "docs" / "guide").mkdir(parents=True)
+            (fixture_source / "docs" / "Diagrams").mkdir()
+            (fixture_source / ".agents" / "plugins").mkdir(parents=True)
+            (fixture_source / ".agents" / "teamwork_preview_fixture" / "external_cache" / "scripts").mkdir(parents=True)
+            (fixture_source / ".playwright-cli").mkdir()
+            (fixture_source / "docs" / "guide" / "installing.md").write_text("guide\n", encoding="utf-8")
+            (fixture_source / "docs" / "Diagrams" / "local.html").write_text("local render\n", encoding="utf-8")
+            (fixture_source / ".agents" / "plugins" / "marketplace.json").write_text("{}\n", encoding="utf-8")
+            (fixture_source / ".playwright-cli" / "capture.png").write_bytes(b"local screenshot")
+            (fixture_source / "PROJECT.md").write_text("local agent context\n", encoding="utf-8")
+            (fixture_source / "TEST_INFRA.md").write_text("local test context\n", encoding="utf-8")
+            (fixture_source / "receipt.json").write_text("private receipt\n", encoding="utf-8")
+            (fixture_source / "trial.jsonl").write_text("private trial\n", encoding="utf-8")
+            (fixture_source / "codex.stderr.txt").write_text("private stderr\n", encoding="utf-8")
+            (fixture_source / ".agents" / "teamwork_preview_fixture" / "external_cache" / "scripts" / "watch-pr").write_text(
+                "local run artifact\n",
+                encoding="utf-8",
             )
+            fixture_copy = Path(temp_directory) / "fixture"
+            copy_self_test_source(fixture_source, fixture_copy)
+            if (
+                (fixture_copy / "docs" / "Diagrams").exists()
+                or not (fixture_copy / "docs" / "guide" / "installing.md").is_file()
+                or not (fixture_copy / ".agents" / "plugins" / "marketplace.json").is_file()
+                or (fixture_copy / ".agents" / "teamwork_preview_fixture").exists()
+                or (fixture_copy / ".playwright-cli").exists()
+                or (fixture_copy / "PROJECT.md").exists()
+                or (fixture_copy / "TEST_INFRA.md").exists()
+                or (fixture_copy / "receipt.json").exists()
+                or (fixture_copy / "trial.jsonl").exists()
+                or (fixture_copy / "codex.stderr.txt").exists()
+            ):
+                failures.append(
+                    "self-test: fixture copy did not prune local artifacts while preserving package docs and marketplace"
+                )
 
-        git_fixture_source = Path(temp_directory) / "git-source"
-        shutil.copytree(fixture_source, git_fixture_source)
-        git_init = subprocess.run(
-            ["git", "init", "--quiet"],
-            cwd=git_fixture_source,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if git_init.returncode != 0:
-            failures.append(f"self-test: could not initialize Git copy fixture: {git_init.stderr}")
-        else:
-            git_add = subprocess.run(
-                ["git", "add", "--all", "--force"],
+            git_fixture_source = Path(temp_directory) / "git-source"
+            shutil.copytree(fixture_source, git_fixture_source)
+            git_init = subprocess.run(
+                ["git", "init", "--quiet"],
                 cwd=git_fixture_source,
                 check=False,
                 capture_output=True,
                 text=True,
             )
-            if git_add.returncode != 0:
-                failures.append(f"self-test: could not track Git copy fixture: {git_add.stderr}")
+            if git_init.returncode != 0:
+                failures.append(f"self-test: could not initialize Git copy fixture: {git_init.stderr}")
             else:
-                git_fixture_copy = Path(temp_directory) / "git-fixture"
-                copy_self_test_source(git_fixture_source, git_fixture_copy)
-                if (
-                    (git_fixture_copy / "docs" / "Diagrams").exists()
-                    or not (git_fixture_copy / "docs" / "guide" / "installing.md").is_file()
-                    or not (git_fixture_copy / ".agents" / "plugins" / "marketplace.json").is_file()
-                    or (git_fixture_copy / ".agents" / "teamwork_preview_fixture").exists()
-                    or (git_fixture_copy / ".playwright-cli").exists()
-                    or (git_fixture_copy / "PROJECT.md").exists()
-                    or (git_fixture_copy / "TEST_INFRA.md").exists()
-                    or (git_fixture_copy / "receipt.json").exists()
-                    or (git_fixture_copy / "trial.jsonl").exists()
-                    or (git_fixture_copy / "codex.stderr.txt").exists()
-                ):
-                    failures.append(
-                        "self-test: Git-backed fixture copy did not prune tracked local artifacts"
-                    )
-        try:
-            copy_self_test_source(fixture_source, fixture_source / "nested-copy")
-        except RuntimeError as error:
-            if "overlap" not in str(error):
-                failures.append("self-test: source snapshot rejected overlap for the wrong reason")
-        else:
-            failures.append("self-test: source snapshot accepted a destination inside its source")
-
-        symlink_source = Path(temp_directory) / "symlink-source"
-        symlink_source.mkdir()
-        outside_file = Path(temp_directory) / "outside.txt"
-        outside_file.write_text("outside source", encoding="utf-8")
-        outside_link = symlink_source / "outside-link.txt"
-        try:
-            outside_link.symlink_to(outside_file)
-        except (NotImplementedError, OSError):
-            pass
-        else:
-            symlink_snapshot = Path(temp_directory) / "symlink-snapshot"
-            try:
-                copy_self_test_source(symlink_source, symlink_snapshot)
-            except RuntimeError as error:
-                if "symlink" not in str(error) or not (symlink_snapshot / "outside-link.txt").is_symlink():
-                    failures.append("self-test: source snapshot did not safely refuse an external symlink")
-            else:
-                failures.append("self-test: source snapshot followed a symlink outside its source")
-
-            if shutil.which("git"):
-                git_symlink_source = Path(temp_directory) / "git-symlink-source"
-                git_symlink_source.mkdir()
-                git_init = subprocess.run(
-                    ["git", "init", "--quiet"],
-                    cwd=git_symlink_source,
+                git_add = subprocess.run(
+                    ["git", "add", "--all", "--force"],
+                    cwd=git_fixture_source,
                     check=False,
                     capture_output=True,
                     text=True,
                 )
-                if git_init.returncode != 0:
-                    failures.append(f"self-test: could not initialize Git symlink fixture: {git_init.stderr}")
+                if git_add.returncode != 0:
+                    failures.append(f"self-test: could not track Git copy fixture: {git_add.stderr}")
                 else:
-                    git_outside_link = git_symlink_source / "outside-link.txt"
-                    try:
-                        git_outside_link.symlink_to(outside_file)
-                    except (NotImplementedError, OSError):
-                        pass
+                    git_fixture_copy = Path(temp_directory) / "git-fixture"
+                    copy_self_test_source(git_fixture_source, git_fixture_copy)
+                    if (
+                        (git_fixture_copy / "docs" / "Diagrams").exists()
+                        or not (git_fixture_copy / "docs" / "guide" / "installing.md").is_file()
+                        or not (git_fixture_copy / ".agents" / "plugins" / "marketplace.json").is_file()
+                        or (git_fixture_copy / ".agents" / "teamwork_preview_fixture").exists()
+                        or (git_fixture_copy / ".playwright-cli").exists()
+                        or (git_fixture_copy / "PROJECT.md").exists()
+                        or (git_fixture_copy / "TEST_INFRA.md").exists()
+                        or (git_fixture_copy / "receipt.json").exists()
+                        or (git_fixture_copy / "trial.jsonl").exists()
+                        or (git_fixture_copy / "codex.stderr.txt").exists()
+                    ):
+                        failures.append(
+                            "self-test: Git-backed fixture copy did not prune tracked local artifacts"
+                        )
+            try:
+                copy_self_test_source(fixture_source, fixture_source / "nested-copy")
+            except RuntimeError as error:
+                if "overlap" not in str(error):
+                    failures.append("self-test: source snapshot rejected overlap for the wrong reason")
+            else:
+                failures.append("self-test: source snapshot accepted a destination inside its source")
+
+            symlink_source = Path(temp_directory) / "symlink-source"
+            symlink_source.mkdir()
+            outside_file = Path(temp_directory) / "outside.txt"
+            outside_file.write_text("outside source", encoding="utf-8")
+            outside_link = symlink_source / "outside-link.txt"
+            try:
+                outside_link.symlink_to(outside_file)
+            except (NotImplementedError, OSError):
+                pass
+            else:
+                symlink_snapshot = Path(temp_directory) / "symlink-snapshot"
+                try:
+                    copy_self_test_source(symlink_source, symlink_snapshot)
+                except RuntimeError as error:
+                    if "symlink" not in str(error) or not (symlink_snapshot / "outside-link.txt").is_symlink():
+                        failures.append("self-test: source snapshot did not safely refuse an external symlink")
+                else:
+                    failures.append("self-test: source snapshot followed a symlink outside its source")
+
+                if shutil.which("git"):
+                    git_symlink_source = Path(temp_directory) / "git-symlink-source"
+                    git_symlink_source.mkdir()
+                    git_init = subprocess.run(
+                        ["git", "init", "--quiet"],
+                        cwd=git_symlink_source,
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                    )
+                    if git_init.returncode != 0:
+                        failures.append(f"self-test: could not initialize Git symlink fixture: {git_init.stderr}")
                     else:
-                        git_symlink_snapshot = Path(temp_directory) / "git-symlink-snapshot"
+                        git_outside_link = git_symlink_source / "outside-link.txt"
                         try:
-                            copy_self_test_source(git_symlink_source, git_symlink_snapshot)
-                        except RuntimeError as error:
-                            if (
-                                "symlink" not in str(error)
-                                or (git_symlink_snapshot / "outside-link.txt").is_symlink()
-                            ):
-                                failures.append("self-test: Git snapshot did not safely refuse an external symlink")
+                            git_outside_link.symlink_to(outside_file)
+                        except (NotImplementedError, OSError):
+                            pass
                         else:
-                            failures.append("self-test: Git snapshot followed a symlink outside its source")
+                            git_symlink_snapshot = Path(temp_directory) / "git-symlink-snapshot"
+                            try:
+                                copy_self_test_source(git_symlink_source, git_symlink_snapshot)
+                            except RuntimeError as error:
+                                if (
+                                    "symlink" not in str(error)
+                                    or (git_symlink_snapshot / "outside-link.txt").is_symlink()
+                                ):
+                                    failures.append("self-test: Git snapshot did not safely refuse an external symlink")
+                            else:
+                                failures.append("self-test: Git snapshot followed a symlink outside its source")
 
     with tempfile.TemporaryDirectory(prefix="patpat-validator-") as temp_directory:
         temp_root = Path(temp_directory)
-        portable_fixture = temp_root / "valid-agent-plugin-package"
-        create_agent_plugin_fixture(portable_fixture)
-        metadata_skill = portable_fixture / "skills" / "patpat-inspect" / "SKILL.md"
-        metadata_text = metadata_skill.read_text(encoding="utf-8")
-        metadata_skill.write_text(
-            metadata_text.replace("metadata:\n", "metadata:\n  author: Patpat maintainers\n", 1),
-            encoding="utf-8",
-        )
-        portable_errors = validate_agent_plugin_package(portable_fixture)
-        if portable_errors:
-            failures.append(
-                "self-test: valid minimal Agent Plugins package was rejected: "
-                + "; ".join(portable_errors)
+        if shard_index == 1:
+            portable_fixture = temp_root / "valid-agent-plugin-package"
+            create_agent_plugin_fixture(portable_fixture)
+            metadata_skill = portable_fixture / "skills" / "patpat-inspect" / "SKILL.md"
+            metadata_text = metadata_skill.read_text(encoding="utf-8")
+            metadata_skill.write_text(
+                metadata_text.replace("metadata:\n", "metadata:\n  author: Patpat maintainers\n", 1),
+                encoding="utf-8",
             )
-        default_profile_errors = validate_root(portable_fixture)
-        if not default_profile_errors:
-            failures.append("self-test: source validation accepted an unselected Agent Plugins profile")
-        portable_cli = subprocess.run(
-            [sys.executable, str(root / "scripts" / "validate.py"), "--agent-plugin", str(portable_fixture)],
-            cwd=root,
-            check=False,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
-        if portable_cli.returncode != 0:
-            failures.append(
-                "self-test: explicit Agent Plugins CLI validation failed: "
-                f"{portable_cli.stdout}{portable_cli.stderr}"
+            portable_errors = validate_agent_plugin_package(portable_fixture)
+            if portable_errors:
+                failures.append(
+                    "self-test: valid minimal Agent Plugins package was rejected: "
+                    + "; ".join(portable_errors)
+                )
+            default_profile_errors = validate_root(portable_fixture)
+            if not default_profile_errors:
+                failures.append("self-test: source validation accepted an unselected Agent Plugins profile")
+            portable_cli = subprocess.run(
+                [sys.executable, str(root / "scripts" / "validate.py"), "--agent-plugin", str(portable_fixture)],
+                cwd=root,
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
             )
-        default_cli = subprocess.run(
-            [sys.executable, str(root / "scripts" / "validate.py"), str(portable_fixture)],
-            cwd=root,
-            check=False,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
-        if default_cli.returncode == 0:
-            failures.append("self-test: default source CLI accepted an Agent Plugins package")
+            if portable_cli.returncode != 0:
+                failures.append(
+                    "self-test: explicit Agent Plugins CLI validation failed: "
+                    f"{portable_cli.stdout}{portable_cli.stderr}"
+                )
+            default_cli = subprocess.run(
+                [sys.executable, str(root / "scripts" / "validate.py"), str(portable_fixture)],
+                cwd=root,
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            if default_cli.returncode == 0:
+                failures.append("self-test: default source CLI accepted an Agent Plugins package")
+            for bad_shard in ("0/4", "5/4", "1/0", "bad", "x/4"):
+                try:
+                    _parse_shard(bad_shard)
+                except argparse.ArgumentTypeError:
+                    pass
+                else:
+                    failures.append(f"self-test: _parse_shard accepted invalid spec {bad_shard!r}")
+            bad_shard_cli = subprocess.run(
+                [sys.executable, str(root / "scripts" / "validate.py"), "--shard", "2/4"],
+                cwd=root,
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            if bad_shard_cli.returncode == 0:
+                failures.append("self-test: --shard without --self-test exited 0")
         def run_mutation_case(index: int, name: str, mutate: Callable[[Path], None], expected: str) -> str | None:
             fixture = temp_root / f"fixture-{index}"
             try:
@@ -3525,26 +3565,35 @@ def run_self_test(root: Path, *, skip_subtests: bool = False) -> list[str]:
             finally:
                 shutil.rmtree(fixture, ignore_errors=True)
 
-        worker_count = min(6, max(2, os.cpu_count() or 4))
-        with ThreadPoolExecutor(max_workers=worker_count) as pool:
-            case_futures = [
-                pool.submit(run_mutation_case, index, name, mutate, expected)
-                for index, (name, mutate, expected) in enumerate(cases)
-            ]
-            agent_futures = [
-                pool.submit(run_agent_plugin_case, index, name, mutate, expected)
-                for index, (name, mutate, expected) in enumerate(agent_plugin_cases)
-            ]
-            for future in case_futures:
-                err = future.result()
-                if err:
-                    failures.append(err)
-            for future in agent_futures:
-                err = future.result()
-                if err:
-                    failures.append(err)
+        selected_cases = [
+            (index, case) for index, case in enumerate(cases) if index % shard_total == shard_index - 1
+        ]
+        selected_agent_cases = [
+            (index, case)
+            for index, case in enumerate(agent_plugin_cases)
+            if index % shard_total == shard_index - 1
+        ]
+        worker_count = 2 if shard_total > 1 else min(6, max(2, os.cpu_count() or 4))
+        if selected_cases or selected_agent_cases:
+            with ThreadPoolExecutor(max_workers=worker_count) as pool:
+                case_futures = [
+                    pool.submit(run_mutation_case, index, name, mutate, expected)
+                    for index, (name, mutate, expected) in selected_cases
+                ]
+                agent_futures = [
+                    pool.submit(run_agent_plugin_case, index, name, mutate, expected)
+                    for index, (name, mutate, expected) in selected_agent_cases
+                ]
+                for future in case_futures:
+                    err = future.result()
+                    if err:
+                        failures.append(err)
+                for future in agent_futures:
+                    err = future.result()
+                    if err:
+                        failures.append(err)
 
-    if skip_subtests:
+    if skip_subtests or shard_index != 1:
         return failures
 
     subtests: list[tuple[str, list[str]]] = [
@@ -3604,6 +3653,12 @@ def main() -> int:
         help="skip child script self-tests when an external CI runner invokes them directly",
     )
     parser.add_argument(
+        "--shard",
+        type=_parse_shard,
+        default=(1, 1),
+        help="shard K/N (e.g. 1/4) to partition --self-test mutation cases across OS processes",
+    )
+    parser.add_argument(
         "--agent-plugin",
         action="store_true",
         help="validate a staged Patpat Agent Plugins 1.0 package (not a general schema validator)",
@@ -3611,12 +3666,15 @@ def main() -> int:
     args = parser.parse_args()
     if args.self_test and args.agent_plugin:
         parser.error("--self-test cannot be combined with --agent-plugin")
+    if args.shard != (1, 1) and not args.self_test:
+        parser.error("--shard requires --self-test")
 
     root = (args.root or Path(__file__).resolve().parents[1]).resolve()
+    shard_index, _shard_total = args.shard
     errors = (
         validate_agent_plugin_package(root)
         if args.agent_plugin
-        else validate_root(root)
+        else ([] if args.self_test and shard_index > 1 else validate_root(root))
     )
     if not errors and args.self_test:
         try:
@@ -3624,7 +3682,7 @@ def main() -> int:
             with tempfile.TemporaryDirectory(prefix="patpat-validator-source-") as directory:
                 snapshot = Path(directory) / "source"
                 copy_self_test_source(root, snapshot)
-                errors.extend(run_self_test(snapshot, skip_subtests=args.skip_subtests))
+                errors.extend(run_self_test(snapshot, skip_subtests=args.skip_subtests, shard=args.shard))
         except (OSError, RuntimeError) as error:
             errors.append(f"self-test: unable to create an isolated source snapshot: {error}")
 

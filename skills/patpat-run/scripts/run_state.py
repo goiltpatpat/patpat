@@ -125,20 +125,34 @@ def git_text(root: Path, *args: str) -> str | None:
 
 
 def require_git_root(root: Path) -> str:
-    top = git_text(root, "rev-parse", "--show-toplevel")
-    head = git_text(root, "rev-parse", "HEAD")
-    if not top or not head:
+    combined = git_text(root, "rev-parse", "--show-toplevel", "HEAD")
+    if not combined:
         raise RunStateError("durable runs require a Git worktree with at least one commit")
+    lines = combined.splitlines()
+    if len(lines) == 2 and all(lines):
+        top, head = lines
+    else:
+        top = git_text(root, "rev-parse", "--show-toplevel")
+        head = git_text(root, "rev-parse", "HEAD")
+        if not top or not head:
+            raise RunStateError("durable runs require a Git worktree with at least one commit")
     if Path(top).resolve() != root.resolve():
         raise RunStateError(f"--root must be the Git worktree root: {Path(top).resolve()}")
     return head
 
 
 def git_store_root(root: Path) -> Path:
-    require_git_root(root)
-    raw_path = git_text(root, "rev-parse", "--git-path", "patpat/runs")
-    if not raw_path:
-        raise RunStateError("Git did not return a Patpat metadata path")
+    combined = git_text(root, "rev-parse", "--show-toplevel", "--git-path", "patpat/runs", "HEAD")
+    lines = combined.splitlines() if combined else []
+    if len(lines) == 3 and all(lines):
+        top, raw_path, _head = lines
+        if Path(top).resolve() != root.resolve():
+            raise RunStateError(f"--root must be the Git worktree root: {Path(top).resolve()}")
+    else:
+        require_git_root(root)
+        raw_path = git_text(root, "rev-parse", "--git-path", "patpat/runs")
+        if not raw_path:
+            raise RunStateError("Git did not return a Patpat metadata path")
     path = Path(raw_path)
     return (path if path.is_absolute() else root / path).resolve()
 
@@ -2067,8 +2081,7 @@ def run_delivery_self_test() -> None:
         expect_gate("gitlink-untracked", "ship", False, "differs from HEAD")
 
 
-def run_self_test() -> bool:
-    run_delivery_self_test()
+def _run_core_self_test() -> bool:
     with (
         tempfile.TemporaryDirectory(prefix="patpat-run-state-") as directory,
         tempfile.TemporaryDirectory(prefix="patpat-run-evidence-") as evidence_directory,
@@ -3311,12 +3324,80 @@ def run_self_test() -> bool:
             else:
                 raise AssertionError("append_decision_trail_row succeeded through symlink")
 
+        # Verify require_git_root / git_store_root error and fallback paths.
+        non_repo = root / "not-a-git-repo"
+        non_repo.mkdir()
+        try:
+            require_git_root(non_repo)
+        except RunStateError as error:
+            assert "Git worktree" in str(error)
+        else:
+            raise AssertionError("require_git_root accepted non-git directory")
+
+        unborn = root / "unborn-repo"
+        unborn.mkdir()
+        subprocess.run(["git", "init", "-q", str(unborn)], check=True)
+        try:
+            require_git_root(unborn)
+        except RunStateError as error:
+            assert "at least one commit" in str(error)
+        else:
+            raise AssertionError("require_git_root accepted unborn repository")
+
+        sub_repo = root / "sub-check-repo"
+        make_test_repository(sub_repo)
+        subdir = sub_repo / "nested-dir"
+        subdir.mkdir()
+        for probe in (lambda: require_git_root(subdir), lambda: git_store_root(subdir)):
+            try:
+                probe()
+            except RunStateError as error:
+                assert "--root must be the Git worktree root" in str(error)
+            else:
+                raise AssertionError("git root guard accepted nested subdirectory")
+
+        expected_head = require_git_root(sub_repo)
+        expected_store = git_store_root(sub_repo)
+        orig_git_text = globals()["git_text"]
+        try:
+            def fallback_git_text(target: Path, *git_args: str) -> str | None:
+                if git_args == ("rev-parse", "--show-toplevel", "HEAD"):
+                    return "malformed-single-line"
+                if git_args == ("rev-parse", "--show-toplevel", "--git-path", "patpat/runs", "HEAD"):
+                    return f"{sub_repo}\n\n{expected_head}"
+                return orig_git_text(target, *git_args)
+
+            globals()["git_text"] = fallback_git_text
+            assert require_git_root(sub_repo) == expected_head
+            assert git_store_root(sub_repo) == expected_store
+        finally:
+            globals()["git_text"] = orig_git_text
+
         return symlink_supported
+
+
+def run_self_test(part: str = "all") -> bool:
+    """Run all run_state self-tests or a process-isolated subset ('core' or 'delivery')."""
+    if part == "delivery":
+        run_delivery_self_test()
+        return True
+    if part == "core":
+        return _run_core_self_test()
+    if part == "all":
+        run_delivery_self_test()
+        return _run_core_self_test()
+    raise ValueError(f"unknown self-test part: {part}")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--self-test", action="store_true")
+    parser.add_argument(
+        "--self-test-part",
+        choices=("all", "delivery", "core"),
+        default="all",
+        help="subset of self-tests to run with --self-test",
+    )
     subparsers = parser.add_subparsers(dest="command")
 
     init_parser = subparsers.add_parser("init")
@@ -3400,9 +3481,16 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.self_test_part != "all" and not args.self_test:
+        parser.error("--self-test-part requires --self-test")
     if args.self_test:
-        symlink_checks_passed = run_self_test()
-        symlink_status = "passed" if symlink_checks_passed else "skipped (creation unsupported)"
+        symlink_checks_passed = run_self_test(part=args.self_test_part)
+        if args.self_test_part == "delivery":
+            symlink_status = "skipped (delivery part only)"
+        elif symlink_checks_passed:
+            symlink_status = "passed"
+        else:
+            symlink_status = "skipped (creation unsupported)"
         print(f"Patpat run-state self-test passed; symlink assertions {symlink_status}.")
         return 0
     if not args.command:
