@@ -9,6 +9,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 import re
 import subprocess
 import sys
@@ -42,6 +43,8 @@ def resolve_git_dir(root: Path) -> Path | None:
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
     except (subprocess.SubprocessError, OSError):
         return None
@@ -208,6 +211,8 @@ def _verify_git_head_binding(root: Path, data: dict[str, Any]) -> None:
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
     except (subprocess.SubprocessError, OSError) as error:
         raise ReviewVerificationError(f"failed to establish git HEAD in {root}: {error}") from error
@@ -226,6 +231,75 @@ def _verify_git_head_binding(root: Path, data: dict[str, Any]) -> None:
         )
 
 
+def _resolve_git_toplevel(root: Path) -> Path:
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except (subprocess.SubprocessError, OSError):
+        return root.resolve()
+    if completed.returncode != 0 or not completed.stdout.strip():
+        return root.resolve()
+    return Path(completed.stdout.strip()).resolve()
+
+
+def _verify_clean_worktree(root: Path, receipt_path: Path | None = None) -> None:
+    try:
+        completed = subprocess.run(
+            ["git", "status", "--porcelain", "-z", "--untracked-files=all"],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except (subprocess.SubprocessError, OSError) as error:
+        raise ReviewVerificationError(f"failed to inspect git worktree cleanliness in {root}: {error}") from error
+    if completed.returncode != 0:
+        err = completed.stderr.strip() or f"exit code {completed.returncode}"
+        raise ReviewVerificationError(f"failed to inspect git worktree cleanliness in {root}: {err}")
+    toplevel = _resolve_git_toplevel(root)
+    resolved_receipt: str | None = None
+    if receipt_path is not None:
+        try:
+            resolved_receipt = os.path.normcase(str(receipt_path.resolve()))
+        except (OSError, RuntimeError):
+            resolved_receipt = None
+    dirty: list[str] = []
+    entries = completed.stdout.split("\0")
+    idx = 0
+    while idx < len(entries):
+        entry = entries[idx]
+        idx += 1
+        if not entry or len(entry) < 4:
+            continue
+        status = entry[:2]
+        rel_path = entry[3:]
+        if status[0] in {"R", "C"} or status[1] in {"R", "C"}:
+            idx += 1
+        if status == "??" and resolved_receipt is not None:
+            candidate = toplevel / rel_path
+            if not candidate.is_symlink():
+                try:
+                    if os.path.normcase(str(candidate.resolve())) == resolved_receipt:
+                        continue
+                except (OSError, RuntimeError):
+                    pass
+        dirty.append(f"{status} {rel_path}")
+    if dirty:
+        sample = ", ".join(dirty[:5])
+        raise ReviewVerificationError(
+            f"workspace has uncommitted changes after reviewed HEAD ({len(dirty)} entries: {sample})"
+        )
+
+
 def verify_review(
     receipt_path: Path,
     root: Path | None = None,
@@ -235,6 +309,8 @@ def verify_review(
 ) -> dict[str, Any]:
     if not receipt_path.is_file():
         raise ReviewVerificationError(f"missing review receipt: {receipt_path}")
+    if receipt_path.stat().st_size > MAX_RECEIPT_BYTES:
+        raise ReviewVerificationError(f"review receipt exceeds {MAX_RECEIPT_BYTES} byte limit")
     raw = receipt_path.read_bytes()
     if len(raw) > MAX_RECEIPT_BYTES:
         raise ReviewVerificationError(f"review receipt exceeds {MAX_RECEIPT_BYTES} byte limit")
@@ -250,6 +326,7 @@ def verify_review(
             if floor_violations:
                 details = "\n".join(f"  - {item}" for item in floor_violations)
                 raise ReviewVerificationError(f"Floor Guard violations detected in review diff:\n{details}")
+        _verify_clean_worktree(root, receipt_path=receipt_path)
     return verified_data
 
 
@@ -506,6 +583,33 @@ def self_test() -> int:
             raise AssertionError(f"--skip-diff-check returned non-zero {rc}")
         if "FLOOR GUARD SKIPPED" not in skipped_out or "Review cleared:" in skipped_out:
             raise AssertionError(f"--skip-diff-check output lacked explicit skip tag: {skipped_out!r}")
+
+        # 14. Post-review uncommitted edit to tracked file must fail closed even without Floor Guard violations
+        (repo / "feature_clean.py").write_text("def ok() -> int:\n    return 999\n", encoding="utf-8")
+        try:
+            verify_review(expected_path, root=repo, check_diff=False)
+        except ReviewVerificationError as err:
+            if "uncommitted changes" not in str(err):
+                raise AssertionError(f"expected dirty worktree failure, got: {err}")
+        else:
+            raise AssertionError("verify_review accepted uncommitted post-review edit on reviewed HEAD")
+
+        # 15. Untracked symlink pointing to the review receipt must not be exempted
+        git("checkout", "--", "feature_clean.py")
+        link_path = repo / "stray-receipt-link.json"
+        try:
+            link_path.symlink_to(expected_path)
+        except (NotImplementedError, OSError):
+            pass
+        else:
+            try:
+                verify_review(expected_path, root=repo, check_diff=False)
+            except ReviewVerificationError as err:
+                if "uncommitted changes" not in str(err):
+                    raise AssertionError(f"expected symlink dirty failure, got: {err}")
+            else:
+                raise AssertionError("verify_review exempted an untracked symlink pointing to receipt_path")
+            link_path.unlink()
 
     print("Review verifier self-test passed.")
     return 0

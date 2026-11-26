@@ -532,6 +532,61 @@ PINNED_BOUNDARY_SENTENCES = (
         ),
         "dense-source anti-condensation contract",
     ),
+    (
+        Path("skills/patpat-loop/SKILL.md"),
+        (
+            "In non-Git workspaces (no `.git`), disclose before the first edit that changes have no Git rollback",
+            "Read <abs-path>/skills/patpat-engineer/references/worker-contract.md before anything else.",
+            "for sandboxed or no-filesystem subagents",
+        ),
+        "startup non-Git and sandboxed-worker fallback contract",
+    ),
+    (
+        Path("skills/patpat-loop/references/git-and-ship.md"),
+        (
+            "If the workspace is not a Git repository, state before the first edit that changes have no Git rollback",
+            "stay unavailable; use task-native authoritative verification, snapshot/SHA-256 diffing, and serial single-owner edits unless a host-enforced filesystem+process sandbox isolates workers.",
+        ),
+        "non-Git workspace fallback contract",
+    ),
+    (
+        Path("skills/patpat-loop/references/skill-state-gate.md"),
+        (
+            "In a non-Git workspace (`git rev-parse --is-inside-work-tree` fails), treat Git-based `verification_cmd` hints",
+        ),
+        "non-Git ontology verification fallback contract",
+    ),
+    (
+        Path("skills/patpat-swarm/SKILL.md"),
+        (
+            "Read <abs-path>/skills/patpat-engineer/references/worker-contract.md before anything else.",
+            "for sandboxed or no-filesystem subagents",
+        ),
+        "swarm sandboxed-worker fallback contract",
+    ),
+    (
+        Path("skills/patpat-engineer/references/worker-contract.md"),
+        (
+            "Read <abs-path>/skills/patpat-engineer/references/worker-contract.md before anything else.",
+            "for sandboxed or no-filesystem subagents",
+        ),
+        "worker-contract sandboxed-worker fallback contract",
+    ),
+    (
+        Path("skills/patpat-review/SKILL.md"),
+        (
+            "For shell-less read-only reviewers",
+            "the parent—never the read-only reviewer—writes",
+        ),
+        "shell-less read-only reviewer packet contract",
+    ),
+    (
+        Path("skills/patpat-loop/playbooks/pause-safely.md"),
+        (
+            "A push is allowed only if delivery authority already exists for an open pull request and the committed head has fresh verify and independent review receipts, never as a pause ritual.",
+        ),
+        "pause-safely delivery-gate contract",
+    ),
 )
 UNADMITTED_COMPONENT_PATHS = {
     ".cursor",
@@ -1843,9 +1898,20 @@ def validate_root(root: Path) -> list[str]:
     for markdown in sorted((root / "skills").rglob("*.md")):
         if "node_modules" in markdown.parts:
             continue
-        drift = claim_label_drift(markdown.read_text(encoding="utf-8"))
+        text = markdown.read_text(encoding="utf-8")
+        drift = claim_label_drift(text)
         if drift:
             errors.append(f"{markdown}: non-canonical claim labels {sorted(set(drift))}")
+        operational = operational_markdown(text)
+        for paragraph in re.split(r"\r?\n\s*\r?\n", operational):
+            if re.search(r"(?is)\bmust\b.*worker-contract\.md", paragraph):
+                if not re.search(
+                    r"(?is)(?:\bsandbox(?:ed)?\b.*\binline\b|\binline\b.*\bsandbox(?:ed)?\b)",
+                    paragraph,
+                ):
+                    errors.append(
+                        f"{markdown}: unqualified worker-contract.md MUST directive missing sandbox inline fallback"
+                    )
 
     for relative, needles, label in PINNED_BOUNDARY_SENTENCES:
         pinned = root / relative
@@ -1857,6 +1923,12 @@ def validate_root(root: Path) -> list[str]:
             errors.append(f"{pinned}: missing {label}")
 
     entrypoint = reference_root / "SKILL.md"
+    if entrypoint.is_file():
+        loop_operational = operational_markdown(entrypoint.read_text(encoding="utf-8"))
+        if re.search(r"\]\((?:\./)?playbooks/[^)\s#]+\.md", loop_operational):
+            errors.append(
+                f"{entrypoint}: direct Markdown link to playbooks/*.md bloats depth-1 startup closure; use backticked paths and route-catalog.md"
+            )
     link_cache: dict[Path, list[Path]] = {}
     reached = reachable_markdown(entrypoint, root, link_cache) if entrypoint.is_file() else set()
     required_references = {(skill / "SKILL.md").resolve() for skill in skills}
@@ -2552,6 +2624,26 @@ def run_self_test(
             encoding="utf-8",
         )
 
+    def add_direct_playbook_link_to_loop(fixture: Path) -> None:
+        loop_skill = fixture / "skills" / "patpat-loop" / "SKILL.md"
+        text = loop_skill.read_text(encoding="utf-8")
+        loop_skill.write_text(
+            text + "\nSee [bounded change](playbooks/bounded-change.md).\n",
+            encoding="utf-8",
+        )
+
+    def strip_sandbox_worker_fallback(fixture: Path) -> None:
+        swarm_skill = fixture / "skills" / "patpat-swarm" / "SKILL.md"
+        text = swarm_skill.read_text(encoding="utf-8")
+        swarm_skill.write_text(
+            text.replace(
+                "for sandboxed or no-filesystem subagents (such as `browser` or workspace-jailed agents) that cannot read outside the sandbox, omit that `Read` line and inline the compact worker contract summary (operator = user, bounded scope, no ship/external writes, no unauthorized spawn, no `sleep`/polling loops, raw evidence only) at the top of the brief.",
+                "always require reading that file.",
+                1,
+            ),
+            encoding="utf-8",
+        )
+
     def strip_program_coordination_link(fixture: Path) -> None:
         skill = fixture / "skills" / "patpat-run" / "SKILL.md"
         text = skill.read_text(encoding="utf-8")
@@ -3206,6 +3298,8 @@ def run_self_test(
             ("risk-scaled start ceremony drift", strip_risk_scaled_start, "missing risk-scaled start ceremony contract"),
             ("diagnostic delta drift", strip_diagnostic_delta, "missing anti-thrashing diagnostic delta contract"),
             ("boundary pause drift", strip_boundary_pause, "missing anti-thrashing boundary pause contract"),
+            ("direct playbook link in patpat-loop", add_direct_playbook_link_to_loop, "bloats depth-1 startup closure"),
+            ("unqualified worker-contract MUST without sandbox fallback", strip_sandbox_worker_fallback, "missing sandbox inline fallback"),
             ("program coordination progressive disclosure drift", strip_program_coordination_link, "missing program-coordination progressive disclosure contract"),
             ("formal counterexample handoff drift", strip_formal_counterexample_handoff, "missing formal counterexample handoff contract"),
             ("judgment-failure instruction-contract drift", strip_judgment_failure_contract, "missing judgment-failure instruction-contract"),
@@ -3602,6 +3696,7 @@ def run_self_test(
         ("repository-diagram import graph", [sys.executable, str(root / "skills" / "patpat-repository-diagram" / "scripts" / "import_graph.py"), "--self-test"]),
         ("decision trail helper", [sys.executable, str(root / "skills" / "patpat-run" / "scripts" / "decisions.py"), "--self-test"]),
         ("sticky hook", [sys.executable, str(root / "hooks" / "scripts" / "patpat_loop_state.py"), "--self-test"]),
+        ("safety guard hook", [sys.executable, str(root / "hooks" / "scripts" / "patpat_safety_guard.py"), "--self-test"]),
         ("loop dry-run", [sys.executable, str(root / "scripts" / "dry_run_loop.py"), "--self-test"]),
         ("representation contract eval", [sys.executable, str(root / "scripts" / "eval_representation.py"), "--self-test"]),
         ("writable parallelism evaluation", [sys.executable, str(root / "scripts" / "eval_parallel.py"), "--self-test"]),

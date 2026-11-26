@@ -1451,6 +1451,13 @@ def record_failure(
         return state
 
 
+def is_worker_owner(owner: Any) -> bool:
+    if not isinstance(owner, str):
+        return False
+    normalized = owner.strip().casefold()
+    return normalized == "worker" or normalized.startswith(("worker-", "worker:", "worker_", "worker/", "worker ", "worker."))
+
+
 def check_gate(
     root: Path, run_id: str, gate: str, base_head: str | None = None
 ) -> tuple[bool, str]:
@@ -1483,7 +1490,7 @@ def check_gate(
             return False, f"{gate} gate failed: verification receipt is missing or stale"
         if not receipt_is_fresh(root, review, state, candidate, "pass", independent=True):
             return False, f"{gate} gate failed: independent review pass is missing or stale"
-        if state.get("owner") == "worker":
+        if is_worker_owner(state.get("owner")):
             return False, f"{gate} gate failed: workers never ship; parent integration owner must ship"
         matches_head = worktree_matches_head(root, candidate)
         if gate == "ship":
@@ -3323,6 +3330,16 @@ def _run_core_self_test() -> bool:
                 pass
             else:
                 raise AssertionError("append_decision_trail_row succeeded through symlink")
+
+        # Verify worker owner ship-block matching is case-insensitive and prefix-aware.
+        assert is_worker_owner("worker")
+        assert is_worker_owner("Worker")
+        assert is_worker_owner("worker-1")
+        assert is_worker_owner("WORKER:slice-a")
+        assert is_worker_owner("worker 1")
+        assert is_worker_owner("worker.2")
+        assert not is_worker_owner("parent")
+        assert not is_worker_owner("coworker")
 
         # Verify require_git_root / git_store_root error and fallback paths.
         non_repo = root / "not-a-git-repo"

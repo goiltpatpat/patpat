@@ -20,7 +20,7 @@ When regression-first applies, observe fail-before (or an explicit why-not) and 
 
 For an explicit visual migration or pixel-equivalence claim, apply the [visual equivalence playbook](../patpat-loop/playbooks/visual-equivalence.md) without weakening its baseline or comparison harness.
 
-Inspect version-control state and nearby contracts before editing. Define Claim, Surface, Action, Expect, and Cleanup. Follow the Minimal Solution Ladder in [bounded change](../patpat-loop/playbooks/bounded-change.md) (be lazy about the solution, never about callers, tests, fixtures, or safety; mark deliberate bounded shortcuts as `shortcut: <limit>, <when to upgrade>`). Make one coherent repository-native patch. Avoid unrelated cleanup, speculative abstractions, new dependencies, and public interface changes unless the objective requires them.
+Inspect version-control state and nearby contracts before editing (in non-Git workspaces, disclose no Git rollback and snapshot in-scope non-secret target files first). Define Claim, Surface, Action, Expect, and Cleanup. Follow the Minimal Solution Ladder in [bounded change](../patpat-loop/playbooks/bounded-change.md) (be lazy about the solution, never about callers, tests, fixtures, or safety; mark deliberate bounded shortcuts as `shortcut: <limit>, <when to upgrade>`). Make one coherent repository-native patch. Avoid unrelated cleanup, speculative abstractions, new dependencies, and public interface changes unless the objective requires them.
 
 Do not claim completion from generation, compilation, or tests alone when the changed behavior has an observable surface.
 

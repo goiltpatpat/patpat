@@ -33,9 +33,9 @@ Execute the authoritative check in the current turn. Inside a durable `patpat-ru
 1. Reconcile requested outcomes with the proof contract via [proof over proxy](../patpat-loop/principles/proof-over-proxy.md); name gaps before running checks.
 2. Identify the authoritative artifact or user surface and capture a baseline/repro when relevant.
 3. Run the smallest targeted automated check; isolate live servers, browsers, or databases per [runtime isolation](references/verification-standards.md#runtime-isolation).
-4. When a broader suite runs, classify failures as `pre-existing` (same test and signature on pinned base SHA in a clean temporary worktree removed via `git worktree remove`), `new`, or `unclassified` per [broader-suite failure classification](references/verification-standards.md#broader-suite-failure-classification). Any `new` or `unclassified` failure blocks `verified`.
+4. When a broader suite runs, classify failures as `pre-existing` (same test and signature on pinned base SHA in a clean temporary worktree removed via `git worktree remove`, or—outside Git—against an unmodified pre-edit snapshot in a clean temp directory), `new`, or `unclassified` per [broader-suite failure classification](references/verification-standards.md#broader-suite-failure-classification). Any `new` or `unclassified` failure blocks `verified`.
 5. Exercise changed behavioral logic through the authoritative interface under representative conditions (or run the strongest deterministic check for static claims) using a concrete observable oracle—never mock counts, copied constants, or self-referential expected values.
-6. Observe visible output and material side effects directly, and inspect the final diff and VCS status for unrelated changes.
+6. Observe visible output and material side effects directly, and inspect the final diff and VCS status (or pre/post snapshot diff and SHA-256 manifest in non-Git workspaces) for unrelated changes.
 7. Record command/action, observed result, cleanup, and limitations per material claim; never mark uncovered outcomes `verified`.
 
 ## Claim-adaptive verification and outcomes

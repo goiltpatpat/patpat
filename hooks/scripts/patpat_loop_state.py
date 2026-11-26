@@ -96,7 +96,7 @@ def session_key(session_id: object) -> str | None:
 def project_fingerprint(cwd: object) -> str | None:
     if not isinstance(cwd, str) or not cwd or len(cwd) > 4096 or "\0" in cwd:
         return None
-    return hash_value(str(Path(cwd)))
+    return hash_value(os.path.normcase(str(Path(cwd))))
 
 
 def classify_prompt(prompt: object) -> str:

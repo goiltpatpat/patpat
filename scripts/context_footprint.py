@@ -17,11 +17,16 @@ from pathlib import Path
 
 LINK = re.compile(r"\]\(([^)\s#]+\.md)(?:#[^)]*)?\)")
 BYTES_PER_TOKEN = 4
-# Tiered depth-1 closure token ceilings (~tokens = closure bytes // 4):
-# - orchestrators (patpat-loop, patpat-run): <= 20,000 ~tokens
+# Tiered depth-1 closure token ceilings (~tokens = LF-normalized closure bytes // 4):
+# - routers: patpat <= 6,000 ~tokens (<= 4 files), patpat-loop <= 14,000 ~tokens (<= 10 files)
+# - durable orchestrator (patpat-run): <= 20,000 ~tokens
 # - domain-contract specialists (ship, diagram, statechart, formal-verify, game-builder): <= 16,000 ~tokens
 # - leaf skills (all other skills): <= 10,000 ~tokens
-ORCHESTRATOR_SKILLS = frozenset({"patpat-loop", "patpat-run"})
+ORCHESTRATOR_SKILLS = frozenset({"patpat-run"})
+ROUTER_LIMITS: dict[str, tuple[int, int]] = {
+    "patpat": (6000, 4),
+    "patpat-loop": (14000, 10),
+}
 HEAVY_SPECIALIST_SKILLS = frozenset(
     {
         "patpat-formal-verify",
@@ -46,11 +51,20 @@ def skill_name_from_entry(entry: str) -> str:
 
 def tier_max_tokens(entry: str) -> tuple[str, int]:
     name = skill_name_from_entry(entry)
+    if name in ROUTER_LIMITS:
+        return ("router", ROUTER_LIMITS[name][0])
     if name in ORCHESTRATOR_SKILLS:
         return ("orchestrator", ORCHESTRATOR_MAX_TOKENS)
     if name in HEAVY_SPECIALIST_SKILLS:
         return ("specialist", HEAVY_SPECIALIST_MAX_TOKENS)
     return ("leaf", LEAF_MAX_TOKENS)
+
+
+def tier_max_files(entry: str) -> int | None:
+    name = skill_name_from_entry(entry)
+    if name in ROUTER_LIMITS:
+        return ROUTER_LIMITS[name][1]
+    return None
 
 
 def linked_markdown(path: Path) -> list[Path]:
@@ -79,9 +93,15 @@ def closure(entry: Path, depth: int) -> list[Path]:
     return sorted(seen)
 
 
+def lf_utf8_size(path: Path) -> int:
+    """Measure LF-normalized UTF-8 byte length so budgets are deterministic across Windows/POSIX."""
+    raw = path.read_bytes().replace(b"\r\n", b"\n")
+    return len(raw)
+
+
 def footprint(entry: Path, depth: int) -> dict:
     files = closure(entry, depth)
-    total = sum(f.stat().st_size for f in files)
+    total = sum(lf_utf8_size(f) for f in files)
     return {
         "entry": entry.as_posix(),
         "depth": depth,
@@ -100,7 +120,7 @@ def report(root: Path, depth: int) -> list[dict]:
     for entry in skill_entries(root):
         row = footprint(entry, depth)
         row["entry"] = entry.relative_to(root).as_posix()
-        row["entry_bytes"] = entry.stat().st_size
+        row["entry_bytes"] = lf_utf8_size(entry)
         rows.append(row)
     return sorted(rows, key=lambda r: r["bytes"], reverse=True)
 
@@ -142,6 +162,11 @@ def check_budget(
                 violations.append(
                     f"over {tier} token budget: {r['entry']} {r['approx_tokens']} > {limit} ~tokens"
                 )
+            max_files = tier_max_files(r["entry"])
+            if max_files is not None and r.get("files", 0) > max_files:
+                violations.append(
+                    f"over {tier} file budget: {r['entry']} {r['files']} > {max_files} files"
+                )
     return violations
 
 
@@ -167,7 +192,7 @@ def self_test() -> int:
         check(footprint(entry, 1)["files"] == 2, "depth 1 follows local links, skips URLs and missing files")
         deep = footprint(entry, 5)
         check(deep["files"] == 3, "cycles are visited once")
-        expected = sum(p.stat().st_size for p in (entry, skill / "refs" / "a.md", skill / "refs" / "b.md"))
+        expected = sum(lf_utf8_size(p) for p in (entry, skill / "refs" / "a.md", skill / "refs" / "b.md"))
         check(deep["bytes"] == expected, "closure bytes sum every reached file")
         check(deep["approx_tokens"] == expected // BYTES_PER_TOKEN, "tokens are bytes / 4")
         rows = report(root, 1)
@@ -189,10 +214,21 @@ def self_test() -> int:
             main(["--root", str(root), "--max-tokens", "1"]) == 1,
             "--max-tokens exits 1 when closure exceeds ceiling",
         )
-        # Tiered budget checks: orchestrator <= 20k, specialist <= 16k, leaf <= 10k
+        # LF normalization check: CRLF checkout produces identical byte count to LF
+        crlf_file = root / "crlf.md"
+        lf_file = root / "lf.md"
+        crlf_file.write_bytes(b"line1\r\nline2\r\n")
+        lf_file.write_bytes(b"line1\nline2\n")
+        check(lf_utf8_size(crlf_file) == lf_utf8_size(lf_file), "lf_utf8_size normalizes CRLF to LF")
+
+        # Tiered budget checks: router (patpat <= 6k/4f, patpat-loop <= 14k/10f), orchestrator <= 20k, specialist <= 16k, leaf <= 10k
         check(
-            tier_max_tokens("skills/patpat-loop/SKILL.md") == ("orchestrator", ORCHESTRATOR_MAX_TOKENS),
-            "patpat-loop maps to orchestrator tier",
+            tier_max_tokens("skills/patpat-loop/SKILL.md") == ("router", ROUTER_LIMITS["patpat-loop"][0]),
+            "patpat-loop maps to router tier",
+        )
+        check(
+            tier_max_tokens("skills/patpat-run/SKILL.md") == ("orchestrator", ORCHESTRATOR_MAX_TOKENS),
+            "patpat-run maps to orchestrator tier",
         )
         check(
             tier_max_tokens("skills/patpat-ship/SKILL.md") == ("specialist", HEAVY_SPECIALIST_MAX_TOKENS),
@@ -203,28 +239,36 @@ def self_test() -> int:
             "unlisted skill maps to leaf tier",
         )
         synthetic = [
-            {"entry": "skills/patpat-loop/SKILL.md", "bytes": 0, "approx_tokens": ORCHESTRATOR_MAX_TOKENS},
-            {"entry": "skills/patpat-ship/SKILL.md", "bytes": 0, "approx_tokens": HEAVY_SPECIALIST_MAX_TOKENS},
-            {"entry": "skills/demo/SKILL.md", "bytes": 0, "approx_tokens": LEAF_MAX_TOKENS},
+            {"entry": "skills/patpat/SKILL.md", "bytes": 0, "files": 4, "approx_tokens": ROUTER_LIMITS["patpat"][0]},
+            {"entry": "skills/patpat-loop/SKILL.md", "bytes": 0, "files": 10, "approx_tokens": ROUTER_LIMITS["patpat-loop"][0]},
+            {"entry": "skills/patpat-run/SKILL.md", "bytes": 0, "files": 15, "approx_tokens": ORCHESTRATOR_MAX_TOKENS},
+            {"entry": "skills/patpat-ship/SKILL.md", "bytes": 0, "files": 11, "approx_tokens": HEAVY_SPECIALIST_MAX_TOKENS},
+            {"entry": "skills/demo/SKILL.md", "bytes": 0, "files": 3, "approx_tokens": LEAF_MAX_TOKENS},
         ]
         check(check_budget(synthetic, use_tiers=True) == [], "exact tier ceilings pass")
-        over_leaf = [{"entry": "skills/demo/SKILL.md", "bytes": 0, "approx_tokens": LEAF_MAX_TOKENS + 1}]
+        over_leaf = [{"entry": "skills/demo/SKILL.md", "bytes": 0, "files": 1, "approx_tokens": LEAF_MAX_TOKENS + 1}]
         leaf_violations = check_budget(over_leaf, use_tiers=True)
         check(
             len(leaf_violations) == 1 and "over leaf token budget:" in leaf_violations[0],
             "leaf skill exceeding LEAF_MAX_TOKENS is flagged even when under ORCHESTRATOR_MAX_TOKENS",
         )
-        over_spec = [{"entry": "skills/patpat-ship/SKILL.md", "bytes": 0, "approx_tokens": HEAVY_SPECIALIST_MAX_TOKENS + 1}]
+        over_spec = [{"entry": "skills/patpat-ship/SKILL.md", "bytes": 0, "files": 1, "approx_tokens": HEAVY_SPECIALIST_MAX_TOKENS + 1}]
         spec_violations = check_budget(over_spec, use_tiers=True)
         check(
             len(spec_violations) == 1 and "over specialist token budget:" in spec_violations[0],
             "specialist skill exceeding HEAVY_SPECIALIST_MAX_TOKENS is flagged",
         )
-        over_orch = [{"entry": "skills/patpat-loop/SKILL.md", "bytes": 0, "approx_tokens": ORCHESTRATOR_MAX_TOKENS + 1}]
+        over_orch = [{"entry": "skills/patpat-run/SKILL.md", "bytes": 0, "files": 1, "approx_tokens": ORCHESTRATOR_MAX_TOKENS + 1}]
         orch_violations = check_budget(over_orch, use_tiers=True)
         check(
             len(orch_violations) == 1 and "over orchestrator token budget:" in orch_violations[0],
             "orchestrator skill exceeding ORCHESTRATOR_MAX_TOKENS is flagged",
+        )
+        over_router_files = [{"entry": "skills/patpat-loop/SKILL.md", "bytes": 0, "files": 11, "approx_tokens": 1000}]
+        router_file_violations = check_budget(over_router_files, use_tiers=True)
+        check(
+            len(router_file_violations) == 1 and "over router file budget:" in router_file_violations[0],
+            "router skill exceeding file budget is flagged",
         )
     print("context_footprint self-test: ok")
     return 0
@@ -247,7 +291,9 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help=(
             f"enforce tiered CI token-budget ceilings "
-            f"(orchestrator <= {ORCHESTRATOR_MAX_TOKENS}, specialist <= {HEAVY_SPECIALIST_MAX_TOKENS}, "
+            f"(router: patpat <= {ROUTER_LIMITS['patpat'][0]}/{ROUTER_LIMITS['patpat'][1]}f, "
+            f"patpat-loop <= {ROUTER_LIMITS['patpat-loop'][0]}/{ROUTER_LIMITS['patpat-loop'][1]}f; "
+            f"orchestrator <= {ORCHESTRATOR_MAX_TOKENS}, specialist <= {HEAVY_SPECIALIST_MAX_TOKENS}, "
             f"leaf <= {LEAF_MAX_TOKENS} ~tokens unless --max-tokens is set)"
         ),
     )
@@ -267,7 +313,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.entry:
         rows = [footprint(args.entry.resolve(), args.depth)]
         rows[0]["entry"] = args.entry.as_posix()
-        rows[0]["entry_bytes"] = args.entry.stat().st_size
+        rows[0]["entry_bytes"] = lf_utf8_size(args.entry.resolve())
     else:
         rows = report(root, args.depth)
 

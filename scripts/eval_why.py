@@ -37,7 +37,9 @@ def _text(path: Path) -> str:
 
 
 def _git(*args: str) -> str:
-    return subprocess.check_output(["git", *args], cwd=ROOT, text=True).strip()
+    return subprocess.check_output(
+        ["git", *args], cwd=ROOT, text=True, encoding="utf-8", errors="replace"
+    ).strip()
 
 
 def assert_playbook_contract() -> None:
@@ -66,16 +68,25 @@ def assert_playbook_contract() -> None:
         raise AssertionError("rationale questions must remain in patpat-inspect")
     if re.search(r"(?m)^# /why\b", blob):
         raise AssertionError("introduced a separate /why skill")
-    if "how-report.md" not in _text(HOW_CONTRACT) and not HOW_CONTRACT.exists():
+    if not HOW_CONTRACT.exists():
         raise AssertionError("how-report contract missing; C neighbor must remain")
 
 
+def _ship_plan_line_range() -> tuple[int, int]:
+    src_lines = _text(SOURCE).splitlines()
+    start = next(i + 1 for i, line in enumerate(src_lines) if line.startswith("def ship_plan("))
+    end = min(len(src_lines), start + 14)
+    return start, end
+
+
 def git_anchors() -> dict[str, str]:
-    src = SOURCE.as_posix() if False else "scripts/dry_run_loop.py"
+    src = "scripts/dry_run_loop.py"
+    start, end = _ship_plan_line_range()
+    blame_range = f"{start},{end}"
     log = _git("log", "--oneline", "-n", "12", "--", src)
-    blame = _git("blame", "-L", "87,101", "--", src)
+    blame = _git("blame", "-L", blame_range, "--", src)
     focused = _git("log", "-S", "explicit_merge", "--oneline", "--", src)
-    return {"log": log, "blame": blame, "focused": focused}
+    return {"log": log, "blame": blame, "blame_range": blame_range, "focused": focused}
 
 
 def why_ship_plan_report(anchors: dict[str, str]) -> str:
@@ -104,7 +115,7 @@ Current behavior: `ship_plan()` returns `merge` only when `explicit_merge` is tr
 - Symbol: `ship_plan` (line {ship_line}), `explicit_merge` branch (line {explicit_line}), `continuation` branch (line {continuation_line})
 - Focused log (`git log -S explicit_merge -- scripts/dry_run_loop.py`):
 {focused}
-- Blame (`git blame -L 87,101 -- scripts/dry_run_loop.py`):
+- Blame (`git blame -L {anchors["blame_range"]} -- scripts/dry_run_loop.py`):
 {blame}
 - Recent file log:
 {log}

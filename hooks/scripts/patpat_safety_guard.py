@@ -112,6 +112,16 @@ GIT_VALUE_FLAGS = {
     "--super-prefix",
     "--config-env",
 }
+GIT_PUSH_VALUE_FLAGS = {
+    "-o",
+    "--push-option",
+    "--repo",
+    "--receive-pack",
+    "--exec",
+}
+SHELL_EXECUTABLES = {"sh", "bash", "zsh", "dash"}
+SHELL_VALUE_FLAGS = {"-o", "+o", "-O", "+O", "--rcfile", "--init-file"}
+MAX_RECURSION_DEPTH = 3
 
 PROTECTED_BRANCHES = {"main", "master"}
 ENV_ASSIGNMENT = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
@@ -126,7 +136,7 @@ CO_AUTHOR = re.compile(
     r"""(?im)(?:^|['"`])[\t ]*co-authored-by:\s*(?P<name>[^<\n'"`]*?)\s*(?:<(?P<email>[^>\n'"`]*)>)?[\t ]*(?:['"`]|$)"""
 )
 GENERATED = re.compile(
-    r"""(?im)(?:^|['"`])[\t ]*(?:🤖\s*)?generated (?:with|by)\b(?P<rest>[^\n'"`]*)"""
+    r"""(?im)(?:^|['"`])[>*_~\t -]*(?:🤖[ \t]*)?generated (?:with|by)\b(?P<rest>[^\n'"`]*)"""
 )
 STRIP_CHARS = " \t'\"`"
 
@@ -347,11 +357,20 @@ def _check_git_push(argv: list[str]) -> str | None:
     has_delete = False
     positional: list[str] = []
     after_double_dash = False
-    for arg in push_args:
+    arg_idx = 0
+    while arg_idx < len(push_args):
+        arg = push_args[arg_idx]
         if not after_double_dash and arg == "--":
             after_double_dash = True
+            arg_idx += 1
             continue
         if not after_double_dash and arg.startswith("-"):
+            if arg in GIT_PUSH_VALUE_FLAGS:
+                arg_idx += 2
+                continue
+            if arg.startswith("-o") and len(arg) > 2:
+                arg_idx += 1
+                continue
             if arg == "--force" or arg == "-f":
                 return (
                     "Blocked by Patpat safety guard: `git push --force` / `-f` is disabled. "
@@ -359,20 +378,29 @@ def _check_git_push(argv: list[str]) -> str | None:
                 )
             if arg.startswith("--force-with-lease"):
                 has_force_with_lease = True
+                arg_idx += 1
                 continue
             if arg in ("--delete", "-d"):
                 has_delete = True
+                arg_idx += 1
                 continue
             if not arg.startswith("--"):
-                if "f" in arg[1:]:
+                flags = arg[1:]
+                o_pos = flags.find("o")
+                flag_prefix = flags[: o_pos + 1] if o_pos != -1 else flags
+                if "f" in flag_prefix:
                     return (
                         f"Blocked by Patpat safety guard: force-push flag `{arg}` in `git push` is disabled."
                     )
-                if "d" in arg[1:]:
+                if "d" in flag_prefix:
                     has_delete = True
+                if o_pos != -1 and o_pos == len(flags) - 1:
+                    arg_idx += 2
                     continue
+            arg_idx += 1
         else:
             positional.append(arg)
+            arg_idx += 1
     for ref in positional:
         if ref.startswith("+"):
             return (
@@ -443,7 +471,168 @@ def _check_bash_plugin_cache_write(argv: list[str]) -> str | None:
     return None
 
 
-def evaluate_bash_command(command: str) -> str | None:
+def _extract_backtick_commands(command: str) -> list[str]:
+    """Extract unescaped backtick command substitutions outside single quotes."""
+    extracted: list[str] = []
+    in_single = False
+    in_double = False
+    in_backtick = False
+    escaped = False
+    buf: list[str] = []
+    for ch in command:
+        if escaped:
+            if in_backtick:
+                buf.append(ch)
+            escaped = False
+            continue
+        if in_single:
+            if ch == "'":
+                in_single = False
+            continue
+        if ch == "\\":
+            escaped = True
+            continue
+        if not in_backtick:
+            if not in_double and ch == "'":
+                in_single = True
+                continue
+            if ch == '"':
+                in_double = not in_double
+                continue
+        if ch == "`":
+            if in_backtick:
+                snippet = "".join(buf).strip()
+                if snippet:
+                    extracted.append(snippet)
+                buf.clear()
+                in_backtick = False
+            else:
+                in_backtick = True
+            continue
+        if in_backtick:
+            buf.append(ch)
+    return extracted
+
+
+def _extract_dollar_paren_commands(command: str) -> list[str]:
+    """Extract unescaped $(...) command substitutions outside single quotes."""
+    extracted: list[str] = []
+    in_single = False
+    in_double = False
+    escaped = False
+    i = 0
+    length = len(command)
+    while i < length:
+        ch = command[i]
+        if escaped:
+            escaped = False
+            i += 1
+            continue
+        if in_single:
+            if ch == "'":
+                in_single = False
+            i += 1
+            continue
+        if ch == "\\":
+            escaped = True
+            i += 1
+            continue
+        if not in_double and ch == "'":
+            in_single = True
+            i += 1
+            continue
+        if ch == '"':
+            in_double = not in_double
+            i += 1
+            continue
+        if ch == "$" and i + 1 < length and command[i + 1] == "(":
+            # Skip arithmetic $((...)) only if doubled; otherwise capture balanced $(...).
+            start = i + 2
+            depth = 1
+            sub_single = False
+            sub_double = False
+            sub_escaped = False
+            j = start
+            while j < length and depth > 0:
+                c = command[j]
+                if sub_escaped:
+                    sub_escaped = False
+                    j += 1
+                    continue
+                if sub_single:
+                    if c == "'":
+                        sub_single = False
+                    j += 1
+                    continue
+                if c == "\\":
+                    sub_escaped = True
+                    j += 1
+                    continue
+                if not sub_double and c == "'":
+                    sub_single = True
+                    j += 1
+                    continue
+                if c == '"':
+                    sub_double = not sub_double
+                    j += 1
+                    continue
+                if not sub_double:
+                    if c == "(":
+                        depth += 1
+                    elif c == ")":
+                        depth -= 1
+                        if depth == 0:
+                            break
+                j += 1
+            snippet = command[start:j].strip()
+            if snippet:
+                extracted.append(snippet)
+            i = j + 1
+            continue
+        i += 1
+    return extracted
+
+
+def _extract_shell_c_script(argv: list[str]) -> str | None:
+    """Return the inline command string passed to `sh/bash/zsh/dash -c`, if any."""
+    seen_c = False
+    idx = 1
+    while idx < len(argv):
+        arg = argv[idx]
+        if arg == "--":
+            idx += 1
+            break
+        if arg in SHELL_VALUE_FLAGS:
+            idx += 2
+            continue
+        if arg.startswith(("-", "+")) and len(arg) > 1:
+            if not arg.startswith("--"):
+                flags = arg[1:]
+                if arg.startswith("-") and "c" in flags:
+                    seen_c = True
+                extra = sum(1 for ch in flags if ch in ("o", "O"))
+                idx += 1 + extra
+                continue
+            idx += 1
+            continue
+        break
+    if seen_c and idx < len(argv):
+        return argv[idx]
+    return None
+
+
+def _check_attribution_block(text: str) -> str | None:
+    hits = find_attribution(text)
+    if not hits:
+        return None
+    detail = "; ".join(hits)
+    return (
+        f"Blocked by Patpat safety guard (P1 attribution): {detail}. "
+        "Remove AI-agent Co-Authored-By trailers and 'Generated with' footers per AGENTS.md."
+    )
+
+
+def _evaluate_bash_command_inner(command: str, depth: int) -> tuple[str | None, bool]:
     check_attribution = False
     for segment in _split_shell_commands(command):
         _, argv = _unwrap_command(segment)
@@ -453,27 +642,45 @@ def evaluate_bash_command(command: str) -> str | None:
         if exe == "git":
             reason = _check_git_push(argv)
             if reason:
-                return reason
+                return reason, check_attribution
             subcmd, _ = _git_subcommand(argv)
             if subcmd == "commit":
                 check_attribution = True
         elif exe == "gh":
             reason = _check_gh_merge(argv)
             if reason:
-                return reason
+                return reason, check_attribution
             if len(argv) >= 3 and argv[1].lower() == "pr" and argv[2].lower() in {"create", "edit", "merge"}:
                 check_attribution = True
+        elif exe in SHELL_EXECUTABLES and depth < MAX_RECURSION_DEPTH:
+            script = _extract_shell_c_script(argv)
+            if script:
+                sub_reason, sub_attr = _evaluate_bash_command_inner(script, depth + 1)
+                if sub_reason:
+                    return sub_reason, True
+                check_attribution = check_attribution or sub_attr
         reason = _check_bash_plugin_cache_write(argv)
         if reason:
-            return reason
+            return reason, check_attribution
+    if depth < MAX_RECURSION_DEPTH:
+        for sub_cmd in (*_extract_backtick_commands(command), *_extract_dollar_paren_commands(command)):
+            sub_reason, sub_attr = _evaluate_bash_command_inner(sub_cmd, depth + 1)
+            if sub_reason:
+                return sub_reason, True
+            check_attribution = check_attribution or sub_attr
     if check_attribution:
-        hits = find_attribution(command)
-        if hits:
-            detail = "; ".join(hits)
-            return (
-                f"Blocked by Patpat safety guard (P1 attribution): {detail}. "
-                "Remove AI-agent Co-Authored-By trailers and 'Generated with' footers per AGENTS.md."
-            )
+        attr_reason = _check_attribution_block(command)
+        if attr_reason:
+            return attr_reason, True
+    return None, check_attribution
+
+
+def evaluate_bash_command(command: str) -> str | None:
+    reason, check_attribution = _evaluate_bash_command_inner(command, 0)
+    if reason:
+        return reason
+    if check_attribution:
+        return _check_attribution_block(command)
     return None
 
 
@@ -544,14 +751,66 @@ def evaluate_payload(payload: Any) -> tuple[int, str]:
     return 0, ""
 
 
+OVERSIZED_COMMAND_START = re.compile(r'"command"\s*:\s*"')
+
+
+def _extract_oversized_command_prefixes(scanned: str) -> list[str]:
+    """Decode every JSON string prefix of `"command": "..."` fields in a truncated payload."""
+    results: list[str] = []
+    length = len(scanned)
+    for match in OVERSIZED_COMMAND_START.finditer(scanned):
+        chars: list[str] = []
+        idx = match.end()
+        while idx < length:
+            ch = scanned[idx]
+            if ch == '"':
+                break
+            if ch == "\\":
+                if idx + 1 >= length:
+                    break
+                nxt = scanned[idx + 1]
+                if nxt == "n":
+                    chars.append("\n")
+                elif nxt == "r":
+                    chars.append("\r")
+                elif nxt == "t":
+                    chars.append("\t")
+                elif nxt in ('"', "\\", "/"):
+                    chars.append(nxt)
+                elif nxt == "u" and idx + 5 < length:
+                    try:
+                        chars.append(chr(int(scanned[idx + 2 : idx + 6], 16)))
+                        idx += 6
+                        continue
+                    except ValueError:
+                        chars.append(nxt)
+                else:
+                    chars.append(nxt)
+                idx += 2
+                continue
+            chars.append(ch)
+            idx += 1
+        decoded = "".join(chars)
+        if decoded.strip():
+            results.append(decoded)
+    return results
+
+
 def _scan_oversized_payload(raw_prefix: str, stream: io.TextIOBase) -> tuple[int, str]:
-    """Scan oversized (>MAX_STDIN_BYTES) payloads up to MAX_OVERSIZED_SCAN_BYTES for plugin-cache paths."""
+    """Scan oversized (>MAX_STDIN_BYTES) payloads up to MAX_OVERSIZED_SCAN_BYTES."""
     remaining = MAX_OVERSIZED_SCAN_BYTES - len(raw_prefix)
     scanned = raw_prefix + (stream.read(remaining) if remaining > 0 else "")
     tool_match = OVERSIZED_TOOL_NAME.search(scanned[:4096]) or OVERSIZED_TOOL_NAME.search(scanned[-4096:])
     tool_name = tool_match.group(1).strip().lower() if tool_match else ""
     if tool_name and tool_name not in FILE_WRITE_TOOLS and tool_name not in BASH_TOOLS:
         return 0, ""
+    if tool_name in BASH_TOOLS or not tool_name:
+        try:
+            payload = json.loads(scanned)
+        except json.JSONDecodeError:
+            payload = None
+        if isinstance(payload, dict):
+            return evaluate_payload(payload)
     for match in OVERSIZED_PATH_FIELD.finditer(scanned):
         candidate = match.group(1).replace("\\\\", "/")
         if is_plugin_cache_path(candidate):
@@ -560,7 +819,7 @@ def _scan_oversized_payload(raw_prefix: str, stream: io.TextIOBase) -> tuple[int
                 f"Blocked by Patpat safety guard: refusing to edit installed plugin cache path `{candidate}` "
                 "(.out-of-scope/plugin-cache-self-edit.md).",
             )
-    if tool_name in BASH_TOOLS:
+    if tool_name in BASH_TOOLS or (not tool_name and OVERSIZED_COMMAND_START.search(scanned)):
         normalized = scanned.replace("\\\\", "/").replace("\\", "/").lower()
         if PLUGIN_CACHE_PATH.search(normalized):
             return (
@@ -568,6 +827,10 @@ def _scan_oversized_payload(raw_prefix: str, stream: io.TextIOBase) -> tuple[int
                 "Blocked by Patpat safety guard: oversized Bash payload references installed plugin cache path "
                 "(.out-of-scope/plugin-cache-self-edit.md).",
             )
+        for extracted_cmd in _extract_oversized_command_prefixes(scanned):
+            reason = evaluate_bash_command(extracted_cmd)
+            if reason:
+                return 2, reason
     return 0, ""
 
 
@@ -656,6 +919,39 @@ def self_test() -> int:
         ("gh pr edit with generated by codex blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": "gh pr edit 42 --body 'Generated by Codex'"}}), 2),
         ("gh pr merge with gemini co-author blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": "gh pr merge 42 --squash --body 'Co-Authored-By: Gemini'"}}), 2),
         ("chained git add && git commit attribution blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": "git add . && git commit -m 'fix\\n\\nGenerated with Claude'"}}), 2),
+        # Hardened bypass regressions: value-taking push flags, backticks, bash -c, Markdown attribution, oversized Bash
+        ("git push -o ci.skip --force-with-lease origin blocks fail-closed", json.dumps({"tool_name": "Bash", "tool_input": {"command": "git push -o ci.skip --force-with-lease origin"}}), 2),
+        ("git push --push-option a --force-with-lease origin feat/x passes", json.dumps({"tool_name": "Bash", "tool_input": {"command": "git push --push-option a --force-with-lease origin feat/x"}}), 0),
+        ("backtick command substitution git push -f blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": "echo `git push -f origin main`"}}), 2),
+        ("double-quoted backtick git push -f blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": 'echo "`git push -f origin main`"'}}), 2),
+        ("single-quoted backtick git push -f passes", json.dumps({"tool_name": "Bash", "tool_input": {"command": "echo '`git push -f origin main`'"}}), 0),
+        ("bash -c git push -f blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": "bash -c 'git push -f origin main'"}}), 2),
+        ("sh -lc gh pr merge --auto blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": "sh -lc 'gh pr merge 42 --auto'"}}), 2),
+        ("bash -c git commit attribution blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": "bash -c \"git commit -m 'fix\\n\\nCo-Authored-By: Claude'\""}}), 2),
+        ("blockquote generated footer in PR create blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": "gh pr create --title 'x' --body 'Summary\\n\\n> Generated with Claude'"}}), 2),
+        ("emphasized generated footer in PR create blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": "gh pr create --title 'x' --body 'Summary\\n\\n*Generated with [Claude Code](https://claude.com)*'"}}), 2),
+        ("oversized Bash git push -f blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": f"echo {big_content} && git push -f origin main"}}), 2),
+        ("oversized Bash P1 attribution blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": f"gh pr create --title x --body '{big_content}\\n\\nCo-Authored-By: Claude <noreply@anthropic.com>'"}}), 2),
+        # Review hardening regressions: ReDoS guard, >2 MiB Bash truncation, omitted tool_name, POSIX shell -c/quotes, attached -o flags
+        ("long markdown rule in commit passes fast without ReDoS", json.dumps({"tool_name": "Bash", "tool_input": {"command": f"git commit -m 'docs\\n\\n{'-' * 60}\\nbody'"}}), 0),
+        ("over-2MiB truncated Bash git push -f blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": "git push -f origin main && echo " + ("x" * (MAX_OVERSIZED_SCAN_BYTES + 1024))}}), 2),
+        ("oversized Bash without tool_name git push -f blocks", json.dumps({"command": f"echo {big_content} && git push -f origin main"}), 2),
+        ("bash -c -- git push -f blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": "bash -c -- 'git push -f origin main'"}}), 2),
+        ("bash -c -e git push -f blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": "bash -c -e 'git push -f origin main'"}}), 2),
+        ("bash -o pipefail -c git push -f blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": "bash -o pipefail -c 'git push -f origin main'"}}), 2),
+        ("sh +e -c git push -f blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": "sh +e -c 'git push -f origin main'"}}), 2),
+        ("apostrophe inside double quotes before backtick git push -f blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": 'echo "don\'t `git push -f origin main`"'}}), 2),
+        ("git push -uo ci.skip --force-with-lease origin blocks fail-closed", json.dumps({"tool_name": "Bash", "tool_input": {"command": "git push -uo ci.skip --force-with-lease origin"}}), 2),
+        ("git push -ofast origin feat/x passes without false-positive -f", json.dumps({"tool_name": "Bash", "tool_input": {"command": "git push -ofast origin feat/x"}}), 0),
+        # Round-2 review regressions: bundled -o/-O shell flags, escaped quotes P1 inside bash -c, decoy command field >2MiB, double-quoted $(...)
+        ("bash -euo pipefail -c git push -f blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": "bash -euo pipefail -c 'git push -f origin main'"}}), 2),
+        ("bash -co pipefail git push -f blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": "bash -co pipefail 'git push -f origin main'"}}), 2),
+        ("sh +eo errexit -c gh pr merge --auto blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": "sh +eo errexit -c 'gh pr merge 42 --auto'"}}), 2),
+        ("bash -c escaped double-quote Co-Authored-By email blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": 'bash -c "git commit -m \\"fix\\" -m \\"Co-Authored-By: Claude <noreply@anthropic.com>\\""'}}), 2),
+        ("over-2MiB payload with earlier decoy command field blocks", json.dumps({"meta": {"command": "noop"}, "tool_name": "Bash", "tool_input": {"command": "git push -f origin main && echo " + ("x" * (MAX_OVERSIZED_SCAN_BYTES + 1024))}}), 2),
+        ("double-quoted dollar-paren git push -f blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": 'echo "$(git push -f origin main)"'}}), 2),
+        ("double-quoted dollar-paren gh pr merge --auto blocks", json.dumps({"tool_name": "Bash", "tool_input": {"command": 'X="$(gh pr merge 42 --auto)"'}}), 2),
+        ("single-quoted dollar-paren git push -f passes", json.dumps({"tool_name": "Bash", "tool_input": {"command": "echo '$(git push -f origin main)'"}}), 0),
     ]
     failed: list[str] = []
     for name, raw_input, expected_code in cases:
@@ -691,7 +987,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.self_test:
         return self_test()
-    code, message = handle_stream(sys.stdin)
+    stream: io.TextIOBase = (
+        io.TextIOWrapper(sys.stdin.buffer, encoding="utf-8", errors="replace")
+        if hasattr(sys.stdin, "buffer")
+        else sys.stdin
+    )
+    code, message = handle_stream(stream)
     if message:
         print(message, file=sys.stderr)
     return code

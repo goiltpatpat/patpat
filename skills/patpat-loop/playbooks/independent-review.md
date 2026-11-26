@@ -5,7 +5,7 @@ Read repository truth, [proof over proxy](../principles/proof-over-proxy.md), an
 ## Review steps
 
 1. Freeze the objective, proof contract, exact diff/artifact, and raw verification receipts.
-2. Use a separate read-only reviewer for high-risk work when available and authorized; enforce double-blind review (pass only objective, diff, and raw receipts—strip implementer chain-of-thought, rationalizations, and intended conclusion). Maintain strict anti-sycophancy (no flattery or apologetic filler); lead with critique.
+2. Use a separate read-only reviewer for high-risk work when available and authorized; enforce double-blind review (pass only objective, proof contract, exact diff or patch path, snapshot binding, and raw verification receipts—strip implementer chain-of-thought, rationalizations, and intended conclusion). When the reviewer has no shell, include raw command outputs and any mutation-resilience proof in the packet; the reviewer reports missing packet artifacts as a verification gap rather than guessing, and the parent records the delivery review receipt after receiving the verdict. Maintain strict anti-sycophancy (no flattery or apologetic filler); lead with critique.
 3. Trace changed contracts, callers, side effects, and safety boundaries.
 4. Execute the solution-integrity audit.
 5. Reconcile material requirements with the proof contract and try to falsify both implementation and proof claims (passing declared claims does not cover omitted requirements).

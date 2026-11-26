@@ -33,9 +33,9 @@ Climb to the highest fast, deterministic rung the defect supports, tightening up
 9. Narrowed HITL reproduction script (one-command launcher, exact human observation, clear pass/fail exit).
 10. Static contract and code-path trace (only when runtime execution is unsafe or impossible; report missing runtime proof).
 
-**Forced-mutation gate**: Before trusting a red loop, prove it is wired to the actual code under test. Introduce one temporary obvious mutation (or confirm a deliberate probe flips the observed output), verify the loop detects the change, revert the probe, and only then begin root-cause diagnosis. Never trust a reproduction that has not been proven sensitive to the subject.
+**Forced-mutation gate**: Before trusting a red loop, prove it is wired to the actual code under test. Introduce one temporary obvious mutation (in non-Git workspaces, back up the target file first), verify the loop detects the change, revert or restore the probe, and only then begin root-cause diagnosis. Never trust a reproduction that has not been proven sensitive to the subject.
 
-Use **Causal-Chain Backtracking** to trace backward step-by-step from the observed failure to the earliest incorrect state transition or broken assumption before touching code (name the suspect boundary/line explicitly). If an initial probe or edit contradicts the active premise, rewind to the clean pre-edit breakpoint and update the causal hypothesis rather than stacking speculative patches on top of the last visible symptom.
+Use **Causal-Chain Backtracking** to trace backward step-by-step from the observed failure to the earliest incorrect state transition or broken assumption before touching code (name the suspect boundary/line explicitly). If an initial probe or edit contradicts the active premise, rewind to the clean pre-edit breakpoint (or pre-edit backup snapshot outside Git) and update the causal hypothesis rather than stacking speculative patches on top of the last visible symptom.
 
 If the user limited the request to diagnosis, stop after proving or bounding the root cause. Recommend the smallest patch without editing.
 

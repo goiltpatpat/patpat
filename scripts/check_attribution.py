@@ -16,7 +16,7 @@ AGENT_NAMES = re.compile(
 )
 AGENT_EMAILS = {"noreply@anthropic.com", "cursoragent@cursor.com"}
 CO_AUTHOR = re.compile(r"(?im)^\s*co-authored-by:\s*(?P<name>[^<\n]*?)\s*(?:<(?P<email>[^>\n]*)>)?\s*$")
-GENERATED = re.compile(r"(?im)^\s*(?:🤖\s*)?generated (?:with|by)\b(?P<rest>.*)$")
+GENERATED = re.compile(r"(?im)^[>*_~\t -]*(?:🤖[ \t]*)?generated (?:with|by)\b(?P<rest>.*)$")
 
 
 def find_attribution(text: str) -> list[str]:
@@ -77,8 +77,11 @@ def self_test() -> int:
     results = {
         "human co-author passes": clean == [],
         "trailer without email fails": len(find_attribution("x\n\nCo-Authored-By: Claude\n")) == 1,
-        "agent trailer fails":len(trailer) == 1 and "Co-Authored-By" in trailer[0],
+        "agent trailer fails": len(trailer) == 1 and "Co-Authored-By" in trailer[0],
         "generated footer in PR body fails": len(footer) == 1 and footer[0].startswith("pull request body"),
+        "blockquote generated footer fails": len(find_attribution("Summary\n\n> Generated with Claude\n")) == 1,
+        "emphasized generated footer fails": len(find_attribution("Summary\n\n*Generated with [Claude Code](https://claude.com)*\n")) == 1,
+        "long markdown rule completes fast without false positive": find_attribution(("-" * 60) + "\nSummary\n") == [],
     }
     for name, ok in results.items():
         if not ok:
