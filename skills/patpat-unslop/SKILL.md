@@ -44,8 +44,8 @@ Rule numbers are stable: retired rules leave gaps and are never renumbered so cr
 15. **Redundant paraphrasing and compensating comments.** Delete comments that restate code (`// loop over items`). Comments explain *why* or non-obvious constraints only. If a comment compensates for an unclear name or tangled flow, rename or simplify instead.
 16. **Dead code and historical commentary.** Delete commented-out code, obsolete workarounds, and apologies (`// hack: fix later`); Git holds history.
 17. **Decorative comment dividers.** Remove ASCII banners, `// ====`, and boxes; use blank lines and modules.
-18. **Orphaned TODOs.** Delete unanchored `TODO`s lacking an owner, issue link, or actionable condition.
-19. **Keep high-value invariants; cut structural bloat.** Keep comments encoding non-obvious *why*, domain invariants, concurrency fences, upstream bug URLs/RFCs, or legal notices. Cut single-caller pass-through wrappers, silent broad catches (`except Exception: pass`), speculative fallback flags, and duplicate helpers.
+18. **Orphaned TODOs.** Delete unanchored `TODO`/`FIXME`s lacking an owner, issue link, or actionable condition. Keep anchored `shortcut: <limit>, <when to upgrade>` comments encoding deliberate bounded trade-offs.
+19. **Keep high-value invariants; cut structural bloat.** Keep comments encoding non-obvious *why*, domain invariants, `shortcut: <limit>, <when to upgrade>` limits, concurrency fences, upstream bug URLs/RFCs, or legal notices. Cut single-caller pass-through wrappers, helpers split merely by line count, silent broad catches (`except Exception: pass`), speculative fallback flags, and duplicate helpers.
 20. **Anti-reward-hacking and verifier integrity.** Reject test skips (`@pytest.mark.skip`, `test.skip(`, `it.skip(`, `[Fact(Skip=...)]`), linter/warning suppressions (`# noqa`, `// eslint-disable`, `#pragma warning disable`, `// @ts-ignore`), and arbitrary sleeps (`time.sleep(`, `Task.Delay(`) added to force green builds. Fix the defect, never silence the oracle.
 
 ## Diataxis mode rule
