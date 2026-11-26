@@ -35,7 +35,12 @@ metadata:
 - Give each skill one distinct responsibility. Add optional files only for an immediate, demonstrated need.
 - A learn pass requires approval and edits existing files only. Do not mint a new `SKILL.md` or personal `*-mode` skill from learn.
 
-Reuse repository-native scripts and patterns. Author skills as concise anti-default nudges countering known model failure modes, never tutorials; do not add generic repository overviews or tours to `AGENTS.md` (restrict it to non-standard commands and invariants). Do not depend on undocumented host behavior, duplicate generic model knowledge, or add optional files without an immediate use.
+Reuse repository-native scripts and patterns. Author skills as concise anti-default nudges countering known model failure modes, never tutorials; do not add generic repository overviews or tours to `AGENTS.md` (restrict it to non-standard commands and invariants). Apply three agent-writing levers to every skill, pointer, and instruction file:
+- **Context-pointer precision:** Front-load the leading action word and keep one trigger per distinct branch (collapse synonyms); every always-loaded line taxes attention on every turn.
+- **Branching disclosure & co-location:** Inline what every branch executes, push branch-only detail behind a pointer, and co-locate definitions beside the rules that use them rather than scattering them across files.
+- **Positive framing:** State the target behavior directly rather than bare prohibitions (`"don't do X"` activates `X` in attention); reserve prohibitions for hard guardrails and pair each with the positive action.
+
+Do not depend on undocumented host behavior, duplicate generic model knowledge, or add optional files without an immediate use.
 
 Run structural validation after every change. Apply [`patpat-eval`](../patpat-eval/SKILL.md) when behavior, routing, or a description changes. Do not promote a skill because its prose appears complete.
 
