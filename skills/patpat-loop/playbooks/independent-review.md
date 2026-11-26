@@ -9,7 +9,7 @@ Read repository truth, [proof over proxy](../principles/proof-over-proxy.md), an
 3. Trace changed contracts, callers, side effects, and safety boundaries.
 4. Execute the solution-integrity audit.
 5. Reconcile material requirements with the proof contract and try to falsify both implementation and proof claims (passing declared claims does not cover omitted requirements).
-6. Report evidence-backed findings by severity (`blocker`, `high`, `medium`, `low`), discarding speculative style noise. Prefer compact diff/tree shapes from [earned representation](../references/earned-representation.md) for structural issues.
+6. Report evidence-backed findings by severity (`blocker`, `high`, `medium`, `low`), discarding speculative style noise. Require a concrete failing input or contract impact for every finding; treat explicit `shortcut: <limit>, <when to upgrade>` comments as deliberate decisions unless expected load or current inputs already cross the stated limit, and split code by job rather than line count. Prefer compact diff/tree shapes from [earned representation](../references/earned-representation.md) for structural issues.
 7. For accepted findings, name the earliest invalid decision via [failure edges](../references/execution-graph.md) and require the smallest fix + named re-verification.
 8. Inspect the corrected artifact directly rather than accepting a summary.
 9. State residual gaps; review never authorizes delivery.

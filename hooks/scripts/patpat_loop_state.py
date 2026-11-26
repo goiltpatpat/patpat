@@ -27,26 +27,41 @@ _POLITE_PREFIX = (
     r"(?:(?:hey|hi|hello|yo|ok|okay|alright|sure|thanks|thank\s+you)\b[\s,!:;-]*)*"
     r"(?:(?:please|plz|pls)\b[\s,]*|"
     r"(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?))*"
+    r"(?:(?:สวัสดี(?:ครับ|ค่ะ)?|ขอบคุณ(?:ครับ|ค่ะ)?|รบกวน|กรุณา|ช่วย|โอเค|ได้เลย)[\s,!:;-]*)*"
 )
 DIRECT_ACTIVATION = re.compile(
     rf"^\s*{_POLITE_PREFIX}"
     r"(?:/|\$)(?:patpat:)?patpat(?:-loop)?"
-    r"(?:[.!?]*\s*$|\s+(?!(?:do\s+not|don't|dont|never|not|without)\b)\S)",
+    r"(?:[.!?]*\s*$|\s+(?!(?:do\s+not|don't|dont|never|not|without\s+(?:activating|enabling|using|turning\s+on))\b|(?:ไม่ต้อง|อย่า|ห้าม|ไม่\s))\S)",
     re.IGNORECASE,
 )
 USE_ACTIVATION = re.compile(
     rf"^\s*{_POLITE_PREFIX}"
-    r"use\s+(?:(?:/|\$)?patpat(?:-loop)?)\s+(?:to|for)\s+"
-    r"(?!(?:not|never|avoid|without|docs?|document|documentation|examples?|quote)\b)\S",
+    r"(?:"
+    r"use\s+(?:(?:/|\$)?(?:patpat:)?patpat(?:-loop)?)\s+(?:to|for)\s+"
+    r"(?!(?:not|never|avoid|without|docs?|document|documentation|examples?|quote)\b)\S"
+    r"|"
+    r"ใช้\s*(?:(?:/|\$)?(?:patpat:)?patpat(?:-loop)?)\s+"
+    r"(?!(?:ไม่ต้อง|อย่า|ห้าม|เป็นตัวอย่าง|ยังไง|อย่างไร|ได้ไหม|ได้มั้ย|หรือยัง|ทำไม|คืออะไร))\S"
+    r"|"
+    r"เปิดใช้(?:งาน)?\s*(?:(?:/|\$)?(?:patpat:)?patpat(?:-loop)?)"
+    r"(?:[.,!?;:\s]*$|[.,!?;:\s]+(?!(?:ไม่ต้อง|อย่า|ห้าม|เป็นตัวอย่าง|ยังไง|อย่างไร|ได้ไหม|ได้มั้ย|หรือยัง|ทำไม|คืออะไร))\S)"
+    r")",
     re.IGNORECASE,
 )
 DISABLE = re.compile(
     rf"^\s*{_POLITE_PREFIX}"
-    r"(?:(?:disable|deactivate|exit|leave)\s+|"
+    r"(?:"
+    r"(?:(?:disable|deactivate|exit)\s+|"
+    r"leave\s+(?!(?:the\s+)?(?:/|\$)?(?:patpat:)?patpat(?:-loop)?\s+(?:active|on|enabled|alone|running|in\s+place)\b)|"
     r"stop(?:\s+using)?\s+|"
     r"(?:turn|switch)\s+off\s+|"
     r"opt\s+out(?:\s+of)?\s+)"
-    r"(?:the\s+)?(?:/|\$)?(?:patpat:)?patpat(?:-loop)?(?=$|[\s.,!?;:])",
+    r"(?:the\s+)?(?:/|\$)?(?:patpat:)?patpat(?:-loop)?(?=$|[\s.,!?;:])(?!\s+from\b)"
+    r"|"
+    r"(?:ปิด(?:ใช้งาน)?|หยุดใช้|เลิกใช้)\s*(?:(?:/|\$)?(?:patpat:)?patpat(?:-loop)?)"
+    r"(?=$|[\s.,!?;:]|หน่อย|ก่อน|ชั่วคราว|แล้ว|ให้|เพื่อ|สำหรับ)(?!\s*(?:ยังไง|อย่างไร|ได้ไหม|ได้มั้ย|หรือยัง|ทำไม|คืออะไร))"
+    r")",
     re.IGNORECASE,
 )
 STICKY_CONTEXT = (
@@ -92,7 +107,7 @@ def project_fingerprint(cwd: object) -> str | None:
 def classify_prompt(prompt: object) -> str:
     if not isinstance(prompt, str):
         return "inactive"
-    if DISABLE.fullmatch(prompt.strip()) or DISABLE.match(prompt.strip()):
+    if DISABLE.match(prompt.strip()):
         return "disable"
     if DIRECT_ACTIVATION.match(prompt) or USE_ACTIVATION.match(prompt):
         return "activate"
@@ -621,6 +636,15 @@ def run_self_test() -> None:
         "Can you use patpat to inspect this repo?",
         "Could you please use /patpat-loop for this refactor?",
         "Ok, /patpat-loop ship this",
+        "ช่วย /patpat แก้บั๊กนี้",
+        "ใช้ patpat แก้บั๊กนี้",
+        "ใช้ /patpat-loop ตรวจสอบโค้ดนี้",
+        "กรุณาใช้ /patpat เพื่อปรับปรุงโมดูลนี้",
+        "Use /patpat:patpat to inspect this repository",
+        "/patpat without editing, explain how auth works",
+        "ใช้ patpat อธิบายโค้ดนี้",
+        "เปิดใช้ patpat",
+        "เปิดใช้งาน patpat",
     )
     for prompt in affirmative:
         if classify_prompt(prompt) != "activate":
@@ -649,6 +673,23 @@ def run_self_test() -> None:
         "Explain how to disable /patpat",
         "Don't turn off patpat",
         '"disable /patpat"',
+        "Leave patpat active",
+        "Leave patpat on for this session",
+        "Stop patpat from pushing to main",
+        "อย่าใช้ patpat",
+        "ไม่ต้องใช้ /patpat",
+        "ห้ามใช้ patpat แก้ไฟล์นี้",
+        "อธิบายว่า /patpat ทำงานยังไง",
+        "/patpat ไม่ต้องเปิดใช้งานโหมดนี้",
+        "อย่าปิด /patpat",
+        "ปิด /patpat ยังไง",
+        "เลิกใช้ patpat ได้ไหม",
+        "เปิดใช้งาน patpat เป็นตัวอย่าง",
+        "เปิดใช้ patpat เป็นตัวอย่าง ให้ดู",
+        "เปิดใช้งาน patpat ไม่ต้อง",
+        "เปิดใช้ patpat ยังไง",
+        "เปิดใช้งาน patpat ได้ไหม",
+        "ใช้ patpat ยังไง",
     )
     for prompt in inactive:
         if classify_prompt(prompt) != "inactive":
@@ -665,6 +706,10 @@ def run_self_test() -> None:
         "Hey, stop using /patpat-loop and just explain X",
         "Can you exit patpat?",
         "opt out of patpat for now",
+        "ปิด /patpat",
+        "หยุดใช้ patpat",
+        "เลิกใช้ /patpat",
+        "ช่วยปิด /patpat หน่อย",
     )
     for prompt in disable_prompts:
         if classify_prompt(prompt) != "disable":

@@ -50,6 +50,10 @@ LEARN?
 
 Stop at an approval gate when the next transition would delete data, alter production, weaken a safety boundary, change billing or permissions, force-push, publish a package, or deploy. Explicit Patpat activation authorizes the loop, proof, and verify; default commit-and-PR still requires delivery intent. Merge still requires explicit land or merge language and a passing provider gate. Overnight, going to bed, and don't-stop language are delivery intent and stop at merge-ready.
 
+## Active-Scaffold Breakpoint Interception
+
+Before executing a high-risk or branching step (cross-boundary edit, schema/contract change, multi-file refactor, or any step after contradictory tool output), run a 1-line **Step-Risk Check** confirming fresh evidence still supports the active premise. If a mid-flight observation contradicts the premise, rewind to the last clean breakpoint (revert or discard the speculative edit/branch, update the causal hypothesis from the observed divergence, and re-execute locally from that breakpoint) rather than patching forward on top of a polluted state.
+
 ## Bounded retry and Diagnostic Delta
 
 Identify a repeated failure by the same proof step and stable blocker or error signature. Record the relevant candidate snapshot for each failure, but a changed snapshot alone does not break the streak when successive fixes preserve the same failed premise. A retry must add evidence or change the hypothesis, implementation, verifier, or environment; command spelling alone is not a change.

@@ -37,10 +37,7 @@ LEGACY_BABYSIT_NEGATION = re.compile(
     r"babysit(?:ting)?\b",
     re.IGNORECASE,
 )
-DISABLE_MODE = re.compile(
-    r"^\s*(?:disable\s+(?:/|\$)?patpat(?:-loop)?|opt\s+out(?:\s+of)?\s+patpat(?:-loop)?)\s*[.!?]?\s*$",
-    re.IGNORECASE,
-)
+_HOOK_MODULE = None
 # Behavior over time with rules to check goes to patpat-statechart, ahead of structure diagrams.
 STATECHART_INTENT = re.compile(
     r"\b(?:draw|show|make|create|chart|model|render|run)\b.{0,60}\bstate\s?(?:charts?|diagrams?)\b"
@@ -229,11 +226,15 @@ GAME_IMPLEMENTATION_AFTER_CONCEPT = re.compile(
 
 
 def load_hook():
+    global _HOOK_MODULE
+    if _HOOK_MODULE is not None:
+        return _HOOK_MODULE
     spec = importlib.util.spec_from_file_location("patpat_loop_state", HOOK)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"missing hook script: {HOOK}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    _HOOK_MODULE = module
     return module
 
 
@@ -400,7 +401,7 @@ def has_compound_non_diagram_work(text: str) -> bool:
 
 def route(prompt: str) -> str:
     text = prompt.lower()
-    if DISABLE_MODE.fullmatch(prompt):
+    if load_hook().classify_prompt(prompt) == "disable":
         return "disable"
     if has_statechart_request(text):
         return "loop" if has_compound_non_diagram_work(text) else "statechart"
@@ -478,6 +479,32 @@ def route(prompt: str) -> str:
         return "interrogate"
     if "unslop" in text or "cut ai tells" in text:
         return "unslop"
+    if (
+        "reframe" in text
+        or "sharpen this prompt" in text
+        or "disambiguate" in text
+        or "ช่วยนิยามปัญหา" in text
+        or "ตกผลึกโจทย์" in text
+    ):
+        if (
+            re.search(r"\bwhat(?:['’]s|\s+is|\s+does)\b", text)
+            or "คืออะไร" in text
+            or "หมายถึงอะไร" in text
+            or "read-only" in text
+            or "without editing" in text
+            or "without changing" in text
+            or "don't edit" in text
+            or "dont edit" in text
+            or "do not edit" in text
+            or "don't change" in text
+            or "do not change" in text
+            or "no edits" in text
+            or "what pattern is this" in text
+            or "อ่านอย่างเดียว" in text
+            or "ไม่ต้องแก้" in text
+        ):
+            return "inspect"
+        return "architect"
     if (
         "timeout" in text
         or "bug" in text
@@ -1360,6 +1387,27 @@ def run_self_test() -> None:
         "Don't draw a state diagram; just fix the deadlock.": "debug",
         "Draw a state diagram of auth, then fix the login bug.": "loop",
         "opt out of patpat": "disable",
+        "ปิด /patpat": "disable",
+        "หยุดใช้ patpat": "disable",
+        "เลิกใช้ /patpat": "disable",
+        "stop using patpat": "disable",
+        "turn off patpat": "disable",
+        "disable /patpat:patpat": "disable",
+        "disable /patpat for this question": "disable",
+        "Leave patpat active": "loop",
+        "/patpat reframe this vague requirement": "architect",
+        "sharpen this prompt before we design": "architect",
+        "disambiguate what pattern is this without editing": "inspect",
+        "disambiguate this prompt; don't edit files": "inspect",
+        "disambiguate this prompt without changing anything": "inspect",
+        "disambiguate this prompt; dont edit files": "inspect",
+        "what’s reframe": "inspect",
+        "ช่วยนิยามปัญหา ไม่ต้องแก้ไฟล์": "inspect",
+        "what is reframe": "inspect",
+        "what does disambiguate mean": "inspect",
+        "ช่วยนิยามปัญหาและตกผลึกโจทย์นี้": "architect",
+        "/patpat ปรับปรุงและตรวจสอบโค้ดนี้": "loop",
+        "/patpat แก้บั๊ก timeout และเพิ่ม test": "debug",
     }
     for prompt, expected in cases.items():
         got = route(prompt)

@@ -13,6 +13,7 @@ When one request needs outputs from multiple rows, keep `patpat-loop` as orchest
 | Bounded feature or localized edit | [`patpat-change`](../../patpat-change/SKILL.md) | [Bounded change](../playbooks/bounded-change.md) |
 | Map an unfamiliar workspace into a context graph | [`00-workspace-mapper`](../../00-workspace-mapper/SKILL.md) | Explicit request only; optional |
 | Design architecture changes or run an opportunity scan | [`patpat-architect`](../../patpat-architect/SKILL.md) | [Architecture change](../playbooks/architecture-change.md) |
+| Disambiguate a vague brief or reframe lay wording into expert terms | [`patpat-inspect`](../../patpat-inspect/SKILL.md) / [`patpat-architect`](../../patpat-architect/SKILL.md) | Direct (read-only) or [Architecture change](../playbooks/architecture-change.md) |
 | Explain why code reached its current shape | [`patpat-inspect`](../../patpat-inspect/SKILL.md) | [Rationale forensics](../playbooks/rationale-forensics.md) |
 | Build or extend a playable game | [`patpat-game-builder`](../../patpat-game-builder/SKILL.md) | [Build slice](../../patpat-game-builder/playbooks/build-playable-slice.md); [diagnose](../../patpat-game-builder/playbooks/diagnose-gameplay.md), [verify playthrough](../../patpat-game-builder/playbooks/verify-playthrough.md), [visual iteration](../../patpat-game-builder/playbooks/visual-iteration.md) |
 | Draw an interactive architecture or workflow visual | [`patpat-repository-diagram`](../../patpat-repository-diagram/SKILL.md) | Explicit request only; brief-only or repo-backed |

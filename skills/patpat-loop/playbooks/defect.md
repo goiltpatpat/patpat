@@ -3,7 +3,7 @@
 Read repository truth, [proof over proxy](../principles/proof-over-proxy.md), smallest safe change, and preserve safety.
 
 1. Reproduce the symptom on the same surface and capture the baseline when safe and practical. Otherwise trace the contract or code path, or use an isolated non-harmful surrogate, and record the missing runtime proof.
-2. Trace the failing path until evidence identifies the earliest incorrect state.
+2. Apply causal-chain backtracking along the failing path until fresh evidence identifies the earliest incorrect state or broken premise; if a probe contradicts the premise, rewind to the clean breakpoint instead of patching downstream symptoms.
 3. State the root-cause hypothesis and a falsifying observation. The root cause stays `inferred` until the falsifying observation runs and fails to falsify it.
 4. Stop and recommend the smallest patch when the request is diagnosis-only.
 5. Apply the smallest fix at the responsible boundary when implementation is authorized. Change one causal variable at a time.
