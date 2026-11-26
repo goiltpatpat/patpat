@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 import re
@@ -2102,7 +2103,7 @@ def copy_self_test_source(source_root: Path, destination: Path) -> None:
             raise RuntimeError(f"source file disappeared during self-test snapshot: {relative}")
 
 
-def run_self_test(root: Path) -> list[str]:
+def run_self_test(root: Path, *, skip_subtests: bool = False) -> list[str]:
     root = root.resolve()
     cases: list[tuple[str, Callable[[Path], None], str]] = []
     agent_plugin_cases: list[tuple[str, Callable[[Path], None], str]] = []
@@ -3481,6 +3482,8 @@ def run_self_test(root: Path) -> list[str]:
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         if portable_cli.returncode != 0:
             failures.append(
@@ -3493,274 +3496,101 @@ def run_self_test(root: Path) -> list[str]:
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         if default_cli.returncode == 0:
             failures.append("self-test: default source CLI accepted an Agent Plugins package")
-        for index, (name, mutate, expected) in enumerate(cases):
+        def run_mutation_case(index: int, name: str, mutate: Callable[[Path], None], expected: str) -> str | None:
             fixture = temp_root / f"fixture-{index}"
-            shutil.copytree(root, fixture, ignore=self_test_fixture_ignore(root))
-            mutate(fixture)
-            fixture_errors = validate_root(fixture)
-            if not any(expected in error for error in fixture_errors):
-                failures.append(f"self-test: validator accepted deliberate {name}")
-        for index, (name, mutate, expected) in enumerate(agent_plugin_cases):
+            try:
+                shutil.copytree(root, fixture, ignore=self_test_fixture_ignore(root))
+                mutate(fixture)
+                fixture_errors = validate_root(fixture)
+                if not any(expected in error for error in fixture_errors):
+                    return f"self-test: validator accepted deliberate {name}"
+                return None
+            finally:
+                shutil.rmtree(fixture, ignore_errors=True)
+
+        def run_agent_plugin_case(index: int, name: str, mutate: Callable[[Path], None], expected: str) -> str | None:
             fixture = temp_root / f"agent-plugin-fixture-{index}"
-            create_agent_plugin_fixture(fixture)
-            mutate(fixture)
-            fixture_errors = validate_agent_plugin_package(fixture)
-            if not any(expected in error for error in fixture_errors):
-                failures.append(f"self-test: Agent Plugins validator accepted deliberate {name}")
-    run_script = root / "skills" / "patpat-run" / "scripts" / "run_state.py"
-    result = subprocess.run(
-        [sys.executable, str(run_script), "--self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        failures.append(f"self-test: durable run engine failed: {result.stdout}{result.stderr}")
-    diagram_renderer = root / "skills" / "patpat-repository-diagram" / "scripts" / "render.py"
-    diagram_result = subprocess.run(
-        [sys.executable, str(diagram_renderer), "self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if diagram_result.returncode != 0:
-        failures.append(
-            f"self-test: repository-diagram renderer failed: {diagram_result.stdout}{diagram_result.stderr}"
+            try:
+                create_agent_plugin_fixture(fixture)
+                mutate(fixture)
+                fixture_errors = validate_agent_plugin_package(fixture)
+                if not any(expected in error for error in fixture_errors):
+                    return f"self-test: Agent Plugins validator accepted deliberate {name}"
+                return None
+            finally:
+                shutil.rmtree(fixture, ignore_errors=True)
+
+        worker_count = min(6, max(2, os.cpu_count() or 4))
+        with ThreadPoolExecutor(max_workers=worker_count) as pool:
+            case_futures = [
+                pool.submit(run_mutation_case, index, name, mutate, expected)
+                for index, (name, mutate, expected) in enumerate(cases)
+            ]
+            agent_futures = [
+                pool.submit(run_agent_plugin_case, index, name, mutate, expected)
+                for index, (name, mutate, expected) in enumerate(agent_plugin_cases)
+            ]
+            for future in case_futures:
+                err = future.result()
+                if err:
+                    failures.append(err)
+            for future in agent_futures:
+                err = future.result()
+                if err:
+                    failures.append(err)
+
+    if skip_subtests:
+        return failures
+
+    subtests: list[tuple[str, list[str]]] = [
+        ("durable run engine", [sys.executable, str(root / "skills" / "patpat-run" / "scripts" / "run_state.py"), "--self-test"]),
+        ("repository-diagram renderer", [sys.executable, str(root / "skills" / "patpat-repository-diagram" / "scripts" / "render.py"), "self-test"]),
+        ("repository-diagram import graph", [sys.executable, str(root / "skills" / "patpat-repository-diagram" / "scripts" / "import_graph.py"), "--self-test"]),
+        ("decision trail helper", [sys.executable, str(root / "skills" / "patpat-run" / "scripts" / "decisions.py"), "--self-test"]),
+        ("sticky hook", [sys.executable, str(root / "hooks" / "scripts" / "patpat_loop_state.py"), "--self-test"]),
+        ("loop dry-run", [sys.executable, str(root / "scripts" / "dry_run_loop.py"), "--self-test"]),
+        ("representation contract eval", [sys.executable, str(root / "scripts" / "eval_representation.py"), "--self-test"]),
+        ("writable parallelism evaluation", [sys.executable, str(root / "scripts" / "eval_parallel.py"), "--self-test"]),
+        ("portable skill updater", [sys.executable, str(root / "scripts" / "update_skills.py"), "--self-test"]),
+        ("multi-PR plan validator", [sys.executable, str(root / "skills" / "patpat-run" / "scripts" / "validate_plan.py"), "--self-test"]),
+        ("adaptive team policy", [sys.executable, str(root / "skills" / "patpat-run" / "scripts" / "team_shape.py"), "--self-test"]),
+        ("program coordination store", [sys.executable, str(root / "skills" / "patpat-run" / "scripts" / "program_state.py"), "--self-test"]),
+        ("bounded assignment-fence pilot", [sys.executable, str(root / "skills" / "patpat-run" / "scripts" / "verify_assignment_fence.py"), "--self-test"]),
+        ("assignment-model TLC output contract", [sys.executable, str(root / "skills" / "patpat-run" / "scripts" / "check_assignment_model.py"), "--self-test"]),
+        ("pull-request watcher", [sys.executable, str(root / "skills" / "patpat-ship" / "scripts" / "pr_watch.py"), "--self-test"]),
+        ("GitHub pull-request observer", [sys.executable, str(root / "skills" / "patpat-ship" / "scripts" / "github_observe.py"), "--self-test"]),
+        ("bounded GitHub pull-request watch", [sys.executable, str(root / "skills" / "patpat-ship" / "scripts" / "watch_pr.py"), "--self-test"]),
+        ("bounded GitHub PR stack watch", [sys.executable, str(root / "skills" / "patpat-ship" / "scripts" / "watch_pr_stack.py"), "--self-test"]),
+        ("read-only GitHub PR stack discovery", [sys.executable, str(root / "skills" / "patpat-ship" / "scripts" / "discover_pr_stack.py"), "--self-test"]),
+        ("Codex live-behavior probe contract", [sys.executable, str(root / "scripts" / "probe_codex_behavior.py"), "--self-test"]),
+        ("Codex attestation promote gate", [sys.executable, str(root / "scripts" / "publish_codex_attestation.py"), "--self-test"]),
+        ("verify-ready check", [sys.executable, str(root / "scripts" / "verify_ready.py"), "--self-test"]),
+    ]
+
+    def run_subtest(label: str, cmd: list[str]) -> str | None:
+        res = subprocess.run(
+            cmd,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
-    import_graph = root / "skills" / "patpat-repository-diagram" / "scripts" / "import_graph.py"
-    import_graph_result = subprocess.run(
-        [sys.executable, str(import_graph), "--self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if import_graph_result.returncode != 0:
-        failures.append(
-            "self-test: repository-diagram import graph failed: "
-            f"{import_graph_result.stdout}{import_graph_result.stderr}"
-        )
-    decisions_helper = root / "skills" / "patpat-run" / "scripts" / "decisions.py"
-    decisions_result = subprocess.run(
-        [sys.executable, str(decisions_helper), "--self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if decisions_result.returncode != 0:
-        failures.append(
-            "self-test: decision trail helper failed: "
-            f"{decisions_result.stdout}{decisions_result.stderr}"
-        )
-    hook_script = root / "hooks" / "scripts" / "patpat_loop_state.py"
-    hook_result = subprocess.run(
-        [sys.executable, str(hook_script), "--self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if hook_result.returncode != 0:
-        failures.append(
-            f"self-test: sticky hook failed: {hook_result.stdout}{hook_result.stderr}"
-        )
-    dry_run = root / "scripts" / "dry_run_loop.py"
-    dry_result = subprocess.run(
-        [sys.executable, str(dry_run), "--self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if dry_result.returncode != 0:
-        failures.append(f"self-test: loop dry-run failed: {dry_result.stdout}{dry_result.stderr}")
-    representation_eval = root / "scripts" / "eval_representation.py"
-    representation_result = subprocess.run(
-        [sys.executable, str(representation_eval), "--self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if representation_result.returncode != 0:
-        failures.append(
-            "self-test: representation contract eval failed: "
-            f"{representation_result.stdout}{representation_result.stderr}"
-        )
-    parallel_eval = root / "scripts" / "eval_parallel.py"
-    parallel_result = subprocess.run(
-        [sys.executable, str(parallel_eval), "--self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if parallel_result.returncode != 0:
-        failures.append(
-            "self-test: writable parallelism evaluation failed: "
-            f"{parallel_result.stdout}{parallel_result.stderr}"
-        )
-    updater = root / "scripts" / "update_skills.py"
-    update_result = subprocess.run(
-        [sys.executable, str(updater), "--self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if update_result.returncode != 0:
-        failures.append(
-            f"self-test: portable skill updater failed: {update_result.stdout}{update_result.stderr}"
-        )
-    plan_validator = root / "skills" / "patpat-run" / "scripts" / "validate_plan.py"
-    plan_result = subprocess.run(
-        [sys.executable, str(plan_validator), "--self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if plan_result.returncode != 0:
-        failures.append(
-            f"self-test: multi-PR plan validator failed: {plan_result.stdout}{plan_result.stderr}"
-        )
-    team_shape = root / "skills" / "patpat-run" / "scripts" / "team_shape.py"
-    team_result = subprocess.run(
-        [sys.executable, str(team_shape), "--self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if team_result.returncode != 0:
-        failures.append(
-            f"self-test: adaptive team policy failed: {team_result.stdout}{team_result.stderr}"
-        )
-    program_state = root / "skills" / "patpat-run" / "scripts" / "program_state.py"
-    program_result = subprocess.run(
-        [sys.executable, str(program_state), "--self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if program_result.returncode != 0:
-        failures.append(
-            f"self-test: program coordination store failed: {program_result.stdout}{program_result.stderr}"
-        )
-    assignment_fence = root / "skills" / "patpat-run" / "scripts" / "verify_assignment_fence.py"
-    assignment_fence_result = subprocess.run(
-        [sys.executable, str(assignment_fence), "--self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if assignment_fence_result.returncode != 0:
-        failures.append(
-            "self-test: bounded assignment-fence pilot failed: "
-            f"{assignment_fence_result.stdout}{assignment_fence_result.stderr}"
-        )
-    assignment_model = root / "skills" / "patpat-run" / "scripts" / "check_assignment_model.py"
-    assignment_model_result = subprocess.run(
-        [sys.executable, str(assignment_model), "--self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if assignment_model_result.returncode != 0:
-        failures.append(
-            "self-test: assignment-model TLC output contract failed: "
-            f"{assignment_model_result.stdout}{assignment_model_result.stderr}"
-        )
-    pr_watcher = root / "skills" / "patpat-ship" / "scripts" / "pr_watch.py"
-    watch_result = subprocess.run(
-        [sys.executable, str(pr_watcher), "--self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if watch_result.returncode != 0:
-        failures.append(
-            f"self-test: pull-request watcher failed: {watch_result.stdout}{watch_result.stderr}"
-        )
-    github_observer = root / "skills" / "patpat-ship" / "scripts" / "github_observe.py"
-    observer_result = subprocess.run(
-        [sys.executable, str(github_observer), "--self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if observer_result.returncode != 0:
-        failures.append(
-            "self-test: GitHub pull-request observer failed: "
-            f"{observer_result.stdout}{observer_result.stderr}"
-        )
-    bounded_pr_watch = root / "skills" / "patpat-ship" / "scripts" / "watch_pr.py"
-    bounded_watch_result = subprocess.run(
-        [sys.executable, str(bounded_pr_watch), "--self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if bounded_watch_result.returncode != 0:
-        failures.append(
-            "self-test: bounded GitHub pull-request watch failed: "
-            f"{bounded_watch_result.stdout}{bounded_watch_result.stderr}"
-        )
-    pr_stack_watcher = root / "skills" / "patpat-ship" / "scripts" / "watch_pr_stack.py"
-    stack_watch_result = subprocess.run(
-        [sys.executable, str(pr_stack_watcher), "--self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if stack_watch_result.returncode != 0:
-        failures.append(
-            "self-test: bounded GitHub PR stack watch failed: "
-            f"{stack_watch_result.stdout}{stack_watch_result.stderr}"
-        )
-    stack_discovery = root / "skills" / "patpat-ship" / "scripts" / "discover_pr_stack.py"
-    stack_discovery_result = subprocess.run(
-        [sys.executable, str(stack_discovery), "--self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if stack_discovery_result.returncode != 0:
-        failures.append(
-            "self-test: read-only GitHub PR stack discovery failed: "
-            f"{stack_discovery_result.stdout}{stack_discovery_result.stderr}"
-        )
-    codex_probe = root / "scripts" / "probe_codex_behavior.py"
-    probe_result = subprocess.run(
-        [sys.executable, str(codex_probe), "--self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if probe_result.returncode != 0:
-        failures.append(
-            "self-test: Codex live-behavior probe contract failed: "
-            f"{probe_result.stdout}{probe_result.stderr}"
-        )
-    publish_attestation = root / "scripts" / "publish_codex_attestation.py"
-    publish_result = subprocess.run(
-        [sys.executable, str(publish_attestation), "--self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if publish_result.returncode != 0:
-        failures.append(
-            "self-test: Codex attestation promote gate failed: "
-            f"{publish_result.stdout}{publish_result.stderr}"
-        )
-    verify_ready = root / "scripts" / "verify_ready.py"
-    ready_result = subprocess.run(
-        [sys.executable, str(verify_ready), "--self-test"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if ready_result.returncode != 0:
-        failures.append(
-            "self-test: verify-ready check failed: "
-            f"{ready_result.stdout}{ready_result.stderr}"
-        )
+        if res.returncode != 0:
+            return f"self-test: {label} failed: {res.stdout}{res.stderr}"
+        return None
+
+    with ThreadPoolExecutor(max_workers=min(8, max(2, os.cpu_count() or 4))) as pool:
+        sub_futures = [pool.submit(run_subtest, label, cmd) for label, cmd in subtests]
+        for future in sub_futures:
+            err = future.result()
+            if err:
+                failures.append(err)
     return failures
 
 
@@ -3768,6 +3598,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", nargs="?", type=Path)
     parser.add_argument("--self-test", action="store_true")
+    parser.add_argument(
+        "--skip-subtests",
+        action="store_true",
+        help="skip child script self-tests when an external CI runner invokes them directly",
+    )
     parser.add_argument(
         "--agent-plugin",
         action="store_true",
@@ -3789,7 +3624,7 @@ def main() -> int:
             with tempfile.TemporaryDirectory(prefix="patpat-validator-source-") as directory:
                 snapshot = Path(directory) / "source"
                 copy_self_test_source(root, snapshot)
-                errors.extend(run_self_test(snapshot))
+                errors.extend(run_self_test(snapshot, skip_subtests=args.skip_subtests))
         except (OSError, RuntimeError) as error:
             errors.append(f"self-test: unable to create an isolated source snapshot: {error}")
 
