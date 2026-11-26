@@ -13,4 +13,4 @@ This is a pause, not a ship. Do not open a PR to pause. Do not merge.
 5. Leave external delivery authority unchanged. Pause never authorizes merge.
 6. For an anti-thrashing boundary pause, retain the `Diagnostic Delta` from the execution graph and name the exact scope, authority, or external evidence needed. Do not start the out-of-scope recovery as part of checkpointing.
 
-**Reply:** loop state, what is on disk versus only in context (paths, no diff dumps), whether the tree is dirty, the checkpoint path, and the first action on resume.
+**Reply:** loop state, what is on disk versus only in context (paths/SHAs/URLs, no diff dumps, secrets redacted), whether the tree is dirty, the checkpoint path, the first action on resume, and `Suggested next skill(s)`.
