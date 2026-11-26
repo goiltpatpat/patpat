@@ -23,44 +23,39 @@ MAX_STATE_BYTES = 16 * 1024
 MAX_STDIN_BYTES = 256 * 1024
 ACTIVATION_ID = re.compile(r"^[0-9a-f]{64}$")
 STATE_FILENAME = re.compile(r"^[0-9a-f]{64}\.json$")
+# Two-layer language-agnostic design: this deterministic hook matches universal
+# explicit syntax (`/` or `$` tokens + canonical English triggers) across all
+# languages, while pure natural-language semantic opt-out is interpreted by the LLM
+# per operating-protocol.md.
 _POLITE_PREFIX = (
     r"(?:(?:hey|hi|hello|yo|ok|okay|alright|sure|thanks|thank\s+you)\b[\s,!:;-]*)*"
     r"(?:(?:please|plz|pls)\b[\s,]*|"
     r"(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?))*"
-    r"(?:(?:สวัสดี(?:ครับ|ค่ะ)?|ขอบคุณ(?:ครับ|ค่ะ)?|รบกวน|กรุณา|ช่วย|โอเค|ได้เลย)[\s,!:;-]*)*"
 )
+_PATPAT_TOKEN = r"(?:/|\$)(?:patpat:)?patpat(?:-loop)?"
 DIRECT_ACTIVATION = re.compile(
     rf"^\s*{_POLITE_PREFIX}"
-    r"(?:/|\$)(?:patpat:)?patpat(?:-loop)?"
-    r"(?:[.!?]*\s*$|\s+(?!(?:do\s+not|don't|dont|never|not|without\s+(?:activating|enabling|using|turning\s+on))\b|(?:ไม่ต้อง|อย่า|ห้าม|ไม่\s))\S)",
+    rf"{_PATPAT_TOKEN}"
+    r"(?:[.!?]*\s*$|\s+(?!(?:do\s+not|don't|dont|never|not|without\s+(?:activating|enabling|using|turning\s+on))\b)\S)",
     re.IGNORECASE,
 )
 USE_ACTIVATION = re.compile(
     rf"^\s*{_POLITE_PREFIX}"
-    r"(?:"
     r"use\s+(?:(?:/|\$)?(?:patpat:)?patpat(?:-loop)?)\s+(?:to|for)\s+"
-    r"(?!(?:not|never|avoid|without|docs?|document|documentation|examples?|quote)\b)\S"
-    r"|"
-    r"ใช้\s*(?:(?:/|\$)?(?:patpat:)?patpat(?:-loop)?)\s+"
-    r"(?!(?:ไม่ต้อง|อย่า|ห้าม|เป็นตัวอย่าง|ยังไง|อย่างไร|ได้ไหม|ได้มั้ย|หรือยัง|ทำไม|คืออะไร))\S"
-    r"|"
-    r"เปิดใช้(?:งาน)?\s*(?:(?:/|\$)?(?:patpat:)?patpat(?:-loop)?)"
-    r"(?:[.,!?;:\s]*$|[.,!?;:\s]+(?!(?:ไม่ต้อง|อย่า|ห้าม|เป็นตัวอย่าง|ยังไง|อย่างไร|ได้ไหม|ได้มั้ย|หรือยัง|ทำไม|คืออะไร))\S)"
-    r")",
+    r"(?!(?:not|never|avoid|without|docs?|document|documentation|examples?|quote)\b)\S",
     re.IGNORECASE,
 )
 DISABLE = re.compile(
     rf"^\s*{_POLITE_PREFIX}"
     r"(?:"
+    rf"{_PATPAT_TOKEN}\s+(?:off|stop|disable|deactivate|exit)(?=$|[\s.,!?;:])"
+    r"|"
     r"(?:(?:disable|deactivate|exit)\s+|"
     r"leave\s+(?!(?:the\s+)?(?:/|\$)?(?:patpat:)?patpat(?:-loop)?\s+(?:active|on|enabled|alone|running|in\s+place)\b)|"
     r"stop(?:\s+using)?\s+|"
     r"(?:turn|switch)\s+off\s+|"
     r"opt\s+out(?:\s+of)?\s+)"
     r"(?:the\s+)?(?:/|\$)?(?:patpat:)?patpat(?:-loop)?(?=$|[\s.,!?;:])(?!\s+from\b)"
-    r"|"
-    r"(?:ปิด(?:ใช้งาน)?|หยุดใช้|เลิกใช้)\s*(?:(?:/|\$)?(?:patpat:)?patpat(?:-loop)?)"
-    r"(?=$|[\s.,!?;:]|หน่อย|ก่อน|ชั่วคราว|แล้ว|ให้|เพื่อ|สำหรับ)(?!\s*(?:ยังไง|อย่างไร|ได้ไหม|ได้มั้ย|หรือยัง|ทำไม|คืออะไร))"
     r")",
     re.IGNORECASE,
 )
@@ -343,11 +338,7 @@ def now_iso(now_ms: int) -> str:
 
 
 def state_value(
-    fingerprint: str,
-    session_binding: str,
-    activation_id: str,
-    now_ms: int,
-    created_at: str | None,
+    fingerprint: str, session_binding: str, activation_id: str, now_ms: int, created_at: str | None
 ) -> dict[str, Any]:
     timestamp = now_iso(now_ms)
     return {
@@ -362,11 +353,7 @@ def state_value(
 
 
 def receipt_value(
-    fingerprint: str,
-    session_binding: str,
-    activation_id: str,
-    event: str,
-    now_ms: int,
+    fingerprint: str, session_binding: str, activation_id: str, event: str, now_ms: int
 ) -> dict[str, Any]:
     return {
         "schema": STATE_SCHEMA,
@@ -400,23 +387,8 @@ def state_pair_is_valid(
     now_ms: int,
     ttl_ms: int,
 ) -> bool:
-    state_keys = {
-        "schema",
-        "active",
-        "createdAt",
-        "updatedAt",
-        "projectFingerprint",
-        "sessionBinding",
-        "activationId",
-    }
-    receipt_keys = {
-        "schema",
-        "event",
-        "lastHookAt",
-        "projectFingerprint",
-        "sessionBinding",
-        "activationId",
-    }
+    state_keys = {"schema", "active", "createdAt", "updatedAt", "projectFingerprint", "sessionBinding", "activationId"}
+    receipt_keys = {"schema", "event", "lastHookAt", "projectFingerprint", "sessionBinding", "activationId"}
     if set(state) != state_keys or set(receipt) != receipt_keys:
         return False
     activation_id = state.get("activationId")
@@ -513,6 +485,22 @@ def persist(targets: dict[str, Path], state: dict[str, Any], receipt: dict[str, 
     atomic_write(targets["receipt"], receipt)
 
 
+def _refresh_state(
+    targets: dict[str, Path],
+    fingerprint: str,
+    binding: str,
+    activation_id: str,
+    effective_ms: int,
+    event: str,
+    created_at: str | None,
+) -> None:
+    persist(
+        targets,
+        state_value(fingerprint, binding, activation_id, effective_ms, created_at),
+        receipt_value(fingerprint, binding, activation_id, event, effective_ms),
+    )
+
+
 def handle_hook(payload: dict[str, Any], plugin_data: str | None = None, now_ms: int | None = None) -> dict[str, Any] | None:
     plugin_data = plugin_data if plugin_data is not None else resolve_plugin_data()
     now_ms = now_ms if now_ms is not None else int(__import__("time").time() * 1000)
@@ -532,40 +520,15 @@ def handle_hook(payload: dict[str, Any], plugin_data: str | None = None, now_ms:
         collect_expired(plugin_data, now_ms, ttl_ms)
         current = read_active_state(plugin_data, session_id, cwd, now_ms, ttl_ms)
         if current:
-            activation_id = str(current["activationId"])
-            effective_ms = _monotonic_now_ms(current, now_ms)
-            persist(
-                targets,
-                state_value(
-                    fingerprint,
-                    binding,
-                    activation_id,
-                    effective_ms,
-                    str(current.get("createdAt")),
-                ),
-                receipt_value(fingerprint, binding, activation_id, event, effective_ms),
-            )
+            _refresh_state(targets, fingerprint, binding, str(current["activationId"]), _monotonic_now_ms(current, now_ms), event, str(current.get("createdAt")))
         return None
     if event == "SessionStart":
-        source = payload.get("source")
-        if source not in {"resume", "compact"}:
+        if payload.get("source") not in {"resume", "compact"}:
             return None
         current = read_active_state(plugin_data, session_id, cwd, now_ms, ttl_ms)
         if not current:
             return None
-        activation_id = str(current["activationId"])
-        effective_ms = _monotonic_now_ms(current, now_ms)
-        persist(
-            targets,
-            state_value(
-                fingerprint,
-                binding,
-                activation_id,
-                effective_ms,
-                str(current.get("createdAt")),
-            ),
-            receipt_value(fingerprint, binding, activation_id, event, effective_ms),
-        )
+        _refresh_state(targets, fingerprint, binding, str(current["activationId"]), _monotonic_now_ms(current, now_ms), event, str(current.get("createdAt")))
         return context_output(event, STICKY_CONTEXT)
     if event != "UserPromptSubmit":
         return None
@@ -579,19 +542,7 @@ def handle_hook(payload: dict[str, Any], plugin_data: str | None = None, now_ms:
             return None
         collect_expired(plugin_data, now_ms, ttl_ms)
         current = read_active_state(plugin_data, session_id, cwd, now_ms, ttl_ms)
-        activation_id = secrets.token_hex(32)
-        effective_ms = _monotonic_now_ms(current, now_ms)
-        persist(
-            targets,
-            state_value(
-                fingerprint,
-                binding,
-                activation_id,
-                effective_ms,
-                None if not current else str(current.get("createdAt")),
-            ),
-            receipt_value(fingerprint, binding, activation_id, event, effective_ms),
-        )
+        _refresh_state(targets, fingerprint, binding, secrets.token_hex(32), _monotonic_now_ms(current, now_ms), event, None if not current else str(current.get("createdAt")))
         return context_output(
             event,
             "Patpat sticky receipt: trusted session hook persisted /patpat. "
@@ -601,489 +552,38 @@ def handle_hook(payload: dict[str, Any], plugin_data: str | None = None, now_ms:
     current = read_active_state(plugin_data, session_id, cwd, now_ms, ttl_ms)
     if not current:
         return None
-    activation_id = str(current["activationId"])
-    effective_ms = _monotonic_now_ms(current, now_ms)
-    persist(
-        targets,
-        state_value(
-            fingerprint,
-            binding,
-            activation_id,
-            effective_ms,
-            str(current.get("createdAt")),
-        ),
-        receipt_value(fingerprint, binding, activation_id, event, effective_ms),
-    )
+    _refresh_state(targets, fingerprint, binding, str(current["activationId"]), _monotonic_now_ms(current, now_ms), event, str(current.get("createdAt")))
     return context_output(event, STICKY_CONTEXT)
 
 
 def run_self_test() -> None:
-    affirmative = (
-        "/patpat",
-        "/patpat-loop fix this",
-        "$patpat verify this",
-        "$patpat-loop land this",
-        "/patpat:patpat fix this",
-        "/patpat:patpat-loop verify this",
-        "Use patpat to inspect this repository",
-        "use /patpat-loop for this engineering task",
-        "Hey, /patpat fix the auth bug",
-        "Hi /patpat fix this",
-        "Hello, $patpat verify the build",
-        "Please /patpat fix the auth bug",
-        "Please use patpat to debug X",
-        "Hey, please use patpat to fix the auth bug",
-        "Can you use patpat to inspect this repo?",
-        "Could you please use /patpat-loop for this refactor?",
-        "Ok, /patpat-loop ship this",
-        "ช่วย /patpat แก้บั๊กนี้",
-        "ใช้ patpat แก้บั๊กนี้",
-        "ใช้ /patpat-loop ตรวจสอบโค้ดนี้",
-        "กรุณาใช้ /patpat เพื่อปรับปรุงโมดูลนี้",
-        "Use /patpat:patpat to inspect this repository",
-        "/patpat without editing, explain how auth works",
-        "ใช้ patpat อธิบายโค้ดนี้",
-        "เปิดใช้ patpat",
-        "เปิดใช้งาน patpat",
-    )
-    for prompt in affirmative:
-        if classify_prompt(prompt) != "activate":
-            raise AssertionError(f"affirmative activation was rejected: {prompt!r}")
-    inactive = (
-        "Do not activate /patpat for this task.",
-        "Explain what /patpat does without enabling it.",
-        "The docs say /patpat starts the loop.",
-        "Example: /patpat fix the bug",
-        "`/patpat fix the bug`",
-        '"/patpat fix the bug" is an example.',
-        "- /patpat fix the bug",
-        "use patpat as an example",
-        "/patpat do not activate this mode",
-        "use patpat to not activate this mode",
-        "use patpat for documentation without activation",
-        "use $patpat-setup on this host",
-        "/patpat:patpat-setup on this host",
-        "/patpat:patpat-inspect how does routing work",
-        "do not use patpat to modify this repository",
-        "don't use patpat",
-        "don't use patpat to fix this",
-        "Please don't use patpat to modify this",
-        "Hey, don't use /patpat here",
-        "Hey, explain what /patpat does",
-        "Explain how to disable /patpat",
-        "Don't turn off patpat",
-        '"disable /patpat"',
-        "Leave patpat active",
-        "Leave patpat on for this session",
-        "Stop patpat from pushing to main",
-        "อย่าใช้ patpat",
-        "ไม่ต้องใช้ /patpat",
-        "ห้ามใช้ patpat แก้ไฟล์นี้",
-        "อธิบายว่า /patpat ทำงานยังไง",
-        "/patpat ไม่ต้องเปิดใช้งานโหมดนี้",
-        "อย่าปิด /patpat",
-        "ปิด /patpat ยังไง",
-        "เลิกใช้ patpat ได้ไหม",
-        "เปิดใช้งาน patpat เป็นตัวอย่าง",
-        "เปิดใช้ patpat เป็นตัวอย่าง ให้ดู",
-        "เปิดใช้งาน patpat ไม่ต้อง",
-        "เปิดใช้ patpat ยังไง",
-        "เปิดใช้งาน patpat ได้ไหม",
-        "ใช้ patpat ยังไง",
-    )
-    for prompt in inactive:
-        if classify_prompt(prompt) != "inactive":
-            raise AssertionError(f"non-affirmative prompt activated Patpat: {prompt!r}")
-    disable_prompts = (
-        "disable /patpat",
-        "disable /patpat:patpat",
-        "stop using patpat",
-        "stop patpat",
-        "turn off patpat",
-        "exit patpat",
-        "disable /patpat for this question",
-        "Please turn off patpat for now.",
-        "Hey, stop using /patpat-loop and just explain X",
-        "Can you exit patpat?",
-        "opt out of patpat for now",
-        "ปิด /patpat",
-        "หยุดใช้ patpat",
-        "เลิกใช้ /patpat",
-        "ช่วยปิด /patpat หน่อย",
-    )
-    for prompt in disable_prompts:
-        if classify_prompt(prompt) != "disable":
-            raise AssertionError(f"disable command was not recognized: {prompt!r}")
+    test_suite = Path(__file__).resolve().parents[2] / "tests" / "test_patpat_loop_state.py"
+    if test_suite.is_file():
+        import importlib.util
 
-    with tempfile.TemporaryDirectory(prefix="patpat-hook-") as directory:
-        plugin_data = str(Path(directory) / "plugin-data")
-        payload = {
+        spec = importlib.util.spec_from_file_location("test_patpat_loop_state", test_suite)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"cannot load {test_suite}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.run_self_test(sys.modules.get(__name__))
+        return
+
+    # Standalone smoke check when staged without tests/
+    assert classify_prompt("/patpat fix bug") == "activate"
+    assert classify_prompt("/patpat off") == "disable"
+    assert classify_prompt("Explain /patpat") == "inactive"
+    assert len(STICKY_CONTEXT) <= 1200
+    with tempfile.TemporaryDirectory(prefix="patpat-hook-smoke-") as directory:
+        base = {
             "hook_event_name": "UserPromptSubmit",
-            "session_id": "session-1",
-            "cwd": str(Path(directory) / "project"),
-            "prompt": "/patpat reproduce this flake, then land the PR",
+            "session_id": "s1",
+            "cwd": str(Path(directory) / "proj"),
         }
-        activated = handle_hook(payload, plugin_data=plugin_data, now_ms=1_000)
-        if not activated or "sticky receipt" not in json.dumps(activated):
-            raise AssertionError("activation did not persist a sticky receipt")
-        targets = state_paths(plugin_data, payload["session_id"])
-        if not targets:
-            raise AssertionError("test session did not resolve state paths")
-        state = read_json(targets["state"])
-        receipt = read_json(targets["receipt"])
-        if not state or not receipt or state.get("schema") != STATE_SCHEMA:
-            raise AssertionError("activation did not persist schema-v2 state and receipt")
-        if os.name != "nt" and stat.S_IMODE(targets["state"].stat().st_mode) != 0o600:
-            raise AssertionError("state file mode is not restricted before publication")
-        if state.get("activationId") != receipt.get("activationId"):
-            raise AssertionError("activation receipt is not bound to state")
-        continued = handle_hook(
-            {**payload, "prompt": "continue with the failing test"},
-            plugin_data=plugin_data,
-            now_ms=2_000,
-        )
-        if not continued or "Patpat Loop is active" not in json.dumps(continued):
-            raise AssertionError("later turn did not keep sticky mode")
-        required_sticky_context = (
-            "Use the Patpat Loop skill for this turn",
-            "follow the operating protocol",
-            "Activation authorizes the loop, proof, and verification",
-            "default commit/PR needs delivery intent",
-            "Higher-priority repository rules or opt-out block delivery",
-            'Merge requires explicit "land" or "merge"',
-            "Do not deploy, force-push, or publish packages by implication",
-            "Re-classify each new task",
-            "major-bumps a direct runtime dependency, SDK, or service provider",
-            "cross-cutting work needs independent review before reporting",
-            "A preview or staging deploy Patpat starts also needs",
-        )
-        if len(STICKY_CONTEXT) > 1200:
-            raise AssertionError("sticky context exceeds the 1200-character hook context limit")
-        hook_output = continued.get("hookSpecificOutput")
-        if not isinstance(hook_output, dict) or hook_output.get("hookEventName") != "UserPromptSubmit":
-            raise AssertionError("sticky mode did not populate host-facing hook output")
-        sticky_text = hook_output.get("additionalContext")
-        if continued.get("additional_context") != sticky_text:
-            raise AssertionError("host-facing and compatibility context diverged")
-        if not isinstance(sticky_text, str) or any(
-            requirement not in sticky_text for requirement in required_sticky_context
-        ):
-            raise AssertionError("sticky mode dropped an activation or delivery boundary")
-        # KV-cache prefix stability: repeated sticky renderings across turns and
-        # resume/compact events must emit byte-identical STICKY_CONTEXT with no dynamic state.
-        continued_again = handle_hook(
-            {**payload, "prompt": "run the next verification step"},
-            plugin_data=plugin_data,
-            now_ms=2_500,
-        )
-        resumed = handle_hook(
-            {
-                "hook_event_name": "SessionStart",
-                "source": "resume",
-                "session_id": payload["session_id"],
-                "cwd": payload["cwd"],
-            },
-            plugin_data=plugin_data,
-            now_ms=2_750,
-        )
-        if not continued_again or not resumed:
-            raise AssertionError("sticky context failed to render on repeated turn or resume")
-        turn1_bytes = json.dumps(continued, sort_keys=True).encode("utf-8")
-        turn2_bytes = json.dumps(continued_again, sort_keys=True).encode("utf-8")
-        if turn1_bytes != turn2_bytes:
-            raise AssertionError("sticky hook JSON output drifted across turns (KV-cache regression)")
-        ctx_bytes_1 = continued["hookSpecificOutput"]["additionalContext"].encode("utf-8")
-        ctx_bytes_2 = continued_again["hookSpecificOutput"]["additionalContext"].encode("utf-8")
-        ctx_bytes_resume = resumed["hookSpecificOutput"]["additionalContext"].encode("utf-8")
-        if not (ctx_bytes_1 == ctx_bytes_2 == ctx_bytes_resume == STICKY_CONTEXT.encode("utf-8")):
-            raise AssertionError("STICKY_CONTEXT bytes are not identical across turns and resume")
-        setup = handle_hook(
-            {**payload, "prompt": "use $patpat-setup on this host"},
-            plugin_data=plugin_data,
-            now_ms=3_000,
-        )
-        if setup is None:
-            raise AssertionError("unrelated later prompt should still be sticky")
-        disabled = handle_hook(
-            {**payload, "prompt": "disable /patpat"},
-            plugin_data=plugin_data,
-            now_ms=4_000,
-        )
-        if disabled is not None:
-            raise AssertionError("disable must clear sticky context")
-        after = handle_hook(
-            {**payload, "prompt": "continue"},
-            plugin_data=plugin_data,
-            now_ms=5_000,
-        )
-        if after is not None:
-            raise AssertionError("sticky mode survived disable")
-
-        def activate(now_ms: int) -> dict[str, Path]:
-            result = handle_hook(payload, plugin_data=plugin_data, now_ms=now_ms)
-            if not result:
-                raise AssertionError("test activation failed")
-            resolved = state_paths(plugin_data, payload["session_id"])
-            if not resolved:
-                raise AssertionError("test state path resolution failed")
-            return resolved
-
-        forged = activate(10_000)
-        remove_state_path(forged["receipt"])
-        if handle_hook({**payload, "prompt": "continue"}, plugin_data=plugin_data, now_ms=11_000):
-            raise AssertionError("state without an activation receipt was trusted")
-
-        mismatches = (
-            (20_000, "projectFingerprint", "0" * 64, "project"),
-            (22_000, "sessionBinding", "0" * 64, "session"),
-            (24_000, "activationId", "0" * 64, "activation"),
-        )
-        for activated_at, field, forged_value, label in mismatches:
-            mismatched = activate(activated_at)
-            mismatched_receipt = read_json(mismatched["receipt"])
-            if not mismatched_receipt:
-                raise AssertionError("test receipt was unreadable")
-            mismatched_receipt[field] = forged_value
-            atomic_write(mismatched["receipt"], mismatched_receipt)
-            if handle_hook(
-                {**payload, "prompt": "continue"},
-                plugin_data=plugin_data,
-                now_ms=activated_at + 1_000,
-            ):
-                raise AssertionError(f"{label}-mismatched activation receipt was trusted")
-
-        legacy = activate(30_000)
-        legacy_state = read_json(legacy["state"])
-        legacy_receipt = read_json(legacy["receipt"])
-        if not legacy_state or not legacy_receipt:
-            raise AssertionError("legacy-state fixture was unreadable")
-        legacy_state["schema"] = 1
-        legacy_receipt["schema"] = 1
-        atomic_write(legacy["state"], legacy_state)
-        atomic_write(legacy["receipt"], legacy_receipt)
-        if handle_hook({**payload, "prompt": "continue"}, plugin_data=plugin_data, now_ms=31_000):
-            raise AssertionError("legacy sticky state survived the schema bump")
-
-        oversized = activate(40_000)
-        oversized["state"].write_bytes(b"x" * (MAX_STATE_BYTES + 1))
-        if handle_hook({**payload, "prompt": "continue"}, plugin_data=plugin_data, now_ms=41_000):
-            raise AssertionError("oversized state was trusted")
-
-        linked = activate(50_000)
-        external = Path(directory) / "external.json"
-        external.write_text('{"protected": true}\n', encoding="utf-8")
-        remove_state_path(linked["state"])
-        linked["state"].symlink_to(external)
-        if handle_hook({**payload, "prompt": "continue"}, plugin_data=plugin_data, now_ms=51_000):
-            raise AssertionError("symlinked state was trusted")
-        if external.read_text(encoding="utf-8") != '{"protected": true}\n':
-            raise AssertionError("symlink rejection modified its target")
-
-        unowned = targets["state"].parent / "unowned.json"
-        unowned.write_text("{}\n", encoding="utf-8")
-        handle_hook(
-            {**payload, "session_id": "cleanup-owner-check", "prompt": "/patpat"},
-            plugin_data=plugin_data,
-            now_ms=52_000,
-        )
-        if unowned.read_text(encoding="utf-8") != "{}\n":
-            raise AssertionError("expired-state cleanup removed a file outside its owned filename namespace")
-
-        if os.name != "nt":
-            protected_mode = Path(directory) / "chmod-race-target.json"
-            protected_mode.write_text("protected\n", encoding="utf-8")
-            protected_mode.chmod(0o644)
-            original_replace = os.replace
-            original_chmod = os.chmod
-
-            def replace_then_redirect(
-                source: str | os.PathLike[str], destination: str | os.PathLike[str]
-            ) -> None:
-                original_replace(source, destination)
-                Path(destination).unlink()
-                Path(destination).symlink_to(protected_mode)
-
-            def reject_path_chmod(*args: Any, **kwargs: Any) -> None:
-                raise AssertionError("atomic state publication must not chmod the destination path")
-
-            os.replace = replace_then_redirect  # type: ignore[assignment]
-            os.chmod = reject_path_chmod  # type: ignore[assignment]
-            try:
-                atomic_write(targets["state"], {"race": True})
-            finally:
-                os.replace = original_replace  # type: ignore[assignment]
-                os.chmod = original_chmod  # type: ignore[assignment]
-            if stat.S_IMODE(protected_mode.stat().st_mode) != 0o644:
-                raise AssertionError("atomic state publication changed a redirected target's permissions")
-            remove_state_path(targets["state"])
-
-        def create_directory_redirect(link: Path, destination: Path) -> None:
-            if os.name == "nt":
-                import shutil
-                import subprocess
-
-                command = shutil.which("powershell.exe") or shutil.which("pwsh.exe")
-                if command is None:
-                    raise AssertionError("Windows junction regression requires PowerShell")
-                environment = os.environ.copy()
-                environment["PATPAT_TEST_JUNCTION_LINK"] = str(link)
-                environment["PATPAT_TEST_JUNCTION_TARGET"] = str(destination)
-                result = subprocess.run(
-                    [
-                        command,
-                        "-NoLogo",
-                        "-NoProfile",
-                        "-NonInteractive",
-                        "-Command",
-                        "$ErrorActionPreference = 'Stop'; New-Item -ItemType Junction -Path $env:PATPAT_TEST_JUNCTION_LINK -Target $env:PATPAT_TEST_JUNCTION_TARGET | Out-Null",
-                    ],
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                    env=environment,
-                )
-                if result.returncode != 0:
-                    raise AssertionError(
-                        f"Windows junction fixture could not be created: {result.stderr}"
-                    )
-            else:
-                link.symlink_to(destination, target_is_directory=True)
-            try:
-                metadata = link.lstat()
-            except OSError as error:
-                raise AssertionError(f"directory redirect fixture is missing: {link}") from error
-            if not _is_link_or_reparse_point(metadata):
-                raise AssertionError(f"directory redirect fixture was not recognized: {link}")
-
-        for redirected_directory in ("patpat-loop", "sessions", "receipts"):
-            with tempfile.TemporaryDirectory(prefix="patpat-hook-redirect-") as redirect_root:
-                redirect_base = Path(redirect_root) / "plugin-data"
-                redirect_base.mkdir()
-                state_root = redirect_base / "patpat-loop"
-                outside = Path(redirect_root) / "outside"
-                outside.mkdir()
-                redirect_session = f"redirect-{redirected_directory}"
-                redirect_key = session_key(redirect_session)
-                if not redirect_key:
-                    raise AssertionError("redirect regression session id did not hash")
-
-                if redirected_directory == "patpat-loop":
-                    (outside / "sessions").mkdir()
-                    (outside / "receipts").mkdir()
-                    redirected_path = state_root
-                    victim = outside / "sessions" / f"{redirect_key}.json"
-                elif redirected_directory == "sessions":
-                    state_root.mkdir()
-                    (state_root / "receipts").mkdir()
-                    redirected_path = state_root / "sessions"
-                    victim = outside / f"{redirect_key}.json"
-                else:
-                    state_root.mkdir()
-                    (state_root / "sessions").mkdir()
-                    redirected_path = state_root / "receipts"
-                    victim = outside / f"{redirect_key}.json"
-
-                victim.write_text("{}\n", encoding="utf-8")
-                create_directory_redirect(redirected_path, outside)
-                collect_expired(str(redirect_base), 100_000, DEFAULT_TTL_MS)
-                if victim.read_text(encoding="utf-8") != "{}\n":
-                    raise AssertionError(f"cleanup followed redirected {redirected_directory} directory")
-                redirect_result = handle_hook(
-                    {
-                        "hook_event_name": "UserPromptSubmit",
-                        "session_id": redirect_session,
-                        "cwd": str(redirect_root),
-                        "prompt": "/patpat verify redirect handling",
-                    },
-                    plugin_data=str(redirect_base),
-                    now_ms=100_000,
-                )
-                if redirect_result is not None:
-                    raise AssertionError(f"activation accepted redirected {redirected_directory} directory")
-                if victim.read_text(encoding="utf-8") != "{}\n":
-                    raise AssertionError(
-                        "activation modified a file through redirected "
-                        f"{redirected_directory} directory"
-                    )
-
-        wrong_project = activate(60_000)
-        if not wrong_project["state"].exists():
-            raise AssertionError("project-binding fixture was not created")
-        if handle_hook(
-            {**payload, "cwd": str(Path(directory) / "other-project"), "prompt": "continue"},
-            plugin_data=plugin_data,
-            now_ms=61_000,
-        ):
-            raise AssertionError("state was accepted for a different project")
-
-        nonregular = activate(70_000)
-        remove_state_path(nonregular["state"])
-        nonregular["state"].mkdir()
-        if handle_hook({**payload, "prompt": "continue"}, plugin_data=plugin_data, now_ms=71_000):
-            raise AssertionError("non-regular state was trusted")
-
-        if decode_payload(b"{}") != {}:
-            raise AssertionError("bounded payload decoder rejected a valid object")
-        if decode_payload(b"[]") is not None:
-            raise AssertionError("bounded payload decoder accepted a non-object")
-        if decode_payload(b"x" * (MAX_STDIN_BYTES + 1)) is not None:
-            raise AssertionError("oversized hook input was accepted")
-        missing = handle_hook(payload, plugin_data="", now_ms=6_000)
-        if missing is not None:
-            raise AssertionError("missing plugin data must fail closed")
-        if resolve_plugin_data({"PLUGIN_DATA": "/primary", "GROK_PLUGIN_DATA": "/grok"}) != "/primary":
-            raise AssertionError("PLUGIN_DATA must take precedence")
-        if resolve_plugin_data({"GROK_PLUGIN_DATA": "/grok"}) != "/grok":
-            raise AssertionError("GROK_PLUGIN_DATA was not recognized")
-        if resolve_plugin_data({"CLAUDE_PLUGIN_DATA": "/compat"}) != "/compat":
-            raise AssertionError("CLAUDE_PLUGIN_DATA compatibility alias was not recognized")
-        if resolve_plugin_data({}) is not None:
-            raise AssertionError("missing plugin data environment must fail closed")
-        expired_payload = {**payload, "session_id": "expired-session"}
-        expired = handle_hook(expired_payload, plugin_data=plugin_data, now_ms=80_000)
-        expired_targets = state_paths(plugin_data, "expired-session")
-        if not expired or not expired_targets:
-            raise AssertionError("expired-state fixture could not be activated")
-        if handle_hook(
-            {**expired_payload, "prompt": "continue"},
-            plugin_data=plugin_data,
-            now_ms=80_000 + DEFAULT_TTL_MS + 1,
-        ):
-            raise AssertionError("expired sticky state was trusted")
-        if expired_targets["state"].exists() or expired_targets["receipt"].exists():
-            raise AssertionError("expired sticky state was not cleared")
-
-        skew_payload = {**payload, "session_id": "clock-skew-session"}
-        skew_activated = handle_hook(skew_payload, plugin_data=plugin_data, now_ms=200_000)
-        skew_targets = state_paths(plugin_data, "clock-skew-session")
-        if not skew_activated or not skew_targets:
-            raise AssertionError("clock-skew fixture could not be activated")
-        collect_expired(plugin_data, 170_000, DEFAULT_TTL_MS)
-        if not skew_targets["state"].exists() or not skew_targets["receipt"].exists():
-            raise AssertionError("collect_expired wiped state on bounded backward NTP skew")
-        skew_turn_1 = handle_hook(
-            {**skew_payload, "prompt": "continue under backward skew"},
-            plugin_data=plugin_data,
-            now_ms=170_000,
-        )
-        if not skew_turn_1 or "Patpat Loop is active" not in json.dumps(skew_turn_1):
-            raise AssertionError("bounded backward NTP skew (30s) wiped active sticky state")
-        skew_turn_2 = handle_hook(
-            {**skew_payload, "prompt": "continue again under backward skew"},
-            plugin_data=plugin_data,
-            now_ms=175_000,
-        )
-        if not skew_turn_2 or "Patpat Loop is active" not in json.dumps(skew_turn_2):
-            raise AssertionError("sticky state did not survive a second turn under backward NTP skew")
-        if handle_hook(
-            {**skew_payload, "prompt": "continue beyond skew limit"},
-            plugin_data=plugin_data,
-            now_ms=200_000 - MAX_BACKWARD_CLOCK_SKEW_MS - 1,
-        ):
-            raise AssertionError("backward clock skew exceeding tolerance was trusted")
-        if skew_targets["state"].exists() or skew_targets["receipt"].exists():
-            raise AssertionError("excessive backward clock skew state was not cleared")
-    print("Patpat loop sticky-hook self-test passed.")
+        assert "sticky receipt" in json.dumps(handle_hook({**base, "prompt": "/patpat run"}, plugin_data=directory, now_ms=1000))
+        assert "Patpat Loop is active" in json.dumps(handle_hook({**base, "prompt": "next"}, plugin_data=directory, now_ms=2000))
+        assert handle_hook({**base, "prompt": "/patpat off"}, plugin_data=directory, now_ms=3000) is None
+    print("Patpat loop sticky-hook smoke self-test passed.")
 
 
 def decode_payload(raw: bytes) -> dict[str, Any] | None:

@@ -30,7 +30,7 @@ Inspect version-control state, unrelated dirty files, and secrets before any git
 
 Pause for production deploy, package publish, force-push, secret rotation, and risky auth, billing, or permission changes. Explain blast radius, rollback, and verification before continuing.
 
-Lead every pull request description and delivery summary with a **Merge-Danger Callout** (`Door: one-way | two-way` and `Blast Radius`) so human reviewers triage by merge danger before reading line-by-line.
+Lead every pull request description and delivery summary with a **Merge-Danger Callout** (`Door: one-way | two-way` and `Blast Radius`) so human reviewers triage by merge danger before reading line-by-line; keep PR bodies <= 40 lines (state the goal under `## Why` and link long logs or tables in a file or PR comment).
 
 ## Proof closure
 

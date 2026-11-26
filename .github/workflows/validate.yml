@@ -34,48 +34,7 @@ jobs:
       - name: Validate repository contracts
         env:
           PYTHONDONTWRITEBYTECODE: "1"
-        run: |
-          python3 scripts/validate.py --self-test
-          python3 scripts/dry_run_loop.py --self-test
-          python3 scripts/sanitize_logs.py --self-test
-          python3 scripts/eval_adversarial_controls.py --self-test
-          python3 scripts/eval_parallel.py --self-test
-          python3 scripts/eval_inspect.py --self-test
-          python3 scripts/eval_routing.py --self-test
-          python3 scripts/eval_representation.py --self-test
-          python3 scripts/eval_why.py --self-test
-          python3 scripts/probe_codex_behavior.py --self-test
-          python3 scripts/publish_codex_attestation.py --self-test
-          python3 scripts/verify_ready.py --self-test
-          python3 scripts/install_skills.py --self-test
-          python3 scripts/update_skills.py --self-test
-          python3 scripts/stage_plugin.py --self-test
-          python3 scripts/stage_agent_plugin.py --self-test
-          python3 scripts/smoke_grok_plugin.py --commands-only
-          python3 tests/test_workspace_mapper.py
-          python3 tests/test_general_task_ontology.py
-          python3 tests/test_ontology_verifiers.py
-          python3 tests/test_adversarial_controls.py
-          python3 tests/test_sanitize_logs.py
-          python3 tests/test_assignment_generation_replay.py
-          python3 tests/test_assignment_model_pure_python.py
-          python3 skills/patpat-run/scripts/run_state.py --self-test
-          python3 skills/patpat-run/scripts/program_state.py --self-test
-          python3 skills/patpat-run/scripts/decisions.py --self-test
-          python3 skills/patpat-eval/scripts/eval_stats.py --self-test
-          python3 skills/patpat-run/scripts/validate_plan.py --self-test
-          python3 hooks/scripts/patpat_loop_state.py --self-test
-          python3 hooks/scripts/patpat_safety_guard.py --self-test
-          python3 skills/patpat-learn/scripts/verify_corrections.py --self-test
-          python3 skills/patpat-learn/scripts/verify_corrections.py --root .
-          python3 scripts/check_attribution.py --self-test
-          python3 scripts/worktree_audit.py --self-test
-          python3 scripts/context_footprint.py --self-test
-          python3 scripts/context_footprint.py --check-budget
-          python3 skills/patpat-verify/scripts/eval_proof_contract.py --self-test
-          python3 skills/patpat-unslop/scripts/unslop_ast_check.py --self-test
-          python3 skills/patpat-review/scripts/verify_review.py --self-test
-          python3 skills/patpat-ship/scripts/verify_cicd.py --self-test
+        run: python3 scripts/run_ci_suite.py --suite contracts
 
       - name: Validate release tag
         if: startsWith(github.ref, 'refs/tags/v')
@@ -149,58 +108,7 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
-          # Later native commands can overwrite LASTEXITCODE, so stop at each failed check.
-          python scripts/sanitize_logs.py --self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python scripts/eval_adversarial_controls.py --self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python scripts/eval_routing.py --self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python scripts/install_skills.py --self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python scripts/update_skills.py --self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python scripts/stage_plugin.py --self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python scripts/stage_agent_plugin.py --self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python tests/test_workspace_mapper.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python tests/test_general_task_ontology.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python skills/patpat-repository-diagram/scripts/render.py self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python skills/patpat-repository-diagram/scripts/import_graph.py --self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python skills/patpat-run/scripts/run_state.py --self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python skills/patpat-run/scripts/program_state.py --self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python skills/patpat-eval/scripts/eval_stats.py --self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python hooks/scripts/patpat_loop_state.py --self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python hooks/scripts/patpat_safety_guard.py --self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python tests/smoke_windows_codex_hooks.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python tests/test_statechart_receipts.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python skills/patpat-learn/scripts/verify_corrections.py --self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python scripts/verify_ready.py --self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python skills/patpat-verify/scripts/eval_proof_contract.py --self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python skills/patpat-unslop/scripts/unslop_ast_check.py --self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python skills/patpat-review/scripts/verify_review.py --self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python scripts/context_footprint.py --self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python scripts/context_footprint.py --check-budget
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python scripts/worktree_audit.py --self-test
+          python scripts/run_ci_suite.py --suite windows-paths
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Set up Node
